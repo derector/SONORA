@@ -666,7 +666,7 @@ app.delete<{ Params: { providerTrackId: string } }>("/api/v1/provider-favorites/
 // Jamendo API access is configured for non-commercial use. Known Creative Commons
 // licenses are accepted; unknown licenses are rejected. Attribution and license links
 // are returned with every catalog item.
-app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
+app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
   const clientId = process.env.JAMENDO_CLIENT_ID;
   const nonCommercialMode = process.env.JAMENDO_USE_MODE === "noncommercial";
   const commercialApproved = process.env.JAMENDO_COMMERCIAL_APPROVED === "true";
@@ -675,7 +675,11 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
   }
   if (!clientId) return reply.code(503).send(authError(503, "Jamendo catalog is not configured yet."));
   const q = request.query.q?.trim().slice(0, 100) ?? "";
-  const limit = Math.min(30, Math.max(1, Number(request.query.limit) || 20));
+  const trackId = request.query.id?.trim() ?? "";
+  if (trackId && !/^[0-9]{1,24}$/.test(trackId)) {
+    return reply.code(400).send(authError(400, "A valid Jamendo track ID is required."));
+  }
+  const limit = trackId ? 1 : Math.min(30, Math.max(1, Number(request.query.limit) || 20));
   const page = Math.min(100, Math.max(1, Number(request.query.page) || 1));
   try {
     const params = new URLSearchParams({
@@ -683,12 +687,13 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
       format: "json",
       limit: String(limit),
       offset: String((page - 1) * limit),
-      order: q ? "relevance" : "popularity_total",
+      order: trackId ? "id" : q ? "relevance" : "popularity_total",
       include: "licenses musicinfo",
       type: "single albumtrack",
       audioformat: "mp32"
     });
-    if (q) params.set("search", q);
+    if (trackId) params.set("id", trackId);
+    else if (q) params.set("search", q);
     const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10000)
