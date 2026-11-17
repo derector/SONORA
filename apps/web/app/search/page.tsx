@@ -101,7 +101,7 @@ export default function SearchPage() {
             {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={22}/></div>}
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.provider} · {track.rightsLabel || track.provider} {track.durationSeconds ? "· " + duration(track.durationSeconds) : ""}</p></div>
             <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
-            <button type="button" onClick={() => playTrack(track, tracks.filter((item) => item.playable).map((item) => ({...item, audioUrl:item.audioUrl || ""})))} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
+            <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
           </article>)}
         </div>
       </section>}
