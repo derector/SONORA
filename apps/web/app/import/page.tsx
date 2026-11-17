@@ -134,7 +134,7 @@ export default function ImportPage() {
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><FileUp className="text-violet-300"/> IMPORT</span>
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><FileUp className="text-violet-300"/> {t("IMPORT")}</span>
       </header>
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> {t("Bring your music together")}</p>
