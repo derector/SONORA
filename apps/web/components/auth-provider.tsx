@@ -17,7 +17,7 @@ type AuthContextValue = {
   loading: boolean;
   isAuthenticated: boolean;
   refreshSession: () => Promise<boolean>;
-  acceptSession: (token: string, user?: Partial<SonoraUser> | null, expiresAt?: number) => void;
+  acceptSession: (token: string, user?: (Pick<SonoraUser, "id" | "email"> & { username?: string | null; displayName?: string | null; avatarUrl?: string | null }) | null, expiresAt?: number) => void;
   updateProfile: (changes: { displayName?: string; username?: string }) => Promise<SonoraUser>;
   uploadAvatar: (file: File) => Promise<SonoraUser>;
   logout: () => Promise<void>;
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tokenRef = useRef("");
   const refreshPromiseRef = useRef<Promise<boolean> | null>(null);
 
-  const acceptSession = useCallback((token: string, nextUser?: Partial<SonoraUser> | null, expiresAt?: number) => {
+  const acceptSession = useCallback((token: string, nextUser?: (Pick<SonoraUser, "id" | "email"> & { username?: string | null; displayName?: string | null; avatarUrl?: string | null }) | null, expiresAt?: number) => {
     tokenRef.current = token;
     setAccessToken(token);
     if (expiresAt) expiresAtRef.current = expiresAt;
