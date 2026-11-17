@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, Disc3, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, AudioLines, Disc3, LoaderCircle, Plus, Trash2, ChevronRight } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 
 type Playlist = {
@@ -132,7 +132,7 @@ export default function PlaylistsPage() {
             <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Your library")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Your playlists")}</h2></div><span className="text-xs text-slate-500">{playlists.length} total</span></div>
             {playlists.length === 0 ? <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center"><Disc3 className="mx-auto text-slate-500" size={28}/><p className="mt-3 font-medium">{t("Your first playlist starts here.")}</p><p className="mt-1 text-sm text-slate-500">{t("Create one above. You can add catalog tracks as the music catalog is connected.")}</p></div> : (
               <div className="grid gap-3 sm:grid-cols-2">
-                {playlists.map((playlist) => <article key={playlist.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-300/10 text-violet-200"><Disc3 size={22}/></div><div className="min-w-0 flex-1"><h3 className="truncate font-medium">{playlist.title}</h3><p className="mt-1 truncate text-xs text-slate-500">{playlist.description || t("No description")} · {playlist.is_public ? t("Public") : t("Private")}</p></div><button type="button" onClick={() => void deletePlaylist(playlist.id)} aria-label={t("Delete") + " " + playlist.title} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button></article>)}
+                {playlists.map((playlist) => <article key={playlist.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-300/10 text-violet-200"><Disc3 size={22}/></div><div className="min-w-0 flex-1"><h3 className="truncate font-medium">{playlist.title}</h3><p className="mt-1 truncate text-xs text-slate-500">{playlist.description || t("No description")} · {playlist.is_public ? t("Public") : t("Private")}</p></div><Link href={`/playlists/${playlist.id}`} aria-label={t("Open") + " " + playlist.title} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10"><ChevronRight size={18}/></Link><button type="button" onClick={() => void deletePlaylist(playlist.id)} aria-label={t("Delete") + " " + playlist.title} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button></article>)}
               </div>
             )}
           </section>
