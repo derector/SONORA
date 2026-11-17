@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePlayer } from "../../components/player-provider";
+import { useLanguage } from "../../components/language-provider";
 
 type Track = {
   id: string;
@@ -27,6 +28,7 @@ function duration(seconds: number) {
 }
 
 export default function DiscoverPage() {
+  const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
