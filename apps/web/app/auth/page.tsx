@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { AudioLines, ArrowLeft, CheckCircle2, LoaderCircle, Mail, ShieldCheck } from "lucide-react";
+import { useLanguage } from "../../components/language-provider";
 
 type AuthMode = "login" | "register";
 type ApiResult = {
@@ -16,6 +17,7 @@ type ApiResult = {
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 export default function AuthPage() {
+  const { t } = useLanguage();
   const [mode, setMode] = useState<AuthMode>("register");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
