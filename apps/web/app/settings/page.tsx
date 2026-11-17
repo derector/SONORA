@@ -40,6 +40,20 @@ export default function SettingsPage() {
               {t("Open VK ID developer setup")} <ExternalLink size={13}/>
             </a>
           </div>
+          <div className="mt-4 rounded-xl border border-sky-300/15 bg-sky-300/[0.035] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">Moozza · внешний плеер VK</p>
+                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-400">{t("Moozza can access your VK music inside its own Android app. It does not currently expose a documented public API or account-linking flow for SONORA, so this opens Moozza separately and does not sync its library or stream into the SONORA player.")}</p>
+              </div>
+              <a href="https://play.google.com/store/apps/details?id=ru.euphoria.moozza.new" target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-sky-200/20 bg-sky-200/10 px-3 py-2 text-xs text-sky-100 transition hover:bg-sky-200/15">
+                {t("Open Moozza in Google Play")} <ExternalLink size={14}/>
+              </a>
+            </div>
+            <a href="https://www.mozza.tech/" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs text-sky-200 underline decoration-sky-200/30 underline-offset-4 hover:text-white">
+              {t("Moozza official website")} <ExternalLink size={13}/>
+            </a>
+          </div>
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-400">
             <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Jamendo · {t("playable")}</span>
             <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Audius · {t("playable when streamable")}</span>
