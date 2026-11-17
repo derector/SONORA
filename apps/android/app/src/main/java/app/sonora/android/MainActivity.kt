@@ -1,10 +1,15 @@
 package app.sonora.android
 
+import android.Manifest
 import android.content.ComponentName
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -38,6 +43,7 @@ import androidx.media3.session.SessionToken
 import androidx.work.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import app.sonora.android.data.OfflineDatabase
 import app.sonora.android.data.OfflineTrack
 import coil.compose.AsyncImage
@@ -82,6 +88,7 @@ private fun SonoraApp() {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
 
     fun loadTracks(source: String, done: (List<Track>) -> Unit) {
         scope.launch {
@@ -99,6 +106,21 @@ private fun SonoraApp() {
             }
         } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
         loadTracks("Audius") { tracks = it }
+    }
+
+    DisposableEffect(controller, tracks) {
+        val player = controller
+        if (player == null) return@DisposableEffect onDispose { }
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val id = mediaItem?.mediaId ?: return
+                tracks.firstOrNull { it.id == id }?.let { current = it }
+            }
+        }
+        player.addListener(listener)
+        isPlaying = player.isPlaying
+        onDispose { player.removeListener(listener) }
     }
 
     fun mediaItem(track: Track, url: String): MediaItem {
@@ -148,7 +170,7 @@ private fun SonoraApp() {
             containerColor = Ink,
             bottomBar = {
                 Column {
-                    current?.let { MiniPlayer(it, onClick = { tab = "Плеер" }, onPlay = { if (controller?.isPlaying == true) controller?.pause() else controller?.play() }, playing = controller?.isPlaying == true) }
+                    current?.let { MiniPlayer(it, onClick = { tab = "Плеер" }, onPlay = { if (isPlaying) controller?.pause() else controller?.play() }, playing = controller?.isPlaying == true) }
                     NavigationBar(containerColor = Color(0xFF101219), contentColor = Lime) {
                         listOf("Главная" to Icons.Default.Home, "Поиск" to Icons.Default.Search, "Медиатека" to Icons.Default.LibraryMusic, "Загрузки" to Icons.Default.Download, "Профиль" to Icons.Default.Person).forEach { (name, icon) ->
                             NavigationBarItem(selected = tab == name, onClick = { tab = name }, icon = { Icon(icon, null) }, label = { Text(name, fontSize = 10.sp) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime, indicatorColor = Color(0xFF26321B), unselectedIconColor = Muted, unselectedTextColor = Muted))
@@ -232,6 +254,20 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 @Composable
 private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val context = LocalContext.current
+    val enqueueDownload = {
+        val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(workDataOf(
+                "url" to track.downloadUrl, "id" to track.id,
+                "provider" to track.provider, "title" to track.title,
+                "artist" to track.artist, "artwork" to track.artworkUrl,
+                "duration" to track.durationSeconds
+            )).build()
+        WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.id, ExistingWorkPolicy.KEEP, request)
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) enqueueDownload()
+    }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
@@ -240,15 +276,9 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
             IconButton(onClick = {
-                val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
-                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                    .setInputData(workDataOf(
-                        "url" to track.downloadUrl, "id" to track.id,
-                        "provider" to track.provider, "title" to track.title,
-                        "artist" to track.artist, "artwork" to track.artworkUrl,
-                        "duration" to track.durationSeconds
-                    )).build()
-                WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.id, ExistingWorkPolicy.KEEP, request)
+                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else enqueueDownload()
             }) { Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime) }
         }
         IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
