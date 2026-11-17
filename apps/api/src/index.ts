@@ -59,7 +59,13 @@ app.get("/api/v1", async () => ({
     "/api/v1/auth/verify",
     "/api/v1/auth/refresh",
     "/api/v1/auth/me",
-    "/api/v1/auth/logout"
+    "/api/v1/auth/logout",
+    "/api/v1/catalog/tracks",
+    "/api/v1/catalog/search",
+    "/api/v1/playlists",
+    "/api/v1/playlists/:playlistId",
+    "/api/v1/playlists/:playlistId/tracks",
+    "/api/v1/playlists/:playlistId/tracks/:trackId"
   ]
 }));
 
@@ -182,7 +188,10 @@ app.post("/api/v1/auth/refresh", async (request, reply) => {
 
   try {
     const { data, error } = await authClient().auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) return reply.code(401).send(authError(401, "Session expired. Please sign in again."));
+    if (error || !data.session) {
+      reply.clearCookie("sonora_refresh", { path: "/api/v1/auth", httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
+      return reply.code(401).send(authError(401, "Session expired. Please sign in again."));
+    }
     reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
     return {
       ok: true,
