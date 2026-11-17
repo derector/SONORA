@@ -961,6 +961,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
         durationSeconds: track.duration,
         artworkUrl: track.album_image ?? track.image ?? null,
         audioUrl: track.audio,
+        downloadUrl: track.audiodownload ?? null,
         licenseUrl,
         sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
         provider: "Jamendo"
