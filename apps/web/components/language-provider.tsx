@@ -43,17 +43,17 @@ const ru: Record<string, string> = {
   "Could not save this track.": "Не удалось сохранить этот трек.",
   "Import failed.": "Ошибка импорта.",
   "Added to your SONORA favorites:": "Добавлено в избранное SONORA:",
-  "Original": "Оригинал",
-  "Speed up": "Ускорить",
-  "Slowed": "Замедлить",
-  "Playback version": "Версия воспроизведения",
+  
+  
+  
+  
   "Up next": "Далее",
   "tracks": "треков",
-  "Volume": "Громкость",
-  "Seek through track": "Перемотка трека",
-  "Next track": "Следующий трек",
-  "Toggle queue": "Открыть очередь",
-  "Close queue": "Закрыть очередь",
+  
+  
+  
+  
+  
   "Import": "Импорт",
   "IMPORT": "ИМПОРТ",
   "Open catalog": "Открытый каталог",
@@ -65,9 +65,9 @@ const ru: Record<string, string> = {
   "Remove from favorites": "Убрать из избранного",
   "Add to favorites": "Добавить в избранное",
   "Open Jamendo source": "Открыть источник Jamendo",
-  "Playlist name": "Название плейлиста",
-  "A short description (optional)": "Краткое описание (необязательно)",
-  "No description": "Без описания",
+  
+  
+  
   "Remove": "Убрать",
   "Warm electronic · 42 tracks": "Тёплая электроника · 42 трека",
   "Indie & alternative · 36 tracks": "Инди и альтернатива · 36 треков",
