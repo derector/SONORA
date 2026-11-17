@@ -17,7 +17,7 @@ type AuthContextValue = {
   loading: boolean;
   isAuthenticated: boolean;
   refreshSession: () => Promise<boolean>;
-  acceptSession: (token: string, user?: (Pick<SonoraUser, "id" | "email"> & { username?: string | null; displayName?: string | null; avatarUrl?: string | null }) | null, expiresAt?: number) => void;
+  acceptSession: (token: string, user?: (Pick<SonoraUser, "id" | "email"> & { username?: string | null; displayName?: string | null; avatarUrl?: string | null; createdAt?: string }) | null, expiresAt?: number) => void;
   updateProfile: (changes: { displayName?: string; username?: string }) => Promise<SonoraUser>;
   uploadAvatar: (file: File) => Promise<SonoraUser>;
   logout: () => Promise<void>;
