@@ -538,7 +538,31 @@ private fun LibraryScreen(
                 }
                 if (playlistTracks.isEmpty() && !busy) Text("В этом плейлисте пока нет доступных треков.", color = Muted, modifier = Modifier.padding(top = 10.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
-                    items(playlistTracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, {}) }
+                    items(playlistTracks, key = { it.id }) { track ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
+                            Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                                Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            IconButton(onClick = { play(track) }) { Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = Lime) }
+                            IconButton(onClick = {
+                                val target = selected ?: return@IconButton
+                                scope.launch {
+                                    busy = true
+                                    try {
+                                        withContext(Dispatchers.IO) { SonoraApi.removeTrackFromPlaylist(target.id, track) }
+                                        playlistTracks = playlistTracks.filterNot { it.id == track.id }
+                                        error = ""
+                                    } catch (e: Exception) { error = e.message ?: "Не удалось удалить трек" }
+                                    finally { busy = false }
+                                }
+                            }, enabled = !busy) { Icon(Icons.Default.DeleteOutline, "Убрать из плейлиста", tint = Muted) }
+                        }
+                    }
                 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
