@@ -102,7 +102,7 @@ export default function DiscoverPage() {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void loadTracks(query);
+    if (query.trim().length >= 2) window.location.assign(`/search?q=${encodeURIComponent(query.trim())}`);
   }
 
   return (
