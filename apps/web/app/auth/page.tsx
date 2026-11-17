@@ -120,7 +120,7 @@ export default function AuthPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
-        <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16}/> Back to SONORA</Link>
+        <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16}/> {t("Back to SONORA")}</Link>
         <section className="rounded-[2rem] border border-white/10 bg-[#11111b]/90 p-7 shadow-2xl shadow-violet-950/20 backdrop-blur-xl sm:p-9">
           <div className="mb-8 flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><AudioLines size={23}/></span>
@@ -138,7 +138,7 @@ export default function AuthPage() {
             <form onSubmit={verifyCode}>
               <ShieldCheck className="mb-4 text-violet-200" size={28}/>
               <h1 className="text-2xl font-semibold">{t("Check your inbox.")}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Enter the six-digit code sent to <span className="text-slate-200">{email}</span>.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{t("Enter the six-digit code sent to")} <span className="text-slate-200">{email}</span>.</p>
               <label className="mt-7 block text-xs font-medium text-slate-400">{t("Verification code")}</label>
               <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required placeholder="000000" className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-center text-2xl tracking-[.55em] outline-none transition focus:border-violet-300/60"/>
               <button disabled={busy || code.length !== 6} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{busy && <LoaderCircle className="animate-spin" size={16}/>} Verify and continue</button>
@@ -164,7 +164,7 @@ export default function AuthPage() {
           )}
           {message && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs leading-5 text-emerald-200">{message}</p>}
           {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs leading-5 text-rose-200">{error}</p>}
-          <p className="mt-7 text-center text-[10px] leading-5 text-slate-600">Protected by Supabase Auth. Your refresh session is stored in a secure HttpOnly cookie.</p>
+          <p className="mt-7 text-center text-[10px] leading-5 text-slate-600">{t("Protected by Supabase Auth. Your refresh session is stored in a secure HttpOnly cookie.")}</p>
         </section>
       </div>
     </main>
