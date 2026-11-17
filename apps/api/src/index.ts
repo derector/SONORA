@@ -227,14 +227,204 @@ app.post("/api/v1/auth/logout", async (request, reply) => {
   const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!accessToken) return reply.code(401).send(authError(401, "Authentication required."));
 
+  const refreshToken = request.cookies.sonora_refresh;
   try {
-    const { error } = await authClient(accessToken).auth.signOut({ scope: "local" });
-    if (error) return reply.code(400).send(authError(400, "Could not end this session."));
+    if (cleanText(refreshToken, 10, 4096)) {
+      const client = authClient(accessToken);
+      const { error: refreshError } = await client.auth.refreshSession({ refresh_token: refreshToken });
+      if (!refreshError) {
+        const { error } = await client.auth.signOut({ scope: "local" });
+        if (error) request.log.warn({ code: error.code }, "Supabase sign-out returned an error");
+      }
+    }
+    reply.clearCookie("sonora_refresh", { path: "/api/v1/auth", httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
     return { ok: true };
   } catch (error) {
     request.log.error({ err: error }, "Logout unavailable");
+    reply.clearCookie("sonora_refresh", { path: "/api/v1/auth", httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
     return reply.code(503).send(authError(503, "Authentication service is temporarily unavailable."));
   }
+});
+
+
+// Public catalog: only tracks explicitly cleared for playback are marked licensed.
+// Unverified provider references are metadata, not playable URLs.
+app.get<{ Querystring: { q?: string; limit?: string; offset?: string } }>("/api/v1/catalog/tracks", async (request, reply) => {
+  const q = request.query.q?.trim().slice(0, 120) ?? "";
+  const limit = Math.min(50, Math.max(1, Number(request.query.limit) || 20));
+  const offset = Math.max(0, Number(request.query.offset) || 0);
+  try {
+    let query = authClient().from("tracks")
+      .select("id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title)", { count: "exact" })
+      .order("created_at", { ascending: false }).range(offset, offset + limit - 1);
+    if (q) query = query.ilike("title", `%${q.replace(/[,%()]/g, " ").trim()}%`);
+    const { data, error, count } = await query;
+    if (error) {
+      request.log.error({ code: error.code }, "Catalog query failed");
+      return reply.code(503).send(authError(503, "The music catalog is temporarily unavailable."));
+    }
+    return { items: data ?? [], total: count ?? 0, limit, offset };
+  } catch (error) {
+    request.log.error({ err: error }, "Catalog unavailable");
+    return reply.code(503).send(authError(503, "The music catalog is temporarily unavailable."));
+  }
+});
+
+app.get<{ Querystring: { q?: string; limit?: string } }>("/api/v1/catalog/search", async (request, reply) => {
+  const q = request.query.q?.trim().slice(0, 120) ?? "";
+  if (q.length < 2) return reply.code(400).send(authError(400, "Search query must contain at least two characters."));
+  const pattern = `%${q.replace(/[,%()]/g, " ").trim()}%`;
+  const limit = Math.min(20, Math.max(1, Number(request.query.limit) || 10));
+  try {
+    const client = authClient();
+    const [tracks, artists, albums] = await Promise.all([
+      client.from("tracks").select("id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title)").ilike("title", pattern).limit(limit),
+      client.from("artists").select("id,name").ilike("name", pattern).limit(limit),
+      client.from("albums").select("id,title,artwork_url,artist:artists(name)").ilike("title", pattern).limit(limit)
+    ]);
+    const failed = [tracks, artists, albums].find((result) => result.error);
+    if (failed?.error) {
+      request.log.error({ code: failed.error.code }, "Catalog search failed");
+      return reply.code(503).send(authError(503, "Search is temporarily unavailable."));
+    }
+    return { query: q, tracks: tracks.data ?? [], artists: artists.data ?? [], albums: albums.data ?? [] };
+  } catch (error) {
+    request.log.error({ err: error }, "Catalog search unavailable");
+    return reply.code(503).send(authError(503, "Search is temporarily unavailable."));
+  }
+});
+
+async function requireUser(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) {
+  const authorization = request.headers.authorization;
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
+  if (!token) {
+    await reply.code(401).send(authError(401, "Authentication required."));
+    return null;
+  }
+  try {
+    const client = authClient(token);
+    const { data, error } = await client.auth.getUser(token);
+    if (error || !data.user) {
+      await reply.code(401).send(authError(401, "Session is invalid or expired."));
+      return null;
+    }
+    return { client, user: data.user };
+  } catch (error) {
+    request.log.error({ err: error }, "User authentication unavailable");
+    await reply.code(503).send(authError(503, "Authentication service is temporarily unavailable."));
+    return null;
+  }
+}
+
+app.get("/api/v1/playlists", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("playlists")
+    .select("id,title,description,is_public,created_at,updated_at")
+    .eq("owner_id", auth.user.id).order("updated_at", { ascending: false });
+  if (error) {
+    request.log.error({ code: error.code }, "Playlist listing failed");
+    return reply.code(503).send(authError(503, "Playlists are temporarily unavailable."));
+  }
+  return { items: data ?? [] };
+});
+
+app.post<{ Body: { title?: string; description?: string; isPublic?: boolean } }>("/api/v1/playlists", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { title, description, isPublic } = request.body ?? {};
+  if (!cleanText(title, 1, 80) || (description !== undefined && (typeof description !== "string" || description.length > 500)) || (isPublic !== undefined && typeof isPublic !== "boolean")) {
+    return reply.code(400).send(authError(400, "Enter a playlist title (1-80 characters), optional description (up to 500), and valid visibility."));
+  }
+  const { data, error } = await auth.client.from("playlists").insert({
+    owner_id: auth.user.id, title: title.trim(), description: description?.trim() || null, is_public: isPublic ?? false
+  }).select("id,title,description,is_public,created_at,updated_at").single();
+  if (error) {
+    request.log.error({ code: error.code }, "Playlist creation failed");
+    return reply.code(400).send(authError(400, "Could not create this playlist."));
+  }
+  return reply.code(201).send({ playlist: data });
+});
+
+app.get<{ Params: { playlistId: string } }>("/api/v1/playlists/:playlistId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("playlists")
+    .select("id,title,description,is_public,created_at,updated_at,playlist_tracks(position,added_at,track:tracks(id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title)))")
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
+  if (error) return reply.code(503).send(authError(503, "Playlist could not be loaded."));
+  if (!data) return reply.code(404).send(authError(404, "Playlist not found."));
+  return { playlist: data };
+});
+
+app.patch<{ Params: { playlistId: string }; Body: { title?: string; description?: string | null; isPublic?: boolean } }>("/api/v1/playlists/:playlistId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { title, description, isPublic } = request.body ?? {};
+  const update: Record<string, unknown> = {};
+  if (title !== undefined) {
+    if (!cleanText(title, 1, 80)) return reply.code(400).send(authError(400, "Playlist title must be 1-80 characters."));
+    update.title = title.trim();
+  }
+  if (description !== undefined) {
+    if (description !== null && (typeof description !== "string" || description.length > 500)) return reply.code(400).send(authError(400, "Description must be up to 500 characters."));
+    update.description = typeof description === "string" ? description.trim() || null : null;
+  }
+  if (isPublic !== undefined) {
+    if (typeof isPublic !== "boolean") return reply.code(400).send(authError(400, "Visibility must be true or false."));
+    update.is_public = isPublic;
+  }
+  if (!Object.keys(update).length) return reply.code(400).send(authError(400, "No playlist changes were supplied."));
+  update.updated_at = new Date().toISOString();
+  const { data, error } = await auth.client.from("playlists").update(update)
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id)
+    .select("id,title,description,is_public,created_at,updated_at").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Could not update this playlist."));
+  if (!data) return reply.code(404).send(authError(404, "Playlist not found."));
+  return { playlist: data };
+});
+
+app.delete<{ Params: { playlistId: string } }>("/api/v1/playlists/:playlistId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("playlists").delete()
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).select("id").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Could not delete this playlist."));
+  if (!data) return reply.code(404).send(authError(404, "Playlist not found."));
+  return { ok: true };
+});
+
+app.post<{ Params: { playlistId: string }; Body: { trackId?: string } }>("/api/v1/playlists/:playlistId/tracks", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { trackId } = request.body ?? {};
+  if (!cleanText(trackId, 36, 36)) return reply.code(400).send(authError(400, "A valid track ID is required."));
+  const { data: playlist, error: playlistError } = await auth.client.from("playlists")
+    .select("id").eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
+  if (playlistError || !playlist) return reply.code(404).send(authError(404, "Playlist not found."));
+  const { data: last } = await auth.client.from("playlist_tracks").select("position")
+    .eq("playlist_id", playlist.id).order("position", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await auth.client.from("playlist_tracks").insert({
+    playlist_id: playlist.id, track_id: trackId, position: (last?.position ?? -1) + 1
+  });
+  if (error) {
+    request.log.warn({ code: error.code }, "Track could not be added to playlist");
+    return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
+  }
+  return reply.code(201).send({ ok: true });
+});
+
+app.delete<{ Params: { playlistId: string; trackId: string } }>("/api/v1/playlists/:playlistId/tracks/:trackId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data: playlist } = await auth.client.from("playlists").select("id")
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
+  if (!playlist) return reply.code(404).send(authError(404, "Playlist not found."));
+  const { data, error } = await auth.client.from("playlist_tracks").delete()
+    .eq("playlist_id", playlist.id).eq("track_id", request.params.trackId).select("track_id").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Could not remove this track."));
+  if (!data) return reply.code(404).send(authError(404, "Track not found in this playlist."));
+  return { ok: true };
 });
 
 try {
