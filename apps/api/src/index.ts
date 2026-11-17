@@ -483,9 +483,13 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
     };
     const items = (payload.results ?? []).flatMap((track) => {
       const licenseUrl = track.license_ccurl ?? "";
-      const licensePath = licenseUrl.toLowerCase().replace(/^https?:\\/\\/(www\\.)?creativecommons\\.org\\//, "");
+      const normalizedLicenseUrl = licenseUrl.toLowerCase()
+        .replace("http://creativecommons.org/", "")
+        .replace("https://creativecommons.org/", "")
+        .replace("https://www.creativecommons.org/", "");
+      const licensePath = normalizedLicenseUrl.replace(/^\\/+/, "");
       const isCcZero = licensePath.startsWith("publicdomain/zero/");
-      const licenseSlug = licensePath.match(/^licenses\\/(by(?:-nc)?(?:-sa|-nd)?)(?:\\/|$)/)?.[1] ?? "";
+      const licenseSlug = licensePath.startsWith("licenses/") ? licensePath.split("/")[1] ?? "" : "";
       const isKnownCcLicense = isCcZero || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(licenseSlug);
       const isNonCommercialLicense = licenseSlug.includes("-nc");
       // Jamendo API access is non-commercial in this deployment. Track-level
