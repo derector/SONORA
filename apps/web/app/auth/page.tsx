@@ -9,7 +9,7 @@ import { useAuth } from "../../components/auth-provider";
 
 type AuthResult = {
   error?: string;
-  user?: { id: string; email?: string; username?: string | null; displayName?: string | null; avatarUrl?: string | null };
+  user?: { id: string; email: string; username?: string | null; displayName?: string | null; avatarUrl?: string | null };
   session?: { access_token: string; expires_at?: number };
 };
 type AuthMode = "login" | "register";
