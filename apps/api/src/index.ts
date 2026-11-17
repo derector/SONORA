@@ -195,18 +195,35 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
 app.post("/api/v1/auth/refresh", async (request, reply) => {
   const refreshToken = request.cookies.sonora_refresh;
   if (!cleanText(refreshToken, 10, 4096)) {
-    return reply.code(400).send(authError(400, "A valid refresh token is required."));
+    return reply.code(401).send(authError(401, "A valid refresh token is required."));
   }
 
   try {
     const { data, error } = await authClient().auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) {
+    if (error || !data.session || !data.user) {
       reply.clearCookie("sonora_refresh", { path: "/api/v1/auth", httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax" });
       return reply.code(401).send(authError(401, "Session expired. Please sign in again."));
     }
+
     reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
+
+    const metadata = data.user.user_metadata ?? {};
+    const profileClient = authClient(data.session.access_token);
+    const { data: profile, error: profileError } = await profileClient.from("users")
+      .select("id,email,username,display_name,avatar_url,created_at")
+      .eq("id", data.user.id).maybeSingle();
+    if (profileError) request.log.warn({ code: profileError.code }, "Profile lookup during session refresh failed");
+
     return {
       ok: true,
+      user: {
+        id: data.user.id,
+        email: profile?.email ?? data.user.email ?? "",
+        username: profile?.username ?? (typeof metadata.username === "string" ? metadata.username : ""),
+        displayName: profile?.display_name ?? (typeof metadata.display_name === "string" ? metadata.display_name : ""),
+        avatarUrl: profile?.avatar_url ?? null,
+        createdAt: profile?.created_at ?? null
+      },
       session: {
         access_token: data.session.access_token,
         token_type: data.session.token_type,
