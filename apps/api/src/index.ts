@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 16_384 });
+const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -227,18 +227,110 @@ app.get("/api/v1/auth/me", async (request, reply) => {
     const { data, error } = await authClient().auth.getUser(accessToken);
     if (error || !data.user) return reply.code(401).send(authError(401, "Session is invalid or expired."));
     const metadata = data.user.user_metadata ?? {};
+    const { data: profile } = await authClient(accessToken).from("users")
+      .select("id,email,username,display_name,avatar_url,created_at")
+      .eq("id", data.user.id).maybeSingle();
     return {
       user: {
         id: data.user.id,
-        email: data.user.email,
-        username: typeof metadata.username === "string" ? metadata.username : null,
-        displayName: typeof metadata.display_name === "string" ? metadata.display_name : null
+        email: profile?.email ?? data.user.email ?? "",
+        username: profile?.username ?? (typeof metadata.username === "string" ? metadata.username : ""),
+        displayName: profile?.display_name ?? (typeof metadata.display_name === "string" ? metadata.display_name : ""),
+        avatarUrl: profile?.avatar_url ?? null,
+        createdAt: profile?.created_at ?? null
       }
     };
   } catch (error) {
     request.log.error({ err: error }, "Session validation unavailable");
     return reply.code(503).send(authError(503, "Authentication service is temporarily unavailable."));
   }
+});
+
+app.get("/api/v1/profile", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("users")
+    .select("id,email,username,display_name,avatar_url,created_at")
+    .eq("id", auth.user.id).single();
+  if (error || !data) return reply.code(404).send(authError(404, "Profile not found."));
+  return { user: {
+    id: data.id, email: data.email, username: data.username,
+    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
+  }};
+});
+
+app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profile", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { displayName, username } = request.body ?? {};
+  const update: Record<string, string> = {};
+  if (displayName !== undefined) {
+    if (!cleanText(displayName, 1, 48)) return reply.code(400).send(authError(400, "Display name must be 1-48 characters."));
+    update.display_name = displayName.trim();
+  }
+  if (username !== undefined) {
+    if (!cleanText(username, 3, 24) || !/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+      return reply.code(400).send(authError(400, "Username must be 3-24 letters, numbers or underscores."));
+    }
+    update.username = username.trim().toLowerCase();
+  }
+  if (!Object.keys(update).length) return reply.code(400).send(authError(400, "No profile changes were provided."));
+  update.updated_at = new Date().toISOString();
+  const { data, error } = await auth.client.from("users").update(update)
+    .eq("id", auth.user.id)
+    .select("id,email,username,display_name,avatar_url,created_at").single();
+  if (error || !data) {
+    if (error?.code === "23505") return reply.code(409).send(authError(409, "That username is already taken."));
+    request.log.error({ code: error?.code }, "Profile update failed");
+    return reply.code(400).send(authError(400, "Could not update this profile."));
+  }
+  const { error: metadataError } = await auth.client.auth.updateUser({
+    data: { username: data.username, display_name: data.display_name }
+  });
+  if (metadataError) request.log.warn({ code: metadataError.code }, "Auth profile metadata sync failed");
+  return { user: {
+    id: data.id, email: data.email, username: data.username,
+    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
+  }};
+});
+
+app.post<{ Body: { contentType?: string; base64?: string } }>("/api/v1/profile/avatar", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { contentType, base64 } = request.body ?? {};
+  const extensions: Record<string, string> = {
+    "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"
+  };
+  if (!contentType || !extensions[contentType] || typeof base64 !== "string" ||
+      base64.length < 16 || base64.length > 2_800_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64)) {
+    return reply.code(400).send(authError(400, "Choose a JPG, PNG or WebP image up to 2 MB."));
+  }
+  const image = Buffer.from(base64, "base64");
+  if (!image.length || image.length > 2 * 1024 * 1024) {
+    return reply.code(400).send(authError(400, "The image must be 2 MB or smaller."));
+  }
+  const path = `${auth.user.id}/avatar.${extensions[contentType]}`;
+  const { error: uploadError } = await auth.client.storage.from("sonora-avatars").upload(path, image, {
+    contentType, upsert: true, cacheControl: "3600"
+  });
+  if (uploadError) {
+    request.log.error({ message: uploadError.message }, "Avatar upload failed");
+    return reply.code(400).send(authError(400, "Could not upload the avatar. Try another image."));
+  }
+  const { data: publicData } = auth.client.storage.from("sonora-avatars").getPublicUrl(path);
+  const avatarUrl = `${publicData.publicUrl}?v=${Date.now()}`;
+  const { data, error } = await auth.client.from("users").update({
+    avatar_url: avatarUrl, updated_at: new Date().toISOString()
+  }).eq("id", auth.user.id)
+    .select("id,email,username,display_name,avatar_url,created_at").single();
+  if (error || !data) {
+    request.log.error({ code: error?.code }, "Avatar profile update failed");
+    return reply.code(400).send(authError(400, "Avatar uploaded but profile could not be updated."));
+  }
+  return { user: {
+    id: data.id, email: data.email, username: data.username,
+    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
+  }};
 });
 
 app.post("/api/v1/auth/logout", async (request, reply) => {
