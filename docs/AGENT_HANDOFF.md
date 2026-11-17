@@ -44,7 +44,8 @@ This document is the shared context packet for any coding, QA, research, or Andr
 
 - `2bf72fb9fd2c6b78d7c4b5fe19fcedad52b564e4`: replaced the old static homepage mixes with a live playable catalog sourced from Audius/Jamendo. Build and deployment succeeded.
 - `3d74c7a6fac566b5fb6679e9d1e3f47e44dcd14e`: homepage now requests Jamendo with `q=music`, because the live endpoint returns no items when queried without a search term. Railway deployment `aba37d2b-5635-46af-a878-dd499274ff70` reached SUCCESS.
-- `2cc2dc27bed2488970790d062575b11253d0af07`: Discover's default Jamendo request now also supplies `q=music`. Deployment was triggered after the previous success; check Railway before claiming this commit is live.
+- `2cc2dc27bed2488970790d062575b11253d0af07`: Discover's default Jamendo request now also supplies `q=music`. Deployment succeeded. A browser QA agent verified 24+ Jamendo tracks and player state changes on Play.
+- `077b197a96ff9cf8cfc53e591ac78eaf3d212275`: homepage now interleaves Audius and Jamendo tracks before applying its 12-card cap, instead of filling the first 8 positions with Audius. Deployment status must be checked before claiming this newest commit is live.
 
 The web build reported 12 npm audit advisories (1 moderate, 11 high). This remains an open security-maintenance task. Inspect advisory details before changing versions.
 
@@ -93,22 +94,24 @@ The web build reported 12 npm audit advisories (1 moderate, 11 high). This remai
 
 - Branch: `android-native`.
 - Native Android source lives under `apps/android`.
-- A prior GitHub Actions Android workflow run #31 succeeded (run ID `44199671861`); it produced a debug APK artifact.
-- That APK is an earlier artifact, not a build of the latest web commits.
+- GitHub Actions Android workflow #35 succeeded for Android commit `758a9c9b4c601cd66ad0281dd7bfdaa60df3e261` (run ID `44202958970`). It includes the Jamendo `q=music` fix in `SonoraApi.kt` and produced artifact `14382142101`.
+- The APK was downloaded and verified as a 22,752,675-byte APK file. SHA-256: `e9dbfdb49a10a0ae920c7985e1b8df38fb084faafc529debd966dc1b1bfc43cd`.
+- This is a debug build, not a release APK signed with a persistent production keystore.
 - It is a debug build, not a release APK signed with a persistent production keystore. Do not claim safe in-place updates until applicationId and a stable signing key are configured and verified.
 - Continue using GitHub Actions/Gradle for APK builds. Do not switch to Expo EAS.
 - Android 8+ compatibility is an intended requirement; verify minSdk and runtime behavior from the current Android branch before claiming it.
 
 ## Work still required, ordered by priority
 
-1. Finish and verify deployment of commit `2cc2dc27bed2488970790d062575b11253d0af07`; then fetch the live web app and verify homepage/Discover catalog behavior.
+1. Verify deployment of latest homepage balancing commit `077b197a96ff9cf8cfc53e591ac78eaf3d212275`; then browser-test provider balance and playback.
 2. Test real email OTP delivery, code verification, profile creation, cookie refresh, page navigation and session persistence after reload. Do not call auth complete until all pass.
 3. Test real playback in browser: play/pause, queue progression, source links, audio errors and mobile browser behavior. Verify that each provider's returned audio URL remains playable.
 4. Audit profile/favorites/playlists flows for session races and ownership checks. Test create, add, remove, reload and sign-out.
-5. Review npm advisories individually and patch safely.
-6. Audit the native Android branch: API base URL, auth, player, background playback, notifications, offline download permissions/storage, Android 8 compatibility, update/versioning and stable signing.
-7. Produce a new APK only from the current Android branch after the above Android checks; distinguish debug/release and build/signature/runtime verification.
-8. Research any additional provider only after official API, rights, attribution, stream delivery, quotas and free-tier terms are confirmed.
+5. Browser QA (2026-11-18): Discover default Jamendo shows 24+ cards; pressing Play changes the shared player to playing state. Homepage currently renders 8 Audius + 4 Jamendo cards because the 12-card cap previously sliced an Audius-first concatenated list; commit `077b197` interleaves sources to balance the feed. Re-test after deployment.
+6. Review npm advisories individually and patch safely.
+7. Audit the native Android branch: API base URL, auth, player, background playback, notifications, offline download permissions/storage, Android 8 compatibility, update/versioning and stable signing.
+8. Produce a new APK only from the current Android branch after the above Android checks; distinguish debug/release and build/signature/runtime verification.
+9. Research any additional provider only after official API, rights, attribution, stream delivery, quotas and free-tier terms are confirmed.
 
 ## Agent task protocol
 
