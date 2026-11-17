@@ -124,40 +124,40 @@ export default function AuthPage() {
         <section className="rounded-[2rem] border border-white/10 bg-[#11111b]/90 p-7 shadow-2xl shadow-violet-950/20 backdrop-blur-xl sm:p-9">
           <div className="mb-8 flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><AudioLines size={23}/></span>
-            <div><p className="text-sm font-semibold tracking-[.22em]">SONORA</p><p className="mt-1 text-xs text-slate-500">Your music identity</p></div>
+            <div><p className="text-sm font-semibold tracking-[.22em]">SONORA</p><p className="mt-1 text-xs text-slate-500">{t("Your music identity")}</p></div>
           </div>
 
           {step === "signed-in" ? (
             <div>
               <CheckCircle2 className="mb-4 text-emerald-300" size={30}/>
-              <h1 className="text-2xl font-semibold">You’re in.</h1>
+              <h1 className="text-2xl font-semibold">{t("You’re in.")}</h1>
               <p className="mt-2 text-sm text-slate-400">Signed in as {user?.email || email}{user?.username ? ` · @${user.username}` : ""}</p>
               <button onClick={logout} disabled={busy} className="mt-8 w-full rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10 disabled:opacity-50">{busy ? "Signing out…" : "Sign out"}</button>
             </div>
           ) : step === "verify" ? (
             <form onSubmit={verifyCode}>
               <ShieldCheck className="mb-4 text-violet-200" size={28}/>
-              <h1 className="text-2xl font-semibold">Check your inbox.</h1>
+              <h1 className="text-2xl font-semibold">{t("Check your inbox.")}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-400">Enter the six-digit code sent to <span className="text-slate-200">{email}</span>.</p>
-              <label className="mt-7 block text-xs font-medium text-slate-400">Verification code</label>
+              <label className="mt-7 block text-xs font-medium text-slate-400">{t("Verification code")}</label>
               <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required placeholder="000000" className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-center text-2xl tracking-[.55em] outline-none transition focus:border-violet-300/60"/>
               <button disabled={busy || code.length !== 6} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{busy && <LoaderCircle className="animate-spin" size={16}/>} Verify and continue</button>
-              <button type="button" onClick={() => { setStep("details"); setCode(""); setMessage(""); setError(""); }} className="mt-4 w-full text-xs text-slate-500 hover:text-white">Change email or request another code</button>
+              <button type="button" onClick={() => { setStep("details"); setCode(""); setMessage(""); setError(""); }} className="mt-4 w-full text-xs text-slate-500 hover:text-white">{t("Change email or request another code")}</button>
             </form>
           ) : (
             <>
               <h1 className="text-2xl font-semibold">{mode === "register" ? "Create your account." : "Welcome back."}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">Sign in securely with a one-time code sent to your email.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{t("Sign in securely with a one-time code sent to your email.")}</p>
               <div className="mt-6 grid grid-cols-2 rounded-full border border-white/10 bg-black/20 p-1">
-                <button type="button" onClick={() => setMode("register")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "register" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>Create account</button>
-                <button type="button" onClick={() => setMode("login")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "login" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>Sign in</button>
+                <button type="button" onClick={() => setMode("register")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "register" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>{t("Create account")}</button>
+                <button type="button" onClick={() => setMode("login")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "login" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>{t("Sign in")}</button>
               </div>
               <form onSubmit={submitDetails} className="mt-6 space-y-4">
                 {mode === "register" && <>
-                  <label className="block text-xs text-slate-400">Display name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required minLength={1} maxLength={48} placeholder="How should we call you?" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
-                  <label className="block text-xs text-slate-400">Username<input value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 24))} required minLength={3} maxLength={24} placeholder="your_handle" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
+                  <label className="block text-xs text-slate-400">{t("Display name")}<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required minLength={1} maxLength={48} placeholder="How should we call you?" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
+                  <label className="block text-xs text-slate-400">{t("Username")}<input value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 24))} required minLength={3} maxLength={24} placeholder="your_handle" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
                 </>}
-                <label className="block text-xs text-slate-400">Email address<span className="relative mt-2 block"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16}/><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} placeholder="you@example.com" className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-sm text-white outline-none focus:border-violet-300/60"/></span></label>
+                <label className="block text-xs text-slate-400">{t("Email address")}<span className="relative mt-2 block"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={16}/><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} placeholder="you@example.com" className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pl-11 pr-4 text-sm text-white outline-none focus:border-violet-300/60"/></span></label>
                 <button disabled={busy} className="flex w-full items-center justify-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{busy && <LoaderCircle className="animate-spin" size={16}/>} Send email code</button>
               </form>
             </>
