@@ -118,7 +118,7 @@ export default function DiscoverPage() {
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent tracks from Jamendo. Every result carries its creator, source and Creative Commons license details. Playback is offered only where the track and provider terms permit it.")}</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tracks, artists or moods" className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
           <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
       </section>
@@ -145,7 +145,7 @@ export default function DiscoverPage() {
               <div className="flex gap-4">
                 {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-20 w-20 rounded-2xl object-cover" loading="lazy"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-sky-500/20"><Music2 className="text-violet-100" size={28}/></div>}
                 <div className="min-w-0 flex-1 py-1">
-                  <div className="flex items-start gap-2"><h3 className="min-w-0 flex-1 truncate font-medium">{track.title}</h3><button type="button" onClick={() => void toggleFavorite(track)} disabled={savingFavorite === track.id} aria-label={favoriteIds.includes(track.id) ? "Remove from favorites" : "Add to favorites"} className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-200 disabled:opacity-40"><Heart size={16} fill={favoriteIds.includes(track.id) ? "currentColor" : "none"}/></button></div>
+                  <div className="flex items-start gap-2"><h3 className="min-w-0 flex-1 truncate font-medium">{track.title}</h3><button type="button" onClick={() => void toggleFavorite(track)} disabled={savingFavorite === track.id} aria-label={favoriteIds.includes(track.id) ? t("Remove from favorites") : t("Add to favorites")} className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-200 disabled:opacity-40"><Heart size={16} fill={favoriteIds.includes(track.id) ? "currentColor" : "none"}/></button></div>
                   <p className="mt-1 truncate text-sm text-slate-400">{track.artist}</p>
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
