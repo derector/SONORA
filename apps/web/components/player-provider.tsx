@@ -105,11 +105,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     void audio.play().catch(() => setIsPlaying(false));
   }
 
-  function playAt(index: number) {
+  function playAt(index: number, recordSkip = true) {
     const track = queue[index];
     if (track) {
       const audio = audioRef.current;
-      if (currentRef.current && audio && audio.currentTime > 0) {
+      if (recordSkip && currentRef.current && audio && audio.currentTime > 0) {
         void recordEvent(currentRef.current, "skip", audio.currentTime);
       }
       setQueueIndex(index);
@@ -146,7 +146,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onEnded = () => {
       const track = currentRef.current;
       if (track) void recordEvent(track, "complete", audio.duration || audio.currentTime);
-      if (queueIndex < queue.length - 1) playAt(queueIndex + 1);
+      if (queueIndex < queue.length - 1) playAt(queueIndex + 1, false);
       else setIsPlaying(false);
     };
     audio.addEventListener("play", onPlay);
