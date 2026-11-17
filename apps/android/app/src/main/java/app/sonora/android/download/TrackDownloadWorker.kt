@@ -26,6 +26,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val provider = inputData.getString("provider") ?: return@withContext Result.failure()
         if (provider != "Jamendo" || !url.startsWith("https://")) return@withContext Result.failure()
         var partialFile: File? = null
+        var pendingFinalFile: File? = null
         try {
             setForeground(createForegroundInfo("Загружаем трек…"))
             val client = OkHttpClient.Builder().callTimeout(10, TimeUnit.MINUTES).build()
@@ -43,6 +44,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 val directory = File(applicationContext.filesDir, "offline")
                 if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
                 val finalFile = File(directory, "$safeId.audio")
+                pendingFinalFile = finalFile
                 partialFile = File(directory, "$safeId.audio.part")
                 partialFile!!.delete()
                 body.byteStream().use { input ->
@@ -71,10 +73,12 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     provider = provider
                 )
                 OfflineDatabase.get(applicationContext).offlineTracks().insert(meta)
+                pendingFinalFile = null
                 Result.success()
             }
         } catch (_: Exception) {
             partialFile?.delete()
+            pendingFinalFile?.delete()
             Result.retry()
         }
     }
