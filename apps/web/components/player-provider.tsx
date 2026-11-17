@@ -311,7 +311,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (audio && typeof details.seekTime === "number") audio.currentTime = details.seekTime;
       });
     } catch { /* Media Session is optional and browser-dependent. */ }
-  }, [currentTrack, isPlaying, queue, queueIndex, repeatMode, shuffle]);
+  }, [currentTrack, isPlaying, queue, queueIndex, repeatMode, shuffle, t]);
 
   const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
 
