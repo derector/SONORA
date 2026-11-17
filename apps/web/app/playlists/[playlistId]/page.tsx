@@ -26,8 +26,8 @@ type Playlist = {
   provider_playlist_tracks?: ProviderTrack[];
 };
 type ApiResult = { playlist?: Playlist; error?: string };
-type SearchTrack = PlayerTrack & { id: string; provider: string };
-type SearchResult = { items?: SearchTrack[]; error?: string };
+type SearchTrack = PlayerTrack & { id: string; provider: string; providerTrackId?: string; playable?: boolean };
+type SearchResult = { items?: SearchTrack[]; tracks?: SearchTrack[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 const timeLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -40,6 +40,7 @@ export default function PlaylistDetailPage() {
   const [token, setToken] = useState("");
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [query, setQuery] = useState("");
+  const [searchProvider, setSearchProvider] = useState<"jamendo" | "audius">("jamendo");
   const [results, setResults] = useState<SearchTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -77,11 +78,16 @@ export default function PlaylistDetailPage() {
     setSearching(true); setError(""); setNotice("");
     try {
       const params = new URLSearchParams({ q: query.trim(), limit: "12" });
-      const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${params.toString()}`);
+      const endpoint = searchProvider === "audius" ? "/api/v1/search/music" : "/api/v1/providers/jamendo/tracks";
+      if (searchProvider === "audius") params.set("type", "tracks");
+      const response = await fetch(`${API}${endpoint}?${params.toString()}`);
       const data = await response.json() as SearchResult;
       if (!response.ok) throw new Error(data.error || "Music search is unavailable.");
-      setResults(data.items ?? []);
-      if (!data.items?.length) setNotice("No licensed Jamendo matches were found.");
+      const matches = searchProvider === "audius"
+        ? (data.tracks ?? []).filter((item) => item.provider.toLowerCase() === "audius" && item.playable === true)
+        : (data.items ?? []);
+      setResults(matches);
+      if (!matches.length) setNotice(searchProvider === "audius" ? "No playable Audius matches were found." : "No licensed Jamendo matches were found.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Music search is unavailable.");
     } finally {
@@ -97,7 +103,7 @@ export default function PlaylistDetailPage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         credentials: "include",
-        body: JSON.stringify({ provider: "jamendo", providerTrackId: track.id })
+        body: JSON.stringify({ provider: track.provider.toLowerCase(), providerTrackId: track.providerTrackId ?? track.id.replace(/^audius:/, "") })
       });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not add this track.");
@@ -128,20 +134,23 @@ export default function PlaylistDetailPage() {
 
   async function playSaved(track: ProviderTrack, queue: ProviderTrack[]) {
     try {
-      const params = new URLSearchParams({ id: track.provider_track_id });
-      const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${params.toString()}`);
-      const data = await response.json() as SearchResult;
-      if (!response.ok || !data.items?.[0]) throw new Error(data.error || "This track is no longer available.");
+      const loadSavedTrack = async (item: ProviderTrack) => {
+        const params = new URLSearchParams({ id: item.provider_track_id });
+        const endpoint = item.provider === "audius" ? "/api/v1/providers/audius/tracks" : "/api/v1/providers/jamendo/tracks";
+        const response = await fetch(`${API}${endpoint}?${params.toString()}`);
+        const data = await response.json() as SearchResult;
+        if (!response.ok || !data.items?.[0]) return null;
+        return data.items[0];
+      };
+      const current = await loadSavedTrack(track);
+      if (!current) throw new Error("This track is no longer available.");
       const queueTracks: PlayerTrack[] = [];
       for (const item of queue) {
-        const q = new URLSearchParams({ id: item.provider_track_id });
-        const res = await fetch(`${API}/api/v1/providers/jamendo/tracks?${q.toString()}`);
-        if (!res.ok) continue;
-        const found = await res.json() as SearchResult;
-        if (found.items?.[0]) queueTracks.push(found.items[0]);
+        const loaded = await loadSavedTrack(item);
+        if (loaded) queueTracks.push(loaded);
       }
-      const startIndex = queueTracks.findIndex((item) => item.id === data.items?.[0]?.id);
-      playTrack(data.items[0], startIndex >= 0 ? queueTracks.slice(startIndex) : [data.items[0]]);
+      const startIndex = queueTracks.findIndex((item) => item.id === current.id);
+      playTrack(current, startIndex >= 0 ? queueTracks.slice(startIndex) : [current]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start playback.");
     }
@@ -162,10 +171,11 @@ export default function PlaylistDetailPage() {
             <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your playlist")}</p>
             <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{playlist.title}</h1>
             <p className="mt-3 text-sm text-slate-300">{playlist.description || t("Your music, collected in one place.")}</p>
-            <p className="mt-5 text-xs text-slate-500">{saved.length} {t("tracks")} · {t("Licensed Jamendo catalog")}</p>
+            <p className="mt-5 text-xs text-slate-500">{saved.length} {t("tracks")} · {t("Jamendo and Audius catalogs")}</p>
           </section>
           <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-5 md:p-6">
             <h2 className="flex items-center gap-2 font-semibold"><Search size={17} className="text-violet-200"/> {t("Find tracks to add")}</h2>
+            <div className="mt-4 flex gap-2"><button type="button" onClick={() => { setSearchProvider("jamendo"); setResults([]); }} aria-pressed={searchProvider === "jamendo"} className={searchProvider === "jamendo" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Jamendo</button><button type="button" onClick={() => { setSearchProvider("audius"); setResults([]); }} aria-pressed={searchProvider === "audius"} className={searchProvider === "audius" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Audius</button></div>
             <form onSubmit={searchTracks} className="mt-4 flex gap-2">
               <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder={t("Search by track or artist")} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
               <button disabled={searching || query.trim().length < 2} className="inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{searching ? <LoaderCircle className="animate-spin" size={16}/> : <Search size={16}/>} {t("Search")}</button>
@@ -173,7 +183,7 @@ export default function PlaylistDetailPage() {
             {results.length > 0 && <div className="mt-4 divide-y divide-white/[0.06]">
               {results.map((track) => <div key={track.id} className="flex items-center gap-3 py-3">
                 {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-11 w-11 rounded-lg object-cover"/> : <div className="grid h-11 w-11 place-items-center rounded-lg bg-violet-300/10"><Music2 size={18}/></div>}
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist} · {track.provider}</p></div>
                 <button type="button" onClick={() => void addTrack(track)} disabled={savingId === track.id || saved.some((item) => item.provider_track_id === track.id)} className="rounded-lg border border-violet-200/20 p-2 text-violet-200 hover:bg-violet-200/10 disabled:opacity-40" aria-label={t("Add track")} >{savingId === track.id ? <LoaderCircle size={16} className="animate-spin"/> : <Plus size={16}/>}</button>
               </div>)}
             </div>}
@@ -184,7 +194,7 @@ export default function PlaylistDetailPage() {
               <div className="mt-4 space-y-2">
                 {saved.map((track) => <article key={track.provider + track.provider_track_id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
                   {track.artwork_url ? <img src={track.artwork_url} alt="" className="h-12 w-12 rounded-xl object-cover"/> : <div className="grid h-12 w-12 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist_name} · {track.duration_seconds ? timeLabel(track.duration_seconds) : ""}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist_name} · {track.provider} · {track.duration_seconds ? timeLabel(track.duration_seconds) : ""}</p></div>
                   <a href={track.source_url} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
                   <button type="button" onClick={() => void playSaved(track, saved)} aria-label={t("Play track")} className="rounded-lg p-2 text-violet-200 hover:bg-violet-200/10"><Play size={17} fill="currentColor"/></button>
                   <button type="button" onClick={() => void removeTrack(track)} aria-label={t("Remove track")} className="rounded-lg p-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button>
