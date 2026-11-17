@@ -42,7 +42,12 @@ export default function Home() {
       ];
       const results = await Promise.allSettled(sources);
       if (!active) return;
-      const available = results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+      const audiusTracks = results[0].status === "fulfilled" ? results[0].value : [];
+      const jamendoTracks = results[1].status === "fulfilled" ? results[1].value : [];
+      const available = Array.from(
+        { length: Math.max(audiusTracks.length, jamendoTracks.length) },
+        (_, index) => [audiusTracks[index], jamendoTracks[index]]
+      ).flat().filter((track): track is CatalogTrack => Boolean(track));
       const unique = available.filter((track, index, all) => track.audioUrl && all.findIndex((item) => item.id === track.id) === index);
       setTracks(unique.slice(0, 12));
       if (!unique.length) {
