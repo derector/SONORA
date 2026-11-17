@@ -73,14 +73,14 @@ export default function HistoryPage() {
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> HISTORY</span>
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("HISTORY")}</span>
       </header>
       <section className="mt-10 rounded-[2rem] border border-sky-300/15 bg-gradient-to-br from-[#1d2d43] via-[#171b2a] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-sky-200"><Headphones size={14}/> Your listening trail</p>
+        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-sky-200"><Headphones size={14}/> {t("Your listening trail")}</p>
         <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Recently heard.")}</h1>
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.")}</p>
       </section>
-      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><Clock3 className="animate-pulse" size={18}/> Loading listening history…</div> : !signedIn ? (
+      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><Clock3 className="animate-pulse" size={18}/> {t("Loading listening history…")}</div> : !signedIn ? (
         <section className="mt-8 rounded-3xl border border-white/10 p-8"><h2 className="text-xl font-semibold">{t("Sign in to see your history.")}</h2><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in")}</Link></section>
       ) : items.length === 0 ? (
         <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><ListMusic className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">{t("Your listening history is empty.")}</p><p className="mt-1 text-sm text-slate-500">{t("Play a track in Discover and it will appear here.")}</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Explore music")}</Link></section>
