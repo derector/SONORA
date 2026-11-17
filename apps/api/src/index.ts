@@ -963,6 +963,32 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
+    if (type === "artists") {
+      tasks.push((async () => {
+        try {
+          const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
+          const response = await fetch(`https://musicbrainz.org/ws/2/artist/?${params.toString()}`, {
+            headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
+            signal: AbortSignal.timeout(9000)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json() as { artists?: Array<{
+            id: string; name: string; country?: string; disambiguation?: string; type?: string;
+          }> };
+          for (const artist of payload.artists ?? []) {
+            if (!artist.id || !artist.name) continue;
+            artists.push({
+              id: `musicbrainz-artist:${artist.id}`, provider: "MusicBrainz", name: artist.name,
+              country: artist.country ?? null, description: artist.disambiguation ?? artist.type ?? null,
+              sourceUrl: `https://musicbrainz.org/artist/${artist.id}`
+            });
+          }
+          providers.musicbrainzArtists = { ok: true, count: artists.filter((artist) => artist.provider === "MusicBrainz").length };
+        } catch (error) {
+          providers.musicbrainzArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+        }
+      })());
+    }
   }
   await Promise.all(tasks);
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
