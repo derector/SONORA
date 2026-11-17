@@ -140,7 +140,8 @@ export default function PlaylistDetailPage() {
         const found = await res.json() as SearchResult;
         if (found.items?.[0]) queueTracks.push(found.items[0]);
       }
-      playTrack(data.items[0], queueTracks.length ? queueTracks : [data.items[0]]);
+      const startIndex = queueTracks.findIndex((item) => item.id === data.items?.[0]?.id);
+      playTrack(data.items[0], startIndex >= 0 ? queueTracks.slice(startIndex) : [data.items[0]]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start playback.");
     }
