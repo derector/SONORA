@@ -74,6 +74,12 @@ const ru: Record<string, string> = {
   "Ambient · 58 tracks": "Эмбиент · 58 треков",
   
   "Language": "Язык",
+  "Settings": "Настройки",
+  "Site settings": "Настройки сайта",
+  "Choose the interface language": "Выбери язык интерфейса",
+  "Your language choice is saved on this device.": "Выбор языка сохраняется на этом устройстве.",
+  "English": "Английский",
+  "Russian": "Русский",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
@@ -88,7 +94,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     window.localStorage.setItem("sonora-language", next);
   };
   const value = useMemo(() => ({ language, setLanguage, t: (value: string) => language === "ru" ? (ru[value] ?? value) : value }), [language]);
-  return <LanguageContext.Provider value={value}>{children}<div className="fixed right-3 top-3 z-[70] flex rounded-full border border-white/10 bg-[#10111a]/90 p-1 shadow-xl backdrop-blur-xl" aria-label="Language"><button type="button" onClick={() => setLanguage("en")} aria-pressed={language === "en"} className={`rounded-full px-3 py-1.5 text-[11px] font-semibold ${language === "en" ? "bg-violet-200 text-[#171323]" : "text-slate-400"}`}>EN</button><button type="button" onClick={() => setLanguage("ru")} aria-pressed={language === "ru"} className={`rounded-full px-3 py-1.5 text-[11px] font-semibold ${language === "ru" ? "bg-violet-200 text-[#171323]" : "text-slate-400"}`}>RU</button></div></LanguageContext.Provider>;
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 export function useLanguage() {
   const value = useContext(LanguageContext);
