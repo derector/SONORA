@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, Disc3, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import { useLanguage } from "../../components/language-provider";
 
 type Playlist = {
   id: string;
@@ -23,6 +24,7 @@ type ApiResponse = {
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 export default function PlaylistsPage() {
+  const { t } = useLanguage();
   const [token, setToken] = useState("");
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [title, setTitle] = useState("");
