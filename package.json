@@ -1,0 +1,17 @@
+{
+  "name": "sonora",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @sonora/api\" \"npm run dev --workspace @sonora/web\"",
+    "build": "npm run build --workspace @sonora/api && npm run build --workspace @sonora/web",
+    "typecheck": "npm run typecheck --workspace @sonora/api && npm run typecheck --workspace @sonora/web",
+    "start": "npm run start --workspace @sonora/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": { "node": ">=22" }
+}
