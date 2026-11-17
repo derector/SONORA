@@ -72,6 +72,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
+  const [playerSettingsReady, setPlayerSettingsReady] = useState(false);
   const { t } = useLanguage();
 
   useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
@@ -263,12 +264,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [queue, queueIndex, repeatMode, shuffle, t]);
 
   useEffect(() => {
+    if (!playerSettingsReady) return;
     const audio = audioRef.current;
     if (!audio) return;
     audio.volume = volume;
     audio.muted = muted;
     try { localStorage.setItem("sonora-player-settings", JSON.stringify({ volume, muted, repeatMode, shuffle, playbackMode })); } catch {}
-  }, [volume, muted, repeatMode, shuffle, playbackMode]);
+  }, [playerSettingsReady, volume, muted, repeatMode, shuffle, playbackMode]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -288,7 +290,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (saved.repeatMode === "off" || saved.repeatMode === "all" || saved.repeatMode === "one") setRepeatMode(saved.repeatMode);
       if (typeof saved.shuffle === "boolean") setShuffle(saved.shuffle);
       if (saved.playbackMode === "original" || saved.playbackMode === "speed" || saved.playbackMode === "slowed") setPlaybackMode(saved.playbackMode);
-    } catch {}
+    } catch {
+      // Invalid local settings should fall back to safe defaults.
+    } finally {
+      setPlayerSettingsReady(true);
+    }
   }, []);
 
   useEffect(() => {
