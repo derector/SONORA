@@ -18,7 +18,7 @@ export default function Home() {
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.24em] text-slate-500">{t("Workspace")}</p>
         <nav className="space-y-2 text-sm text-slate-300">
           <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="#"><Compass size={17}/> {t("Discover")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> {t("Search")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/search"><Search size={17}/> {t("Search")}</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> {t("Your library")}</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> {t("Liked tracks")}</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> {t("Listening history")}</a>
@@ -44,7 +44,7 @@ export default function Home() {
             <p className="mb-5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em] text-violet-200"><Sparkles size={14}/> {t("A new way to feel music")}</p>
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl">{t("Find your")}<br/><span className="bg-gradient-to-r from-violet-200 via-fuchsia-200 to-sky-200 bg-clip-text text-transparent">{t("own frequency.")}</span></h1>
             <p className="mt-5 max-w-lg text-sm leading-6 text-slate-300 md:text-base">{t("A calmer space for discovering sounds, collecting moments, and building a soundtrack that feels like yours.")}</p>
-            <a href="/discover" className="mt-8 inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">{t("Explore your sound")} <ArrowUpRight size={16}/></a>
+            <a href="/search" className="mt-8 inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">{t("Explore your sound")} <ArrowUpRight size={16}/></a>
           </div>
           <div className="absolute bottom-8 right-10 hidden h-48 w-48 rotate-[-12deg] items-center justify-center rounded-[2.5rem] border border-white/15 bg-white/[0.04] shadow-2xl backdrop-blur-xl lg:flex">
             <div className="absolute inset-4 rounded-full border border-violet-200/20"/>
