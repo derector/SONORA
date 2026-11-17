@@ -53,8 +53,8 @@ private val Muted = Color(0xFF9298A5)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         androidx.core.splashscreen.SplashScreen.installSplashScreen(this)
+        super.onCreate(savedInstanceState)
         SonoraApi.initialize(this)
         setContent { SonoraApp() }
     }
