@@ -5,9 +5,9 @@ import { useLanguage } from "../components/language-provider";
 import { useAuth } from "../components/auth-provider";
 
 const mixes = [
-  { title: "Afterglow", detail: "Warm electronic · 42 tracks", color: "from-fuchsia-500/35 to-violet-950", mark: "✳" },
-  { title: "Blue hour", detail: "Indie & alternative · 36 tracks", color: "from-sky-400/30 to-blue-950", mark: "◒" },
-  { title: "Deep focus", detail: "Ambient · 58 tracks", color: "from-emerald-400/25 to-teal-950", mark: "⌁" }
+  { title: "Afterglow", detail: "Warm electronic · 42 tracks", color: "from-fuchsia-500/35 to-violet-950", mark: "✳", image: "https://images.unsplash.com/photo-1751105270425-b84095290cca?auto=format&fit=crop&w=1400&q=85", alt: "DJ performance under neon lights" },
+  { title: "Blue hour", detail: "Indie & alternative · 36 tracks", color: "from-sky-400/30 to-blue-950", mark: "◒", image: "https://images.unsplash.com/photo-1742183635099-bf6d03fca5c7?auto=format&fit=crop&w=1400&q=85", alt: "Rainy city street at night" },
+  { title: "Deep focus", detail: "Ambient · 58 tracks", color: "from-emerald-400/25 to-teal-950", mark: "⌁", image: "https://images.unsplash.com/photo-1648751696594-1de6b17f4c0b?auto=format&fit=crop&w=1400&q=85", alt: "Starry night sky over a dark forest" }
 ];
 
 export default function Home() {
@@ -60,7 +60,7 @@ export default function Home() {
         <section id="mixes" className="mt-12">
           <div className="mb-5 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Curated starting points")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Made for the moment")}</h2></div><a href="/discover" className="text-xs text-slate-400 hover:text-white">{t("View all")}</a></div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {mixes.map((mix) => <article key={mix.title} className="group rounded-3xl border border-white/[0.07] bg-white/[0.025] p-3 transition hover:-translate-y-1 hover:bg-white/[0.05]"><div className={`relative grid aspect-[1.55] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br ${mix.color}`}><span className="text-7xl text-white/75 transition group-hover:scale-110">{mix.mark}</span><span className="absolute bottom-3 right-3 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] uppercase tracking-widest text-white/70">{t("Editorial mood")}</span></div><h3 className="mt-4 font-medium">{mix.title}</h3><p className="mt-1 text-xs text-slate-400">{t(mix.detail)}</p></article>)}
+            {mixes.map((mix) => <article key={mix.title} className="group rounded-3xl border border-white/[0.07] bg-white/[0.025] p-3 transition hover:-translate-y-1 hover:bg-white/[0.05]"><div className={`relative grid aspect-[1.55] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br ${mix.color}`}><img src={mix.image} alt={mix.alt} loading="lazy" className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-110"/><div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10"/><span className="relative text-7xl text-white/75 opacity-0 transition duration-500 group-hover:scale-110 group-hover:opacity-100">{mix.mark}</span><span className="absolute bottom-3 right-3 rounded-full border border-white/20 bg-black/35 px-3 py-1 text-[10px] uppercase tracking-widest text-white/80 backdrop-blur-md">{t("Editorial mood")}</span></div><h3 className="mt-4 font-medium">{mix.title}</h3><p className="mt-1 text-xs text-slate-400">{t(mix.detail)}</p></article>)}
           </div>
         </section>
 
