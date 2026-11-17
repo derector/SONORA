@@ -548,12 +548,48 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const { provider, providerTrackId } = request.body ?? {};
-  if (provider !== "jamendo" || typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
+  if ((provider !== "jamendo" && provider !== "audius") || typeof providerTrackId !== "string" ||
+      (provider === "jamendo" ? !/^[0-9]{1,24}$/.test(providerTrackId) : !/^[a-zA-Z0-9_-]{1,64}$/.test(providerTrackId))) {
     return reply.code(400).send(authError(400, "A valid supported provider and track ID are required."));
   }
   const { data: playlist } = await auth.client.from("playlists").select("id")
     .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
   if (!playlist) return reply.code(404).send(authError(404, "Playlist not found."));
+  if (provider === "audius") {
+    try {
+      const response = await fetch(`https://api.audius.co/v1/tracks/${encodeURIComponent(providerTrackId)}?app_name=SONORA`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return reply.code(502).send(authError(502, "Audius could not verify this track."));
+      const payload = await response.json() as { data?: Array<{
+        id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
+        is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
+        user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
+      }> | { id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
+        is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
+        user?: { name?: string; handle?: string }; album?: { playlist_name?: string } } };
+      const track = Array.isArray(payload.data) ? payload.data[0] : payload.data;
+      if (!track || track.id !== providerTrackId || !track.title ||
+          track.is_streamable !== true || track.is_stream_gated === true) {
+        return reply.code(403).send(authError(403, "This Audius track is not available for playback through the public API."));
+      }
+      const { data: last } = await auth.client.from("provider_playlist_tracks").select("position")
+        .eq("playlist_id", playlist.id).order("position", { ascending: false }).limit(1).maybeSingle();
+      const { error } = await auth.client.from("provider_playlist_tracks").insert({
+        playlist_id: playlist.id, provider: "audius", provider_track_id: track.id,
+        title: track.title, artist_name: track.user?.name ?? track.user?.handle ?? "Audius creator",
+        album_name: track.album?.playlist_name ?? null, duration_seconds: track.duration ?? null,
+        artwork_url: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
+        license_url: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
+        source_url: track.permalink ?? "https://audius.co", position: (last?.position ?? -1) + 1
+      });
+      if (error) return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
+      return reply.code(201).send({ ok: true, provider: "audius", providerTrackId: track.id });
+    } catch (error) {
+      request.log.error({ err: error }, "Audius playlist track verification failed");
+      return reply.code(502).send(authError(502, "Audius could not verify this track right now."));
+    }
+  }
   const clientId = process.env.JAMENDO_CLIENT_ID;
   if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
     return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
@@ -939,13 +975,18 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
 
 // Audius public discovery catalog. Read-only endpoints are public; only API-accessible,
 // non-gated tracks are returned as playable. The provider remains the audio host.
-app.get<{ Querystring: { sort?: string; limit?: string } }>("/api/v1/providers/audius/tracks", async (request, reply) => {
+app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v1/providers/audius/tracks", async (request, reply) => {
   const sort = request.query.sort === "latest" ? "latest" : "trending";
-  const limit = Math.min(30, Math.max(1, Number(request.query.limit) || 24));
+  const trackId = request.query.id?.trim() ?? "";
+  const limit = trackId ? 1 : Math.min(30, Math.max(1, Number(request.query.limit) || 24));
+  if (trackId && !/^[a-zA-Z0-9_-]{1,64}$/.test(trackId)) {
+    return reply.code(400).send(authError(400, "A valid Audius track ID is required."));
+  }
   try {
     const params = new URLSearchParams({ limit: String(limit), app_name: "SONORA" });
-    if (sort === "trending") params.set("time", "week");
-    const response = await fetch(`https://api.audius.co/v1/tracks/${sort}?${params.toString()}`, {
+    if (sort === "trending" && !trackId) params.set("time", "week");
+    const path = trackId ? `tracks/${encodeURIComponent(trackId)}` : `tracks/${sort}`;
+    const response = await fetch(`https://api.audius.co/v1/${path}?${params.toString()}`, {
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -953,8 +994,13 @@ app.get<{ Querystring: { sort?: string; limit?: string } }>("/api/v1/providers/a
       id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
       is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
       user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
-    }> };
-    const items = (payload.data ?? []).flatMap((track) => {
+    }> | {
+      id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
+      is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
+      user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
+    } };
+    const records = Array.isArray(payload.data) ? payload.data : payload.data ? [payload.data] : [];
+    const items = records.flatMap((track) => {
       if (!track.id || !track.title || track.is_streamable !== true || track.is_stream_gated === true) return [];
       return [{
         id: `audius:${track.id}`, providerTrackId: track.id, title: track.title,
@@ -966,7 +1012,7 @@ app.get<{ Querystring: { sort?: string; limit?: string } }>("/api/v1/providers/a
         sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
       }];
     });
-    return { provider: "Audius", sort, items, sourceCount: payload.data?.length ?? 0 };
+    return { provider: "Audius", sort, items, sourceCount: records.length };
   } catch (error) {
     request.log.warn({ err: error }, "Audius discovery catalog unavailable");
     return reply.code(502).send(authError(502, "Audius catalog is temporarily unavailable."));
