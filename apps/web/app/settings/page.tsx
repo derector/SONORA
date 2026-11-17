@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, AudioLines, Check } from "lucide-react";
+import { ArrowLeft, AudioLines, Check, ExternalLink, Music2 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 
 export default function SettingsPage() {
@@ -19,6 +19,34 @@ export default function SettingsPage() {
           <span><span className="block text-sm font-semibold">{t("Your profile")}</span><span className="mt-1 block text-xs text-slate-500">{t("Manage your SONORA identity and account details.")}</span></span>
           <span className="text-violet-200">→</span>
         </Link>
+        <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <div className="flex items-center gap-2">
+            <Music2 size={18} className="text-violet-200" />
+            <h2 className="text-base font-semibold">{t("Music sources")}</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{t("SONORA currently searches playable open catalogs such as Jamendo and Audius. Other services are shown only when an official playback integration is available.")}</p>
+          <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">VK Музыка</p>
+                <p className="mt-1 text-xs text-slate-500">{t("Official catalog playback is not available through the public VK API.")}</p>
+              </div>
+              <a href="https://music.vk.com/" target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-200 transition hover:bg-white/5">
+                {t("Open VK Music")} <ExternalLink size={14}/>
+              </a>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-amber-200/80">{t("VK ID sign-in alone does not grant access to the private VK Music catalog or audio streams. SONORA will not ask for your VK password or use unofficial private endpoints.")}</p>
+            <a href="https://id.vk.com/about/business/go" target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 text-xs text-violet-200 underline decoration-violet-200/30 underline-offset-4 hover:text-white">
+              {t("Open VK ID developer setup")} <ExternalLink size={13}/>
+            </a>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-400">
+            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Jamendo · {t("playable")}</span>
+            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Audius · {t("playable when streamable")}</span>
+            <span className="rounded-full border border-white/10 px-3 py-1.5">MusicBrainz · {t("metadata only")}</span>
+            <span className="rounded-full border border-amber-300/15 bg-amber-300/5 px-3 py-1.5 text-amber-200">VK · {t("external service only")}</span>
+          </div>
+        </div>
         <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <h2 className="text-base font-semibold">{t("Language")}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">{t("Choose the interface language")}</p>
