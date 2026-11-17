@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ListMusic, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
 import { useLanguage } from "./language-provider";
+import { useAuth } from "./auth-provider";
 
 export type PlayerTrack = {
   id: string;
@@ -40,6 +41,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
   const tokenRef = useRef("");
+  const { accessToken } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
@@ -52,17 +54,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const { t } = useLanguage();
 
   async function getToken() {
-    if (tokenRef.current) return tokenRef.current;
-    try {
-      const response = await fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" });
-      if (!response.ok) return "";
-      const result = await response.json() as { session?: { access_token?: string } };
-      tokenRef.current = result.session?.access_token ?? "";
-      return tokenRef.current;
-    } catch {
-      return "";
-    }
+    return tokenRef.current;
   }
+
+  useEffect(() => {
+    tokenRef.current = accessToken;
+  }, [accessToken]);
 
   async function recordEvent(track: PlayerTrack, eventType: "play" | "complete" | "skip", listenedMs: number) {
     const token = await getToken();
