@@ -77,12 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           return Boolean(tokenRef.current);
         }
-        const result = await response.json() as { session?: { access_token?: string; expires_at?: number } };
+        const result = await response.json() as {
+          session?: { access_token?: string; expires_at?: number };
+          user?: SonoraUser;
+        };
         const token = result.session?.access_token;
         if (!token) throw new Error("Session refresh returned no access token.");
         tokenRef.current = token;
         setAccessToken(token);
         expiresAtRef.current = result.session?.expires_at ?? Math.floor(Date.now() / 1000) + 3600;
+
+        // Restore the user and token from the same refresh response. A second
+        // /me request created a race where the token was renewed but the profile
+        // stayed null, sending an already signed-in user back to /auth.
+        if (result.user?.id && result.user.email) {
+          setUser(result.user);
+          return true;
+        }
 
         const meResponse = await fetch(`${API}/api/v1/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
