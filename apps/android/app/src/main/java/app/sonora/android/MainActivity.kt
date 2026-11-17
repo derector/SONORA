@@ -109,7 +109,7 @@ private fun SonoraApp() {
         loadTracks("Audius") { tracks = it }
     }
 
-    DisposableEffect(controller, tracks) {
+    DisposableEffect(controller, tracks, activeQueue) {
         val player = controller
         if (player == null) return@DisposableEffect onDispose { }
         val listener = object : Player.Listener {
