@@ -65,7 +65,7 @@ export default function FavoritesPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 md:px-8">
+    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">History</Link></div>
         <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> FAVORITES</span>
