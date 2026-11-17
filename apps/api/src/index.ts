@@ -443,6 +443,11 @@ app.delete<{ Params: { playlistId: string; trackId: string } }>("/api/v1/playlis
 // are always returned with each item.
 app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
   const clientId = process.env.JAMENDO_CLIENT_ID;
+  const nonCommercialMode = process.env.JAMENDO_USE_MODE === "noncommercial";
+  const commercialApproved = process.env.JAMENDO_COMMERCIAL_APPROVED === "true";
+  if (!nonCommercialMode && !commercialApproved) {
+    return reply.code(503).send(authError(503, "Jamendo is disabled until non-commercial mode is explicitly selected or commercial API permission is approved."));
+  }
   if (!clientId) return reply.code(503).send(authError(503, "Jamendo catalog is not configured yet."));
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const limit = Math.min(30, Math.max(1, Number(request.query.limit) || 20));
