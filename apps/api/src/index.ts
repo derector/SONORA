@@ -66,7 +66,10 @@ app.get("/api/v1", async () => ({
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
-    "/api/v1/playlists/:playlistId/tracks/:trackId"
+    "/api/v1/playlists/:playlistId/tracks/:trackId",
+    "/api/v1/favorites",
+    "/api/v1/favorites/:trackId",
+    "/api/v1/history"
   ]
 }));
 
@@ -438,9 +441,84 @@ app.delete<{ Params: { playlistId: string; trackId: string } }>("/api/v1/playlis
 });
 
 
-// Jamendo's API exposes Creative Commons catalog items. Non-commercial-only
-// licenses are excluded from the playable list; attribution and license links
-// are always returned with each item.
+
+// Favorites: one row per user/track, protected by RLS and a composite primary key.
+app.get("/api/v1/favorites", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("user_favorites")
+    .select("created_at,track:tracks(id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title))")
+    .eq("user_id", auth.user.id).order("created_at", { ascending: false });
+  if (error) {
+    request.log.error({ code: error.code }, "Favorites listing failed");
+    return reply.code(503).send(authError(503, "Favorites are temporarily unavailable."));
+  }
+  return { items: data ?? [] };
+});
+
+app.post<{ Body: { trackId?: string } }>("/api/v1/favorites", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { trackId } = request.body ?? {};
+  if (typeof trackId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trackId)) {
+    return reply.code(400).send(authError(400, "A valid track ID is required."));
+  }
+  const { error } = await auth.client.from("user_favorites")
+    .upsert({ user_id: auth.user.id, track_id: trackId }, { onConflict: "user_id,track_id", ignoreDuplicates: true });
+  if (error) {
+    request.log.warn({ code: error.code }, "Favorite could not be saved");
+    return reply.code(error.code === "23503" ? 404 : 400).send(authError(error.code === "23503" ? 404 : 400, "Track could not be added to favorites."));
+  }
+  return reply.code(201).send({ ok: true });
+});
+
+app.delete<{ Params: { trackId: string } }>("/api/v1/favorites/:trackId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("user_favorites").delete()
+    .eq("user_id", auth.user.id).eq("track_id", request.params.trackId).select("track_id").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Favorite could not be removed."));
+  if (!data) return reply.code(404).send(authError(404, "Favorite not found."));
+  return { ok: true };
+});
+
+// Listening history stores real user actions; it never fabricates playback progress.
+app.get<{ Querystring: { limit?: string } }>("/api/v1/history", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const limit = Math.min(100, Math.max(1, Number(request.query.limit) || 30));
+  const { data, error } = await auth.client.from("listening_events")
+    .select("id,event_type,listened_ms,occurred_at,track:tracks(id,title,duration_ms,artwork_url,artist:artists(name),album:albums(title))")
+    .eq("user_id", auth.user.id).order("occurred_at", { ascending: false }).limit(limit);
+  if (error) {
+    request.log.error({ code: error.code }, "Listening history query failed");
+    return reply.code(503).send(authError(503, "Listening history is temporarily unavailable."));
+  }
+  return { items: data ?? [] };
+});
+
+app.post<{ Body: { trackId?: string; eventType?: string; listenedMs?: number } }>("/api/v1/history", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { trackId, eventType, listenedMs } = request.body ?? {};
+  const validTrackId = typeof trackId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(trackId);
+  if (!validTrackId || !["play", "complete", "skip"].includes(eventType ?? "") ||
+      (listenedMs !== undefined && (!Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86_400_000))) {
+    return reply.code(400).send(authError(400, "Provide a valid track ID, play/complete/skip event, and non-negative listening duration."));
+  }
+  const { data, error } = await auth.client.from("listening_events").insert({
+    user_id: auth.user.id, track_id: trackId, event_type: eventType, listened_ms: listenedMs ?? 0
+  }).select("id,event_type,listened_ms,occurred_at").single();
+  if (error) {
+    request.log.warn({ code: error.code }, "Listening event could not be stored");
+    return reply.code(error.code === "23503" ? 404 : 400).send(authError(error.code === "23503" ? 404 : 400, "Listening event could not be saved."));
+  }
+  return reply.code(201).send({ event: data });
+});
+
+// Jamendo API access is configured for non-commercial use. Known CC BY and
+// CC BY-NC variants are accepted; unknown licenses are rejected. Attribution
+// and license links are returned with every catalog item.
 app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
   const clientId = process.env.JAMENDO_CLIENT_ID;
   const nonCommercialMode = process.env.JAMENDO_USE_MODE === "noncommercial";
