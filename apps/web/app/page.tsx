@@ -41,7 +41,7 @@ export default function Home() {
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
           <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-fuchsia-500/15 blur-3xl"/>
           <div className="relative max-w-2xl">
-            <p className="mb-5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em] text-violet-200"><Sparkles size={14}/> A new way to feel music</p>
+            <p className="mb-5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em] text-violet-200"><Sparkles size={14}/> {t("A new way to feel music")}</p>
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl">{t("Find your")}<br/><span className="bg-gradient-to-r from-violet-200 via-fuchsia-200 to-sky-200 bg-clip-text text-transparent">{t("own frequency.")}</span></h1>
             <p className="mt-5 max-w-lg text-sm leading-6 text-slate-300 md:text-base">{t("A calmer space for discovering sounds, collecting moments, and building a soundtrack that feels like yours.")}</p>
             <a href="/discover" className="mt-8 inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">{t("Explore your sound")} <ArrowUpRight size={16}/></a>
@@ -57,7 +57,7 @@ export default function Home() {
         <section id="mixes" className="mt-12">
           <div className="mb-5 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Curated starting points")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Made for the moment")}</h2></div><a href="/discover" className="text-xs text-slate-400 hover:text-white">{t("View all")}</a></div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {mixes.map((mix) => <article key={mix.title} className="group rounded-3xl border border-white/[0.07] bg-white/[0.025] p-3 transition hover:-translate-y-1 hover:bg-white/[0.05]"><div className={`relative grid aspect-[1.55] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br ${mix.color}`}><span className="text-7xl text-white/75 transition group-hover:scale-110">{mix.mark}</span><span className="absolute bottom-3 right-3 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] uppercase tracking-widest text-white/70">{t("Editorial mood")}</span></div><h3 className="mt-4 font-medium">{mix.title}</h3><p className="mt-1 text-xs text-slate-400">{mix.detail}</p></article>)}
+            {mixes.map((mix) => <article key={mix.title} className="group rounded-3xl border border-white/[0.07] bg-white/[0.025] p-3 transition hover:-translate-y-1 hover:bg-white/[0.05]"><div className={`relative grid aspect-[1.55] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br ${mix.color}`}><span className="text-7xl text-white/75 transition group-hover:scale-110">{mix.mark}</span><span className="absolute bottom-3 right-3 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] uppercase tracking-widest text-white/70">{t("Editorial mood")}</span></div><h3 className="mt-4 font-medium">{mix.title}</h3><p className="mt-1 text-xs text-slate-400">{t(mix.detail)}</p></article>)}
           </div>
         </section>
 
