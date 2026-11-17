@@ -104,7 +104,7 @@ export default function PlaylistsPage() {
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 md:px-8">
       <header className="flex items-center justify-between">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> PLAYLISTS</span>
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("PLAYLISTS")}</span>
       </header>
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your personal collection")}</p>
@@ -112,7 +112,7 @@ export default function PlaylistsPage() {
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.")}</p>
       </section>
 
-      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> Restoring your session…</div> : !token ? (
+      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Restoring your session…")}</div> : !token ? (
         <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-7">
           <h2 className="text-xl font-semibold">{t("Sign in to see your library.")}</h2>
           <p className="mt-2 text-sm text-slate-400">{t("Your playlists are private to your account until you choose otherwise.")}</p>
