@@ -66,11 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           cache: "no-store"
         });
         if (!response.ok) {
-          tokenRef.current = "";
-          setAccessToken("");
-          setUser(null);
-          expiresAtRef.current = 0;
-          return false;
+          // Only a definitive auth rejection should clear the session.
+          // A temporary API outage or rate limit must not sign the user out.
+          if (response.status === 401 || response.status === 403) {
+            tokenRef.current = "";
+            setAccessToken("");
+            setUser(null);
+            expiresAtRef.current = 0;
+            return false;
+          }
+          return Boolean(tokenRef.current);
         }
         const result = await response.json() as { session?: { access_token?: string; expires_at?: number } };
         const token = result.session?.access_token;
