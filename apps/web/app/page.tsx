@@ -14,7 +14,7 @@ export default function Home() {
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.24em] text-slate-500">Workspace</p>
         <nav className="space-y-2 text-sm text-slate-300">
           <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="#"><Compass size={17}/> Discover</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="#"><Search size={17}/> Search</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> Search</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="#"><Library size={17}/> Your library</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="#"><Heart size={17}/> Liked tracks</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="#"><ListMusic size={17}/> Playlists</a>
@@ -50,7 +50,7 @@ export default function Home() {
         </div>
 
         <section id="mixes" className="mt-12">
-          <div className="mb-5 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Curated starting points</p><h2 className="mt-2 text-2xl font-semibold">Made for the moment</h2></div><a href="#" className="text-xs text-slate-400 hover:text-white">View all</a></div>
+          <div className="mb-5 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Curated starting points</p><h2 className="mt-2 text-2xl font-semibold">Made for the moment</h2></div><a href="/discover" className="text-xs text-slate-400 hover:text-white">View all</a></div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {mixes.map((mix) => <article key={mix.title} className="group rounded-3xl border border-white/[0.07] bg-white/[0.025] p-3 transition hover:-translate-y-1 hover:bg-white/[0.05]"><div className={`relative grid aspect-[1.55] place-items-center overflow-hidden rounded-2xl bg-gradient-to-br ${mix.color}`}><span className="text-7xl text-white/75 transition group-hover:scale-110">{mix.mark}</span><span className="absolute bottom-3 right-3 rounded-full border border-white/15 bg-black/20 px-3 py-1 text-[10px] uppercase tracking-widest text-white/70">Editorial mood</span></div><h3 className="mt-4 font-medium">{mix.title}</h3><p className="mt-1 text-xs text-slate-400">{mix.detail}</p></article>)}
           </div>
