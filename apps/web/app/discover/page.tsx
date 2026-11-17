@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Search, ShieldCheck } from "lucide-react";
 
 type Track = {
   id: string;
@@ -30,6 +30,9 @@ export default function DiscoverPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [token, setToken] = useState("");
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
+  const [savingFavorite, setSavingFavorite] = useState<string>("");
 
   async function loadTracks(search = "") {
     setLoading(true);
@@ -49,7 +52,49 @@ export default function DiscoverPage() {
     }
   }
 
-  useEffect(() => { void loadTracks(); }, []);
+  useEffect(() => {
+    void loadTracks();
+    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+      .then(async (response) => response.ok ? response.json() as Promise<{ session?: { access_token?: string } }> : null)
+      .then(async (result) => {
+        const accessToken = result?.session?.access_token;
+        if (!accessToken) return;
+        setToken(accessToken);
+        const response = await fetch(`${API}/api/v1/provider-favorites`, {
+          headers: { Authorization: `Bearer ${accessToken}` }, credentials: "include"
+        });
+        if (response.ok) {
+          const saved = await response.json() as { items?: Array<{ provider_track_id: string }> };
+          setFavoriteIds((saved.items ?? []).map((item) => item.provider_track_id));
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function toggleFavorite(track: Track) {
+    if (!token) {
+      setError("Sign in to save tracks to your library.");
+      return;
+    }
+    setSavingFavorite(track.id);
+    setError("");
+    try {
+      const isSaved = favoriteIds.includes(track.id);
+      const response = await fetch(`${API}/api/v1/provider-favorites${isSaved ? `/${encodeURIComponent(track.id)}` : ""}`, {
+        method: isSaved ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        credentials: "include",
+        ...(isSaved ? {} : { body: JSON.stringify({ providerTrackId: track.id }) })
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error || "Could not update favorites.");
+      setFavoriteIds((ids) => isSaved ? ids.filter((id) => id !== track.id) : [...ids, track.id]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update favorites.");
+    } finally {
+      setSavingFavorite("");
+    }
+  }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -96,7 +141,7 @@ export default function DiscoverPage() {
               <div className="flex gap-4">
                 {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-20 w-20 rounded-2xl object-cover" loading="lazy"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-sky-500/20"><Music2 className="text-violet-100" size={28}/></div>}
                 <div className="min-w-0 flex-1 py-1">
-                  <h3 className="truncate font-medium">{track.title}</h3>
+                  <div className="flex items-start gap-2"><h3 className="min-w-0 flex-1 truncate font-medium">{track.title}</h3><button type="button" onClick={() => void toggleFavorite(track)} disabled={savingFavorite === track.id} aria-label={favoriteIds.includes(track.id) ? "Remove from favorites" : "Add to favorites"} className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-200 disabled:opacity-40"><Heart size={16} fill={favoriteIds.includes(track.id) ? "currentColor" : "none"}/></button></div>
                   <p className="mt-1 truncate text-sm text-slate-400">{track.artist}</p>
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
