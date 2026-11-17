@@ -436,6 +436,69 @@ app.delete<{ Params: { playlistId: string; trackId: string } }>("/api/v1/playlis
   return { ok: true };
 });
 
+
+// Jamendo's API exposes Creative Commons catalog items. Non-commercial-only
+// licenses are excluded from the playable list; attribution and license links
+// are always returned with each item.
+app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
+  const clientId = process.env.JAMENDO_CLIENT_ID;
+  if (!clientId) return reply.code(503).send(authError(503, "Jamendo catalog is not configured yet."));
+  const q = request.query.q?.trim().slice(0, 100) ?? "";
+  const limit = Math.min(30, Math.max(1, Number(request.query.limit) || 20));
+  const page = Math.min(100, Math.max(1, Number(request.query.page) || 1));
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      format: "json",
+      limit: String(limit),
+      offset: String((page - 1) * limit),
+      order: "popularity_total",
+      include: "musicinfo",
+      audioformat: "mp32"
+    });
+    if (q) params.set("search", q);
+    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) {
+      request.log.warn({ status: response.status }, "Jamendo catalog request failed");
+      return reply.code(502).send(authError(502, "Music provider is temporarily unavailable."));
+    }
+    const payload = await response.json() as {
+      headers?: { status?: string; results_count?: number };
+      results?: Array<{
+        id: string; name: string; duration: number; artist_name: string;
+        album_name?: string; image?: string; album_image?: string;
+        audio?: string; audiodownload?: string; license_ccurl?: string;
+        shareurl?: string; releasedate?: string;
+      }>;
+    };
+    const items = (payload.results ?? []).flatMap((track) => {
+      const licenseUrl = track.license_ccurl ?? "";
+      const commerciallyUsable = /creativecommons\.org\/licenses\/(by|by-sa|by-nd)\//i.test(licenseUrl) ||
+        /creativecommons\.org\/publicdomain\/zero\//i.test(licenseUrl);
+      if (!commerciallyUsable || !track.audio || !track.id) return [];
+      return [{
+        id: track.id,
+        title: track.name,
+        artist: track.artist_name,
+        album: track.album_name ?? null,
+        durationSeconds: track.duration,
+        artworkUrl: track.album_image ?? track.image ?? null,
+        audioUrl: track.audio,
+        licenseUrl,
+        sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+        provider: "Jamendo"
+      }];
+    });
+    return { provider: "Jamendo", items, page, limit, sourceCount: payload.results?.length ?? 0 };
+  } catch (error) {
+    request.log.error({ err: error }, "Jamendo catalog unavailable");
+    return reply.code(502).send(authError(502, "Music provider is temporarily unavailable."));
+  }
+});
+
 try {
   await app.listen({ port, host });
 } catch (error) {
