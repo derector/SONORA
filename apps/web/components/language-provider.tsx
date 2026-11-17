@@ -78,6 +78,9 @@ const ru: Record<string, string> = {
   "Site settings": "Настройки сайта",
   "Choose the interface language": "Выбери язык интерфейса",
   "Your language choice is saved on this device.": "Выбор языка сохраняется на этом устройстве.",
+  "A sign-in code has been requested. Check your email, including spam.": "Код для входа отправлен. Проверь почту и папку «Спам».",
+  "Your SONORA session is active.": "Сессия SONORA активна.",
+  "You have signed out.": "Вы вышли из аккаунта.",
   "English": "Английский",
   "Russian": "Русский",
 };
