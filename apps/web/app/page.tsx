@@ -1,4 +1,4 @@
-import { ArrowUpRight, AudioLines, Compass, Headphones, Heart, Library, ListMusic, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, AudioLines, Clock3, Compass, Headphones, Heart, Library, ListMusic, Search, Sparkles } from "lucide-react";
 
 const mixes = [
   { title: "Afterglow", detail: "Warm electronic · 42 tracks", color: "from-fuchsia-500/35 to-violet-950", mark: "✳" },
@@ -17,6 +17,7 @@ export default function Home() {
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> Search</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> Your library</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> Liked tracks</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> Listening history</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> Playlists</a>
         </nav>
         <div className="mt-auto rounded-2xl border border-white/[0.07] bg-gradient-to-br from-violet-500/15 to-transparent p-4">
