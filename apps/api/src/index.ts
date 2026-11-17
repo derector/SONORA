@@ -173,7 +173,7 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
   }
 });
 
-app.post<{ Body: { refresh_token?: string } }>("/api/v1/auth/refresh", async (request, reply) => {
+app.post("/api/v1/auth/refresh", async (request, reply) => {
   const refreshToken = request.cookies.sonora_refresh;
   if (!cleanText(refreshToken, 10, 4096)) {
     return reply.code(400).send(authError(400, "A valid refresh token is required."));
