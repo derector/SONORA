@@ -66,6 +66,8 @@ app.get("/api/v1", async () => ({
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
+    "/api/v1/playlists/:playlistId/provider-tracks",
+    "/api/v1/playlists/:playlistId/provider-tracks/:provider/:providerTrackId",
     "/api/v1/playlists/:playlistId/tracks/:trackId",
     "/api/v1/favorites",
     "/api/v1/favorites/:trackId",
@@ -366,7 +368,7 @@ app.get<{ Params: { playlistId: string } }>("/api/v1/playlists/:playlistId", asy
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const { data, error } = await auth.client.from("playlists")
-    .select("id,title,description,is_public,created_at,updated_at,playlist_tracks(position,added_at,track:tracks(id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title)))")
+    .select("id,title,description,is_public,created_at,updated_at,playlist_tracks(position,added_at,track:tracks(id,title,duration_ms,artwork_url,playback_provider,playback_reference,rights_status,artist:artists(name),album:albums(title))),provider_playlist_tracks(provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,source_url,position,added_at)")
     .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
   if (error) return reply.code(503).send(authError(503, "Playlist could not be loaded."));
   if (!data) return reply.code(404).send(authError(404, "Playlist not found."));
@@ -428,6 +430,82 @@ app.post<{ Params: { playlistId: string }; Body: { trackId?: string } }>("/api/v
     return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
   }
   return reply.code(201).send({ ok: true });
+});
+
+app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTrackId?: string } }>("/api/v1/playlists/:playlistId/provider-tracks", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { provider, providerTrackId } = request.body ?? {};
+  if (provider !== "jamendo" || typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
+    return reply.code(400).send(authError(400, "A valid supported provider and track ID are required."));
+  }
+  const { data: playlist } = await auth.client.from("playlists").select("id")
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
+  if (!playlist) return reply.code(404).send(authError(404, "Playlist not found."));
+  const clientId = process.env.JAMENDO_CLIENT_ID;
+  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
+    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  }
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId, format: "json", id: providerTrackId,
+      include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32"
+    });
+    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+      headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
+    const payload = await response.json() as { results?: Array<{
+      id: string; name: string; duration: number; artist_name: string;
+      album_name?: string; image?: string; album_image?: string; audio?: string;
+      license_ccurl?: string; shareurl?: string;
+    }> };
+    const track = payload.results?.[0];
+    if (!track || track.id !== providerTrackId || !track.audio) {
+      return reply.code(404).send(authError(404, "This track is not available for playback."));
+    }
+    const licenseUrl = track.license_ccurl ?? "";
+    const normalized = licenseUrl.toLowerCase()
+      .replace("http://creativecommons.org/", "")
+      .replace("https://creativecommons.org/", "")
+      .replace("https://www.creativecommons.org/", "");
+    const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
+    const isCcZero = normalized.startsWith("publicdomain/zero/");
+    const isKnownCc = isCcZero || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
+    const licenseAllowed = isKnownCc && (process.env.JAMENDO_USE_MODE === "noncommercial" || !slug.includes("-nc"));
+    if (!licenseAllowed) return reply.code(403).send(authError(403, "This track's license is not enabled for this catalog."));
+    const { data: last } = await auth.client.from("provider_playlist_tracks").select("position")
+      .eq("playlist_id", playlist.id).order("position", { ascending: false }).limit(1).maybeSingle();
+    const { error } = await auth.client.from("provider_playlist_tracks").insert({
+      playlist_id: playlist.id, provider: "jamendo", provider_track_id: track.id,
+      title: track.name, artist_name: track.artist_name, album_name: track.album_name ?? null,
+      duration_seconds: track.duration, artwork_url: track.album_image ?? track.image ?? null,
+      license_url: licenseUrl, source_url: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+      position: (last?.position ?? -1) + 1
+    });
+    if (error) {
+      request.log.warn({ code: error.code }, "Provider track could not be added to playlist");
+      return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
+    }
+    return reply.code(201).send({ ok: true, provider: "jamendo", providerTrackId: track.id });
+  } catch (error) {
+    request.log.error({ err: error }, "Provider playlist track verification failed");
+    return reply.code(502).send(authError(502, "Jamendo could not verify this track right now."));
+  }
+});
+
+app.delete<{ Params: { playlistId: string; provider: string; providerTrackId: string } }>("/api/v1/playlists/:playlistId/provider-tracks/:provider/:providerTrackId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data: playlist } = await auth.client.from("playlists").select("id")
+    .eq("id", request.params.playlistId).eq("owner_id", auth.user.id).maybeSingle();
+  if (!playlist) return reply.code(404).send(authError(404, "Playlist not found."));
+  const { data, error } = await auth.client.from("provider_playlist_tracks").delete()
+    .eq("playlist_id", playlist.id).eq("provider", request.params.provider)
+    .eq("provider_track_id", request.params.providerTrackId).select("provider_track_id").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Could not remove this provider track."));
+  if (!data) return reply.code(404).send(authError(404, "Track not found in this playlist."));
+  return { ok: true };
 });
 
 app.delete<{ Params: { playlistId: string; trackId: string } }>("/api/v1/playlists/:playlistId/tracks/:trackId", async (request, reply) => {
