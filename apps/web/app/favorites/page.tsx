@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Trash2 } from "lucide-react";
+import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Trash2 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
+import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
 type Favorite = {
   provider_track_id: string;
@@ -17,6 +18,7 @@ type Favorite = {
   created_at: string;
 };
 type ApiResult = { items?: Favorite[]; error?: string; session?: { access_token?: string } };
+type TrackResult = { items?: PlayerTrack[]; error?: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 function duration(seconds: number | null) {
@@ -26,7 +28,9 @@ function duration(seconds: number | null) {
 
 export default function FavoritesPage() {
   const { t } = useLanguage();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
   const [token, setToken] = useState("");
+  const [startingTrack, setStartingTrack] = useState("");
   const [items, setItems] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,6 +54,30 @@ export default function FavoritesPage() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
+
+  async function startFavorite(item: Favorite) {
+    if (currentTrack?.id === item.provider_track_id) {
+      togglePlay();
+      return;
+    }
+    setStartingTrack(item.provider_track_id);
+    setError("");
+    try {
+      const params = new URLSearchParams({ id: item.provider_track_id });
+      const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${params.toString()}`);
+      const result = await response.json() as TrackResult;
+      if (!response.ok) throw new Error(result.error || "Could not load this track for playback.");
+      const track = result.items?.[0];
+      if (!track || track.id !== item.provider_track_id) {
+        throw new Error("This track is no longer available for licensed playback.");
+      }
+      playTrack(track, [track]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start this track.");
+    } finally {
+      setStartingTrack("");
+    }
+  }
 
   async function removeFavorite(id: string) {
     if (!token) return;
@@ -87,6 +115,7 @@ export default function FavoritesPage() {
           {items.map((item) => <article key={item.provider_track_id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
             {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-16 w-16 rounded-xl object-cover"/> : <div className="grid h-16 w-16 place-items-center rounded-xl bg-violet-300/10"><Music2 className="text-violet-200"/></div>}
             <div className="min-w-0 flex-1"><h3 className="truncate font-medium">{item.title}</h3><p className="mt-1 truncate text-sm text-slate-400">{item.artist_name}</p><p className="mt-1 text-xs text-slate-500">{item.album_name || "Independent release"} · {duration(item.duration_seconds)}</p><div className="mt-2 flex gap-3 text-xs text-slate-400"><a href={item.license_url} target="_blank" rel="noreferrer" className="hover:text-white">{t("License")}</a><a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">{t("Jamendo")} <ExternalLink size={11}/></a></div></div>
+            <button type="button" onClick={() => void startFavorite(item)} disabled={startingTrack === item.provider_track_id} aria-label={currentTrack?.id === item.provider_track_id && isPlaying ? `Pause ${item.title}` : `Play ${item.title}`} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10 disabled:opacity-40">{startingTrack === item.provider_track_id ? <LoaderCircle size={17} className="animate-spin"/> : <Play size={17} fill="currentColor"/>}</button>
             <button type="button" onClick={() => void removeFavorite(item.provider_track_id)} aria-label={`Remove ${item.title} from favorites`} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={17}/></button>
           </article>)}
         </section>
