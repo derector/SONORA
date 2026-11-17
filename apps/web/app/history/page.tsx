@@ -77,16 +77,16 @@ export default function HistoryPage() {
       </header>
       <section className="mt-10 rounded-[2rem] border border-sky-300/15 bg-gradient-to-br from-[#1d2d43] via-[#171b2a] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-sky-200"><Headphones size={14}/> Your listening trail</p>
-        <h1 className="mt-4 text-3xl font-semibold md:text-5xl">Recently heard.</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.</p>
+        <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Recently heard.")}</h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.")}</p>
       </section>
       {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><Clock3 className="animate-pulse" size={18}/> Loading listening history…</div> : !signedIn ? (
-        <section className="mt-8 rounded-3xl border border-white/10 p-8"><h2 className="text-xl font-semibold">Sign in to see your history.</h2><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">Sign in</Link></section>
+        <section className="mt-8 rounded-3xl border border-white/10 p-8"><h2 className="text-xl font-semibold">{t("Sign in to see your history.")}</h2><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in")}</Link></section>
       ) : items.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><ListMusic className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">Your listening history is empty.</p><p className="mt-1 text-sm text-slate-500">Play a track in Discover and it will appear here.</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">Explore music</Link></section>
+        <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><ListMusic className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">{t("Your listening history is empty.")}</p><p className="mt-1 text-sm text-slate-500">{t("Play a track in Discover and it will appear here.")}</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Explore music")}</Link></section>
       ) : (
         <section className="mt-8 space-y-3">
-          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-sky-300">Your activity</p><h2 className="mt-2 text-2xl font-semibold">Listening events</h2></div><span className="text-xs text-slate-500">{items.length} events</span></div>
+          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-sky-300">{t("Your activity")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Listening events")}</h2></div><span className="text-xs text-slate-500">{items.length} events</span></div>
           {items.map((item) => <article key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
             {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
             <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{item.title}</h3><p className="mt-1 truncate text-xs text-slate-400">{item.artist_name} · {item.album_name || "Independent release"}</p><p className="mt-1 text-[11px] text-slate-500">{dateLabel(item.occurred_at)} · {timeLabel(item.listened_ms)} listened</p></div>
