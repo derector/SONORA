@@ -151,6 +151,8 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
       }
     }
 
+    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
+
     return {
       ok: true,
       user: {
@@ -161,7 +163,6 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
       },
       session: {
         access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
         token_type: data.session.token_type,
         expires_in: data.session.expires_in,
         expires_at: data.session.expires_at
@@ -182,6 +183,7 @@ app.post("/api/v1/auth/refresh", async (request, reply) => {
   try {
     const { data, error } = await authClient().auth.refreshSession({ refresh_token: refreshToken });
     if (error || !data.session) return reply.code(401).send(authError(401, "Session expired. Please sign in again."));
+    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
     return {
       ok: true,
       session: {
