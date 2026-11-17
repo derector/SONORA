@@ -188,7 +188,6 @@ app.post("/api/v1/auth/refresh", async (request, reply) => {
       ok: true,
       session: {
         access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
         token_type: data.session.token_type,
         expires_in: data.session.expires_in,
         expires_at: data.session.expires_at
