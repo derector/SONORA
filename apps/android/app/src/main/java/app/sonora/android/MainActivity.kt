@@ -32,12 +32,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.work.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import app.sonora.android.data.OfflineDatabase
+import app.sonora.android.data.OfflineTrack
 import coil.compose.AsyncImage
 import app.sonora.android.data.SonoraApi
 import app.sonora.android.data.Track
@@ -46,6 +48,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import java.io.File
 
 private val Ink = Color(0xFF08090D)
 private val Panel = Color(0xFF151820)
@@ -97,16 +101,43 @@ private fun SonoraApp() {
         loadTracks("Audius") { tracks = it }
     }
 
-    fun play(track: Track) {
-        val url = track.audioUrl ?: return
-        val player = controller
-        if (player == null) { message = "Плеер ещё запускается"; return }
+    fun mediaItem(track: Track, url: String): MediaItem {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) }).build()
-        player.setMediaItem(MediaItem.Builder().setUri(url).setMediaMetadata(metadata).build())
+        return MediaItem.Builder().setMediaId(track.id).setUri(url).setMediaMetadata(metadata).build()
+    }
+
+    fun startTrack(track: Track, local: Boolean = false) {
+        val player = controller
+        if (player == null) { message = "Плеер ещё запускается"; return }
+        val url = if (local) track.audioUrl else track.audioUrl
+        if (url.isNullOrBlank()) { message = "У этого трека нет доступного источника"; return }
+        if (local) {
+            player.setMediaItem(mediaItem(track, url))
+            player.prepare()
+            player.play()
+            current = track
+            return
+        }
+        val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
+            .distinctBy { it.id }
+        val selectedIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
         player.prepare()
         player.play()
         current = track
+    }
+
+    fun play(track: Track) = startTrack(track)
+
+    fun playOffline(track: OfflineTrack) {
+        val localTrack = Track(
+            id = track.id, providerTrackId = track.id, provider = track.provider,
+            title = track.title, artist = track.artist, durationSeconds = track.durationSeconds,
+            artworkUrl = track.artworkUrl, audioUrl = android.net.Uri.fromFile(File(track.localPath)).toString(),
+            playable = true
+        )
+        startTrack(localTrack, local = true)
     }
 
     MaterialTheme(colorScheme = darkColorScheme(
@@ -138,7 +169,12 @@ private fun SonoraApp() {
                         }
                     }, ::play)
                     "Медиатека" -> LibraryScreen(SonoraApi.isSignedIn(), { tab = "Профиль" })
-                    "Загрузки" -> DownloadsScreen()
+                    "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
+                        scope.launch(Dispatchers.IO) {
+                            runCatching { File(item.localPath).delete() }
+                            OfflineDatabase.get(context).offlineTracks().delete(item.id)
+                        }
+                    })
                     "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
                         onRegister = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.requestOtp(email, username, displayName, true) }; authStep = "verify"; message = "Код отправлен на почту" } catch (e: Exception) { message = e.message ?: "Ошибка регистрации" }; busy = false }
@@ -151,7 +187,7 @@ private fun SonoraApp() {
                         },
                         onLogout = { SonoraApi.logout(); authStep = "welcome"; message = "Вы вышли из аккаунта" }
                     )
-                    else -> FullPlayer(current, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
+                    else -> FullPlayer(current, tracks, controller, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
                 }
             }
         }
@@ -232,21 +268,102 @@ private fun MiniPlayer(track: Track, onClick: () -> Unit, onPlay: () -> Unit, pl
 }
 
 @Composable
-private fun FullPlayer(track: Track?, playing: Boolean, pause: () -> Unit, resume: () -> Unit, previous: () -> Unit, next: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF26312A), Ink))).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Text("СЕЙЧАС ИГРАЕТ", color = Lime, letterSpacing = 3.sp, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(28.dp))
-        AsyncImage(track?.artworkUrl, null, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(28.dp)), contentScale = ContentScale.Crop)
-        Spacer(Modifier.height(28.dp))
+private fun FullPlayer(
+    track: Track?,
+    queue: List<Track>,
+    controller: MediaController?,
+    playing: Boolean,
+    pause: () -> Unit,
+    resume: () -> Unit,
+    previous: () -> Unit,
+    next: () -> Unit
+) {
+    var position by remember(controller) { mutableFloatStateOf(0f) }
+    var duration by remember(controller) { mutableFloatStateOf(0f) }
+    var showQueue by remember { mutableStateOf(false) }
+    var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
+    var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
+
+    LaunchedEffect(controller, playing) {
+        while (playing && controller != null) {
+            position = controller.currentPosition.coerceAtLeast(0L).toFloat()
+            duration = controller.duration.takeIf { it > 0L && it != androidx.media3.common.C.TIME_UNSET }?.toFloat() ?: 0f
+            delay(500)
+        }
+    }
+
+    if (showQueue) {
+        Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("Очередь воспроизведения", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = { showQueue = false }) { Icon(Icons.Default.Close, null, tint = Lime) }
+            }
+            Text("Следующие треки", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }, key = { it.id }) { item ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable {
+                        val player = controller ?: return@clickable
+                        val index = queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.indexOfFirst { it.id == item.id }
+                        if (index >= 0) player.seekTo(index, 0L)
+                        player.play()
+                        showQueue = false
+                    }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(item.artworkUrl, null, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                            Text(item.title, color = Color.White, maxLines = 1)
+                            Text(item.artist, color = Muted, fontSize = 12.sp)
+                        }
+                        if (item.id == track?.id) Icon(Icons.Default.GraphicEq, null, tint = Lime)
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF26312A), Ink))).padding(horizontal = 24.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("СЕЙЧАС ИГРАЕТ", color = Lime, letterSpacing = 3.sp, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconButton(onClick = { showQueue = true }) { Icon(Icons.Default.QueueMusic, "Очередь", tint = Lime) }
+        }
+        Spacer(Modifier.height(12.dp))
+        AsyncImage(track?.artworkUrl, null, Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(28.dp)), contentScale = ContentScale.Crop)
+        Spacer(Modifier.height(18.dp))
         Text(track?.title ?: "Выбери свой трек", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(track?.artist ?: "SONORA", color = Muted, modifier = Modifier.padding(top = 6.dp))
-        Spacer(Modifier.height(26.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+        Spacer(Modifier.height(16.dp))
+        Slider(
+            value = position.coerceIn(0f, duration.coerceAtLeast(1f)),
+            onValueChange = { position = it },
+            onValueChangeFinished = { controller?.seekTo(position.toLong()) },
+            valueRange = 0f..duration.coerceAtLeast(1f),
+            enabled = duration > 0f,
+            colors = SliderDefaults.colors(thumbColor = Lime, activeTrackColor = Lime, inactiveTrackColor = Muted)
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(formatTime(position.toLong()), color = Muted, fontSize = 11.sp)
+            Text(formatTime(duration.toLong()), color = Muted, fontSize = 11.sp)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = {
+                shuffle = !shuffle
+                controller?.shuffleModeEnabled = shuffle
+            }) { Icon(Icons.Default.Shuffle, "Перемешать", tint = if (shuffle) Lime else Muted) }
             IconButton(onClick = previous) { Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(38.dp)) }
             FilledIconButton(onClick = { if (playing) pause() else resume() }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.size(68.dp)) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, modifier = Modifier.size(34.dp)) }
             IconButton(onClick = next) { Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(38.dp)) }
+            IconButton(onClick = {
+                repeat = if (repeat == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+                controller?.repeatMode = repeat
+            }) { Icon(Icons.Default.Repeat, "Повтор", tint = if (repeat == Player.REPEAT_MODE_ALL) Lime else Muted) }
         }
     }
+}
+
+private fun formatTime(milliseconds: Long): String {
+    val total = (milliseconds / 1000L).coerceAtLeast(0L)
+    return "%d:%02d".format(total / 60L, total % 60L)
 }
 
 @Composable
@@ -260,24 +377,25 @@ private fun LibraryScreen(signedIn: Boolean, openProfile: () -> Unit) {
 }
 
 @Composable
-private fun DownloadsScreen() {
+private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTrack) -> Unit) {
     val context = LocalContext.current
     val offline by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
     Column(Modifier.fillMaxSize().background(Ink).padding(22.dp)) {
         Text("Офлайн", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         Text(offline.size.toString() + " треков сохранено на устройстве", color = Muted, modifier = Modifier.padding(top = 6.dp, bottom = 16.dp))
         if (offline.isEmpty()) {
-            Text("Здесь появятся загруженные треки. Сейчас офлайн-копии доступны только для Jamendo-записей, если API вернул отдельную ссылку скачивания и лицензию.", color = Muted)
+            Text("Здесь появятся загруженные треки. Скачивание доступно только для источников, которые явно разрешают офлайн-копирование.", color = Muted)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(offline, key = { it.id }) { track ->
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { onPlay(track) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(track.title, color = Color.White, maxLines = 1)
                             Text(track.artist, color = Muted, fontSize = 12.sp)
                         }
-                        Icon(Icons.Default.CheckCircle, null, tint = Lime)
+                        IconButton(onClick = { onPlay(track) }) { Icon(Icons.Default.PlayArrow, "Воспроизвести", tint = Lime) }
+                        IconButton(onClick = { onDelete(track) }) { Icon(Icons.Default.DeleteOutline, "Удалить", tint = Muted) }
                     }
                 }
             }
