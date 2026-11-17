@@ -70,6 +70,7 @@ app.get("/api/v1", async () => ({
     "/api/v1/favorites",
     "/api/v1/favorites/:trackId",
     "/api/v1/history",
+    "/api/v1/provider-history",
     "/api/v1/provider-favorites",
     "/api/v1/provider-favorites/:providerTrackId"
   ]
@@ -514,6 +515,58 @@ app.post<{ Body: { trackId?: string; eventType?: string; listenedMs?: number } }
   if (error) {
     request.log.warn({ code: error.code }, "Listening event could not be stored");
     return reply.code(error.code === "23503" ? 404 : 400).send(authError(error.code === "23503" ? 404 : 400, "Listening event could not be saved."));
+  }
+  return reply.code(201).send({ event: data });
+});
+
+// Jamendo listening history is separate from first-party UUID track history.
+app.get<{ Querystring: { limit?: string } }>("/api/v1/provider-history", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const limit = Math.min(100, Math.max(1, Number(request.query.limit) || 30));
+  const { data, error } = await auth.client.from("provider_listening_events")
+    .select("id,provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,source_url,event_type,listened_ms,occurred_at")
+    .eq("user_id", auth.user.id).eq("provider", "jamendo")
+    .order("occurred_at", { ascending: false }).limit(limit);
+  if (error) {
+    request.log.error({ code: error.code }, "Provider listening history query failed");
+    return reply.code(503).send(authError(503, "Listening history is temporarily unavailable."));
+  }
+  return { items: data ?? [] };
+});
+
+app.post<{ Body: {
+  providerTrackId?: string; title?: string; artistName?: string; albumName?: string | null;
+  durationSeconds?: number; artworkUrl?: string | null; licenseUrl?: string; sourceUrl?: string;
+  eventType?: string; listenedMs?: number;
+} }>("/api/v1/provider-history", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const body = request.body ?? {};
+  const validId = typeof body.providerTrackId === "string" && /^[0-9]{1,24}$/.test(body.providerTrackId);
+  const validText = (value: unknown, max: number) => typeof value === "string" && value.trim().length > 0 && value.length <= max;
+  const validOptionalUrl = (value: unknown) => value === null || value === undefined ||
+    (typeof value === "string" && value.length <= 2048 && value.startsWith("https://"));
+  if (!validId || !validText(body.title, 300) || !validText(body.artistName, 200) ||
+      (body.albumName !== null && body.albumName !== undefined && !validText(body.albumName, 300)) ||
+      !Number.isInteger(body.durationSeconds) || (body.durationSeconds ?? 0) < 1 ||
+      !validOptionalUrl(body.artworkUrl) || !validText(body.licenseUrl, 2048) ||
+      !body.licenseUrl.startsWith("https://creativecommons.org/") ||
+      !validText(body.sourceUrl, 2048) || !body.sourceUrl.startsWith("https://www.jamendo.com/") ||
+      !["play", "complete", "skip"].includes(body.eventType ?? "") ||
+      (body.listenedMs !== undefined && (!Number.isInteger(body.listenedMs) || body.listenedMs < 0 || body.listenedMs > 86400000))) {
+    return reply.code(400).send(authError(400, "Invalid provider track metadata or listening event."));
+  }
+  const { data, error } = await auth.client.from("provider_listening_events").insert({
+    user_id: auth.user.id, provider: "jamendo", provider_track_id: body.providerTrackId,
+    title: body.title.trim(), artist_name: body.artistName.trim(), album_name: body.albumName?.trim() || null,
+    duration_seconds: body.durationSeconds, artwork_url: body.artworkUrl ?? null,
+    license_url: body.licenseUrl, source_url: body.sourceUrl, event_type: body.eventType,
+    listened_ms: body.listenedMs ?? 0
+  }).select("id,event_type,listened_ms,occurred_at").single();
+  if (error) {
+    request.log.warn({ code: error.code }, "Provider listening event could not be stored");
+    return reply.code(400).send(authError(400, "Listening event could not be saved."));
   }
   return reply.code(201).send({ event: data });
 });
