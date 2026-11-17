@@ -11,7 +11,7 @@
         android:icon="@drawable/ic_sonora"
         android:roundIcon="@drawable/ic_sonora"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Sonora"
+        android:theme="@style/Theme.Sonora.Splash"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
