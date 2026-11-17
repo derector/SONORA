@@ -78,6 +78,7 @@ private fun SonoraApp() {
     var tab by remember { mutableStateOf("Главная") }
     var provider by remember { mutableStateOf("Audius") }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
     var email by remember { mutableStateOf(SonoraApi.email()) }
@@ -115,7 +116,7 @@ private fun SonoraApp() {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val id = mediaItem?.mediaId ?: return
-                tracks.firstOrNull { it.id == id }?.let { current = it }
+                (activeQueue + tracks).firstOrNull { it.id == id }?.let { current = it }
             }
         }
         player.addListener(listener)
@@ -135,6 +136,7 @@ private fun SonoraApp() {
         val url = if (local) track.audioUrl else track.audioUrl
         if (url.isNullOrBlank()) { message = "У этого трека нет доступного источника"; return }
         if (local) {
+            activeQueue = listOf(track)
             player.setMediaItem(mediaItem(track, url))
             player.prepare()
             player.play()
@@ -143,6 +145,7 @@ private fun SonoraApp() {
         }
         val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
             .distinctBy { it.id }
+        activeQueue = queue
         val selectedIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
         player.prepare()
@@ -209,7 +212,7 @@ private fun SonoraApp() {
                         },
                         onLogout = { SonoraApi.logout(); authStep = "welcome"; message = "Вы вышли из аккаунта" }
                     )
-                    else -> FullPlayer(current, tracks, controller, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
+                    else -> FullPlayer(current, activeQueue, controller, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
                 }
             }
         }
