@@ -516,6 +516,89 @@ app.post<{ Body: { trackId?: string; eventType?: string; listenedMs?: number } }
   return reply.code(201).send({ event: data });
 });
 
+// Jamendo favorites keep the provider's original ID and license metadata.
+// They are separate from first-party catalog tracks because provider IDs are not UUIDs.
+app.get("/api/v1/provider-favorites", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("user_provider_favorites")
+    .select("provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,source_url,created_at")
+    .eq("user_id", auth.user.id).eq("provider", "jamendo")
+    .order("created_at", { ascending: false });
+  if (error) {
+    request.log.error({ code: error.code }, "Provider favorites listing failed");
+    return reply.code(503).send(authError(503, "Favorites are temporarily unavailable."));
+  }
+  return { items: data ?? [] };
+});
+
+app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { providerTrackId } = request.body ?? {};
+  if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
+    return reply.code(400).send(authError(400, "A valid Jamendo track ID is required."));
+  }
+  const clientId = process.env.JAMENDO_CLIENT_ID;
+  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
+    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  }
+  try {
+    const params = new URLSearchParams({
+      client_id: clientId, format: "json", id: providerTrackId,
+      include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32"
+    });
+    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+      headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
+    const payload = await response.json() as { results?: Array<{
+      id: string; name: string; duration: number; artist_name: string;
+      album_name?: string; image?: string; album_image?: string; audio?: string;
+      license_ccurl?: string; shareurl?: string;
+    }> };
+    const track = payload.results?.[0];
+    if (!track || track.id !== providerTrackId || !track.audio) {
+      return reply.code(404).send(authError(404, "This track is not available from Jamendo."));
+    }
+    const licenseUrl = track.license_ccurl ?? "";
+    const normalized = licenseUrl.toLowerCase()
+      .replace("http://creativecommons.org/", "")
+      .replace("https://creativecommons.org/", "")
+      .replace("https://www.creativecommons.org/", "");
+    const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
+    const allowed = normalized.startsWith("publicdomain/zero/") ||
+      ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
+    if (!allowed) return reply.code(403).send(authError(403, "This track has no supported Creative Commons license for this catalog."));
+    const { error } = await auth.client.from("user_provider_favorites").upsert({
+      user_id: auth.user.id, provider: "jamendo", provider_track_id: track.id,
+      title: track.name, artist_name: track.artist_name,
+      album_name: track.album_name ?? null, duration_seconds: track.duration,
+      artwork_url: track.album_image ?? track.image ?? null, license_url: licenseUrl,
+      source_url: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`
+    }, { onConflict: "user_id,provider,provider_track_id", ignoreDuplicates: true });
+    if (error) {
+      request.log.warn({ code: error.code }, "Provider favorite could not be saved");
+      return reply.code(400).send(authError(400, "Could not save this track."));
+    }
+    return reply.code(201).send({ ok: true, providerTrackId: track.id });
+  } catch (error) {
+    request.log.error({ err: error }, "Provider favorite verification failed");
+    return reply.code(502).send(authError(502, "Jamendo could not verify this track right now."));
+  }
+});
+
+app.delete<{ Params: { providerTrackId: string } }>("/api/v1/provider-favorites/:providerTrackId", async (request, reply) => {
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const { data, error } = await auth.client.from("user_provider_favorites").delete()
+    .eq("user_id", auth.user.id).eq("provider", "jamendo")
+    .eq("provider_track_id", request.params.providerTrackId).select("provider_track_id").maybeSingle();
+  if (error) return reply.code(400).send(authError(400, "Favorite could not be removed."));
+  if (!data) return reply.code(404).send(authError(404, "Favorite not found."));
+  return { ok: true };
+});
+
 // Jamendo API access is configured for non-commercial use. Known CC BY and
 // CC BY-NC variants are accepted; unknown licenses are rejected. Attribution
 // and license links are returned with every catalog item.
