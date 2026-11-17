@@ -538,31 +538,40 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/provider-history", async (
 app.post<{ Body: {
   providerTrackId?: string; title?: string; artistName?: string; albumName?: string | null;
   durationSeconds?: number; artworkUrl?: string | null; licenseUrl?: string; sourceUrl?: string;
-  eventType?: string; listenedMs?: number;
+  eventType?: "play" | "complete" | "skip"; listenedMs?: number;
 } }>("/api/v1/provider-history", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const body = request.body ?? {};
-  const validId = typeof body.providerTrackId === "string" && /^[0-9]{1,24}$/.test(body.providerTrackId);
-  const validText = (value: unknown, max: number) => typeof value === "string" && value.trim().length > 0 && value.length <= max;
-  const validOptionalUrl = (value: unknown) => value === null || value === undefined ||
-    (typeof value === "string" && value.length <= 2048 && value.startsWith("https://"));
-  if (!validId || !validText(body.title, 300) || !validText(body.artistName, 200) ||
-      (body.albumName !== null && body.albumName !== undefined && !validText(body.albumName, 300)) ||
-      !Number.isInteger(body.durationSeconds) || (body.durationSeconds ?? 0) < 1 ||
-      !validOptionalUrl(body.artworkUrl) || !validText(body.licenseUrl, 2048) ||
-      !body.licenseUrl.startsWith("https://creativecommons.org/") ||
-      !validText(body.sourceUrl, 2048) || !body.sourceUrl.startsWith("https://www.jamendo.com/") ||
-      !["play", "complete", "skip"].includes(body.eventType ?? "") ||
-      (body.listenedMs !== undefined && (!Number.isInteger(body.listenedMs) || body.listenedMs < 0 || body.listenedMs > 86400000))) {
+  const providerTrackId = body.providerTrackId;
+  const title = body.title;
+  const artistName = body.artistName;
+  const albumName = body.albumName;
+  const durationSeconds = body.durationSeconds;
+  const artworkUrl = body.artworkUrl;
+  const licenseUrl = body.licenseUrl;
+  const sourceUrl = body.sourceUrl;
+  const eventType = body.eventType;
+  const listenedMs = body.listenedMs;
+  if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId) ||
+      typeof title !== "string" || title.trim().length < 1 || title.length > 300 ||
+      typeof artistName !== "string" || artistName.trim().length < 1 || artistName.length > 200 ||
+      (albumName !== null && albumName !== undefined && (typeof albumName !== "string" || albumName.length > 300)) ||
+      typeof durationSeconds !== "number" || !Number.isInteger(durationSeconds) || durationSeconds < 1 ||
+      (artworkUrl !== null && artworkUrl !== undefined &&
+        (typeof artworkUrl !== "string" || artworkUrl.length > 2048 || !artworkUrl.startsWith("https://"))) ||
+      typeof licenseUrl !== "string" || licenseUrl.length > 2048 || !licenseUrl.startsWith("https://creativecommons.org/") ||
+      typeof sourceUrl !== "string" || sourceUrl.length > 2048 || !sourceUrl.startsWith("https://www.jamendo.com/") ||
+      !["play", "complete", "skip"].includes(eventType ?? "") ||
+      (listenedMs !== undefined && (typeof listenedMs !== "number" || !Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86400000))) {
     return reply.code(400).send(authError(400, "Invalid provider track metadata or listening event."));
   }
   const { data, error } = await auth.client.from("provider_listening_events").insert({
-    user_id: auth.user.id, provider: "jamendo", provider_track_id: body.providerTrackId,
-    title: body.title.trim(), artist_name: body.artistName.trim(), album_name: body.albumName?.trim() || null,
-    duration_seconds: body.durationSeconds, artwork_url: body.artworkUrl ?? null,
-    license_url: body.licenseUrl, source_url: body.sourceUrl, event_type: body.eventType,
-    listened_ms: body.listenedMs ?? 0
+    user_id: auth.user.id, provider: "jamendo", provider_track_id: providerTrackId,
+    title: title.trim(), artist_name: artistName.trim(), album_name: albumName?.trim() || null,
+    duration_seconds: durationSeconds, artwork_url: artworkUrl ?? null,
+    license_url: licenseUrl, source_url: sourceUrl, event_type: eventType,
+    listened_ms: listenedMs ?? 0
   }).select("id,event_type,listened_ms,occurred_at").single();
   if (error) {
     request.log.warn({ code: error.code }, "Provider listening event could not be stored");
