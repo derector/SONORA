@@ -17,12 +17,12 @@ export default function Home() {
         <a href="#" className="mb-12 flex items-center gap-3 text-xl font-semibold tracking-[.22em]"><span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-400/15 text-violet-200"><AudioLines size={20}/></span>SONORA</a>
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.24em] text-slate-500">{t("Workspace")}</p>
         <nav className="space-y-2 text-sm text-slate-300">
-          <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="#"><Compass size={17}/> Discover</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> Search</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> Your library</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> Liked tracks</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> Listening history</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> Playlists</a>
+          <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="#"><Compass size={17}/> {t("Discover")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> {t("Search")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> {t("Your library")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> {t("Liked tracks")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> {t("Listening history")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> {t("Playlists")}</a>
         </nav>
         <div className="mt-auto rounded-2xl border border-white/[0.07] bg-gradient-to-br from-violet-500/15 to-transparent p-4">
           <Sparkles className="mb-3 text-violet-200" size={18}/>
@@ -35,7 +35,7 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 py-3">
           <div className="md:hidden flex items-center gap-2 font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
           <div className="hidden text-sm text-slate-400 md:block">{t("Tuesday, your next favorite is waiting.")}</div>
-          <div className="flex items-center gap-3"><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> Preview experience</span></div>
+          <div className="flex items-center gap-3"><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> {t("Preview experience")}</span></div>
         </header>
 
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
@@ -44,7 +44,7 @@ export default function Home() {
             <p className="mb-5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em] text-violet-200"><Sparkles size={14}/> A new way to feel music</p>
             <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl">{t("Find your")}<br/><span className="bg-gradient-to-r from-violet-200 via-fuchsia-200 to-sky-200 bg-clip-text text-transparent">{t("own frequency.")}</span></h1>
             <p className="mt-5 max-w-lg text-sm leading-6 text-slate-300 md:text-base">{t("A calmer space for discovering sounds, collecting moments, and building a soundtrack that feels like yours.")}</p>
-            <a href="/discover" className="mt-8 inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">Explore your sound <ArrowUpRight size={16}/></a>
+            <a href="/discover" className="mt-8 inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">{t("Explore your sound")} <ArrowUpRight size={16}/></a>
           </div>
           <div className="absolute bottom-8 right-10 hidden h-48 w-48 rotate-[-12deg] items-center justify-center rounded-[2.5rem] border border-white/15 bg-white/[0.04] shadow-2xl backdrop-blur-xl lg:flex">
             <div className="absolute inset-4 rounded-full border border-violet-200/20"/>
@@ -64,7 +64,7 @@ export default function Home() {
         <section className="mt-12 rounded-3xl border border-white/[0.07] bg-white/[0.025] p-6 md:p-8">
           <div className="flex items-center gap-3"><Headphones className="text-violet-200"/><div><h2 className="font-semibold">{t("A listening space, not just a feed.")}</h2><p className="mt-1 text-xs text-slate-400">{t("The foundation is being built. Playback will be enabled only through licensed sources.")}</p></div></div>
         </section>
-        <footer className="mt-12 border-t border-white/[0.07] pt-5 text-xs text-slate-500">SONORA · Early foundation · Music rights first</footer>
+        <footer className="mt-12 border-t border-white/[0.07] pt-5 text-xs text-slate-500">{t("SONORA · Early foundation · Music rights first")}</footer>
       </section>
     </main>
   );
