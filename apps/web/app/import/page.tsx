@@ -81,18 +81,24 @@ export default function ImportPage() {
     if (parsed.length > 100) { setError(t("Import is limited to 100 tracks per batch.")); return; }
     setMatching(true);
     try {
-      const matched = await Promise.all(parsed.map(async (item, index): Promise<ImportRow> => {
-        const q = [item.title, item.artist].filter(Boolean).join(" ");
-        try {
-          const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${new URLSearchParams({ q, limit: "5" })}`);
-          const result = await response.json() as ApiResult;
-          if (!response.ok) throw new Error(result.error || t("Search failed."));
-          const candidates = result.items ?? [];
-          return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates, selectedId: candidates[0]?.id ?? "", imported: false, error: candidates.length ? undefined : t("No licensed match found.") };
-        } catch (err) {
-          return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates: [], selectedId: "", imported: false, error: err instanceof Error ? err.message : t("Search failed.") };
-        }
-      }));
+      const matched: ImportRow[] = [];
+      for (let offset = 0; offset < parsed.length; offset += 5) {
+        const batch = parsed.slice(offset, offset + 5);
+        const results = await Promise.all(batch.map(async (item, localIndex): Promise<ImportRow> => {
+          const index = offset + localIndex;
+          const q = [item.title, item.artist].filter(Boolean).join(" ");
+          try {
+            const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${new URLSearchParams({ q, limit: "5" })}`);
+            const result = await response.json() as ApiResult;
+            if (!response.ok) throw new Error(result.error || t("Search failed."));
+            const candidates = result.items ?? [];
+            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates, selectedId: candidates[0]?.id ?? "", imported: false, error: candidates.length ? undefined : t("No licensed match found.") };
+          } catch (err) {
+            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates: [], selectedId: "", imported: false, error: err instanceof Error ? err.message : t("Search failed.") };
+          }
+        }));
+        matched.push(...results);
+      }
       setRows(matched);
       const found = matched.filter((row) => row.candidates.length).length;
       setNotice(t("Matching complete:") + ` ${found}/${matched.length} ` + t("tracks found."));
@@ -126,7 +132,7 @@ export default function ImportPage() {
       }
     }
     setRows(next);
-    setNotice(t("Added to your SONORA library:") + ` ${success}/${selected.length}`);
+    setNotice(t("Added to your SONORA favorites:") + ` ${success}/${selected.length}`);
     setSaving(false);
   }
 
