@@ -132,8 +132,8 @@ app.post<{ Body: { email?: string } }>("/api/v1/auth/login", async (request, rep
 
 app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", async (request, reply) => {
   const { email, token } = request.body ?? {};
-  if (!validEmail(email) || typeof token !== "string" || !/^\d{6}$/.test(token)) {
-    return reply.code(400).send(authError(400, "Enter the email address and six-digit code."));
+  if (!validEmail(email) || typeof token !== "string" || !/^\d{8}$/.test(token)) {
+    return reply.code(400).send(authError(400, "Enter the email address and eight-digit code."));
   }
 
   try {
