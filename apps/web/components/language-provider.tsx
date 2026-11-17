@@ -133,7 +133,6 @@ const ru: Record<string, string> = {
   "Recording matches": "Найденные записи",
   "MusicBrainz identifies recordings and releases. It does not provide audio playback.": "MusicBrainz помогает находить записи и релизы, но не предоставляет воспроизведение аудио.",
   "SONORA · Federated discovery · Every playable result remains attributed to its source": "SONORA · Поиск по каталогам · У каждого трека сохраняется ссылка на источник",
-  "Search tracks, artists or moods": "Поиск треков, исполнителей и настроений",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
