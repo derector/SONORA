@@ -24,3 +24,8 @@ A debug APK is for installation/testing. A production release that can update ov
 
 ## Playback and rights
 Media3 runs playback in a foreground media session, so system media controls can operate while the app is backgrounded. Offline copies are only enabled when the API explicitly returns a provider download URL for a source/track whose license permits it. Streaming URLs are not treated as download permission.
+
+
+## Native player features
+
+The Android player now uses a Media3 playlist for queue playback, exposes seek, shuffle, repeat, playback-speed and volume controls, and can play provider-approved Jamendo downloads from app-private storage. Audius stream URLs are not treated as downloadable files.
