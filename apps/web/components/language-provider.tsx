@@ -61,6 +61,19 @@ const ru: Record<string, string> = {
   "FAVORITES": "ИЗБРАННОЕ",
   "HISTORY": "ИСТОРИЯ",
   "PLAYLISTS": "ПЛЕЙЛИСТЫ",
+  "Search tracks, artists or moods": "Поиск треков, исполнителей или настроения",
+  "Remove from favorites": "Убрать из избранного",
+  "Add to favorites": "Добавить в избранное",
+  "Open Jamendo source": "Открыть источник Jamendo",
+  "Playlist name": "Название плейлиста",
+  "A short description (optional)": "Краткое описание (необязательно)",
+  "No description": "Без описания",
+  "Remove": "Убрать",
+  "Warm electronic · 42 tracks": "Тёплая электроника · 42 трека",
+  "Indie & alternative · 36 tracks": "Инди и альтернатива · 36 треков",
+  "Ambient · 58 tracks": "Эмбиент · 58 треков",
+  "Open source": "Открыть источник",
+  "Language": "Язык",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
