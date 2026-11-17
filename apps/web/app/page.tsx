@@ -30,7 +30,7 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 py-3">
           <div className="md:hidden flex items-center gap-2 font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
           <div className="hidden text-sm text-slate-400 md:block">Tuesday, your next favorite is waiting.</div>
-          <button className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300"><span className="h-2 w-2 rounded-full bg-amber-300"/> Preview experience</button>
+          <div className="flex items-center gap-2"><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">Sign in</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> Preview experience</span></div>
         </header>
 
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
