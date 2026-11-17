@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html { min-height: 100%; background: #090b10; }
+body { margin: 0; min-height: 100vh; color: #f5f6fa; background: radial-gradient(ellipse at 78% -12%, rgba(124,58,237,.18), transparent 38%), #090b10; font-family: Arial, Helvetica, sans-serif; }
+button, a { -webkit-tap-highlight-color: transparent; }
+::selection { background: rgba(167,139,250,.35); }
