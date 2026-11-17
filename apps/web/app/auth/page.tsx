@@ -72,7 +72,7 @@ export default function AuthPage() {
       const result = await response.json() as ApiResult;
       if (!response.ok) throw new Error(result.error || "Could not send the code.");
       setStep("verify");
-      setMessage("A sign-in code has been requested. Check your email, including spam.");
+      setMessage(t("A sign-in code has been requested. Check your email, including spam."));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -95,7 +95,7 @@ export default function AuthPage() {
       setAccessToken(result.session.access_token);
       setUser(result.user);
       setStep("signed-in");
-      setMessage("Your SONORA session is active.");
+      setMessage(t("Your SONORA session is active."));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -113,7 +113,7 @@ export default function AuthPage() {
       });
     } finally {
       setAccessToken(""); setUser(undefined); setStep("details"); setCode(""); setBusy(false);
-      setMessage("You have signed out.");
+      setMessage(t("You have signed out."));
     }
   }
 
@@ -132,7 +132,7 @@ export default function AuthPage() {
               <CheckCircle2 className="mb-4 text-emerald-300" size={30}/>
               <h1 className="text-2xl font-semibold">{t("You’re in.")}</h1>
               <p className="mt-2 text-sm text-slate-400">Signed in as {user?.email || email}{user?.username ? ` · @${user.username}` : ""}</p>
-              <button onClick={logout} disabled={busy} className="mt-8 w-full rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10 disabled:opacity-50">{busy ? "Signing out…" : "Sign out"}</button>
+              <button onClick={logout} disabled={busy} className="mt-8 w-full rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10 disabled:opacity-50">{busy ? t("Signing out…") : t("Sign out")}</button>
             </div>
           ) : step === "verify" ? (
             <form onSubmit={verifyCode}>
@@ -146,7 +146,7 @@ export default function AuthPage() {
             </form>
           ) : (
             <>
-              <h1 className="text-2xl font-semibold">{mode === "register" ? "Create your account." : "Welcome back."}</h1>
+              <h1 className="text-2xl font-semibold">{mode === "register" ? t("Create your account.") : t("Welcome back.")}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-400">{t("Sign in securely with a one-time code sent to your email.")}</p>
               <div className="mt-6 grid grid-cols-2 rounded-full border border-white/10 bg-black/20 p-1">
                 <button type="button" onClick={() => setMode("register")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "register" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>{t("Create account")}</button>
