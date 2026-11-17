@@ -3,6 +3,7 @@ package app.sonora.android
 import android.content.ComponentName
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -53,7 +54,7 @@ private val Muted = Color(0xFF9298A5)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        androidx.core.splashscreen.SplashScreen.installSplashScreen(this)
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         SonoraApi.initialize(this)
         setContent { SonoraApp() }
@@ -78,15 +79,6 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
 
-    LaunchedEffect(Unit) {
-        try {
-            controller = withContext(Dispatchers.IO) {
-                MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
-            }
-        } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
-        loadTracks("Audius") { tracks = it }
-    }
-
     fun loadTracks(source: String, done: (List<Track>) -> Unit) {
         scope.launch {
             busy = true
@@ -94,6 +86,15 @@ private fun SonoraApp() {
             catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
             finally { busy = false }
         }
+    }
+
+    LaunchedEffect(Unit) {
+        try {
+            controller = withContext(Dispatchers.IO) {
+                MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
+            }
+        } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
+        loadTracks("Audius") { tracks = it }
     }
 
     fun play(track: Track) {
