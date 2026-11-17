@@ -1,0 +1,111 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, AudioLines, CheckCircle2, Clock3, Headphones, ListMusic, Music2, SkipForward } from "lucide-react";
+import { usePlayer, type PlayerTrack } from "../../components/player-provider";
+
+type HistoryItem = {
+  id: string;
+  provider_track_id: string;
+  title: string;
+  artist_name: string;
+  album_name: string | null;
+  duration_seconds: number;
+  artwork_url: string | null;
+  license_url: string;
+  source_url: string;
+  event_type: "play" | "complete" | "skip";
+  listened_ms: number;
+  occurred_at: string;
+};
+type ApiResult = { items?: HistoryItem[]; error?: string; session?: { access_token?: string } };
+const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+function timeLabel(ms: number) {
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function dateLabel(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+function eventLabel(event: HistoryItem["event_type"]) {
+  if (event === "complete") return "Finished";
+  if (event === "skip") return "Skipped";
+  return "Played";
+}
+
+export default function HistoryPage() {
+  const [items, setItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [signedIn, setSignedIn] = useState(false);
+  const [error, setError] = useState("");
+  const { playTrack } = usePlayer();
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const refresh = await fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" });
+        if (!refresh.ok) return;
+        const session = await refresh.json() as ApiResult;
+        const token = session.session?.access_token;
+        if (!token) return;
+        if (active) setSignedIn(true);
+        const response = await fetch(`${API}/api/v1/provider-history?limit=100`, {
+          headers: { Authorization: `Bearer ${token}` }, credentials: "include"
+        });
+        const result = await response.json() as ApiResult;
+        if (!response.ok) throw new Error(result.error || "Could not load listening history.");
+        if (active) setItems(result.items ?? []);
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : "Could not load listening history.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    void load();
+    return () => { active = false; };
+  }, []);
+
+  function replay(item: HistoryItem) {
+    const track: PlayerTrack = {
+      id: item.provider_track_id, title: item.title, artist: item.artist_name, album: item.album_name,
+      durationSeconds: item.duration_seconds, artworkUrl: item.artwork_url,
+      audioUrl: "", licenseUrl: item.license_url, sourceUrl: item.source_url
+    };
+    // The original stream URL is intentionally not stored in history. Reopen the
+    // licensed catalog entry to obtain a fresh provider stream URL.
+    window.location.href = `/discover?q=${encodeURIComponent(item.title)}`;
+  }
+
+  return (
+    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
+      <header className="flex items-center justify-between">
+        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
+        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> HISTORY</span>
+      </header>
+      <section className="mt-10 rounded-[2rem] border border-sky-300/15 bg-gradient-to-br from-[#1d2d43] via-[#171b2a] to-[#10131c] p-7 md:p-10">
+        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-sky-200"><Headphones size={14}/> Your listening trail</p>
+        <h1 className="mt-4 text-3xl font-semibold md:text-5xl">Recently heard.</h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.</p>
+      </section>
+      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><Clock3 className="animate-pulse" size={18}/> Loading listening history…</div> : !signedIn ? (
+        <section className="mt-8 rounded-3xl border border-white/10 p-8"><h2 className="text-xl font-semibold">Sign in to see your history.</h2><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">Sign in</Link></section>
+      ) : items.length === 0 ? (
+        <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><ListMusic className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">Your listening history is empty.</p><p className="mt-1 text-sm text-slate-500">Play a track in Discover and it will appear here.</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">Explore music</Link></section>
+      ) : (
+        <section className="mt-8 space-y-3">
+          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-sky-300">Your activity</p><h2 className="mt-2 text-2xl font-semibold">Listening events</h2></div><span className="text-xs text-slate-500">{items.length} events</span></div>
+          {items.map((item) => <article key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
+            {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
+            <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{item.title}</h3><p className="mt-1 truncate text-xs text-slate-400">{item.artist_name} · {item.album_name || "Independent release"}</p><p className="mt-1 text-[11px] text-slate-500">{dateLabel(item.occurred_at)} · {timeLabel(item.listened_ms)} listened</p></div>
+            <span className="hidden items-center gap-1 text-[11px] text-slate-400 sm:inline-flex">{item.event_type === "complete" ? <CheckCircle2 size={13}/> : item.event_type === "skip" ? <SkipForward size={13}/> : <Headphones size={13}/>} {eventLabel(item.event_type)}</span>
+            <a href={item.source_url} target="_blank" rel="noreferrer" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white" aria-label="Open Jamendo source"><Music2 size={16}/></a>
+          </article>)}
+        </section>
+      )}
+      {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
+    </main>
+  );
+}
