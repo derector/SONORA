@@ -102,6 +102,12 @@ private fun SonoraApp() {
 
     LaunchedEffect(Unit) {
         try {
+            val restored = withContext(Dispatchers.IO) { SonoraApi.restoreSession() }
+            authStep = if (restored) "signed" else "welcome"
+        } catch (_: Exception) {
+            authStep = "welcome"
+        }
+        try {
             controller = withContext(Dispatchers.IO) {
                 MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
             }
