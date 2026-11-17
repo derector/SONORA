@@ -311,6 +311,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
+    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.id } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
 
@@ -330,10 +331,10 @@ private fun FullPlayer(
             }
             Text("Следующие треки", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }, key = { it.id }) { item ->
+                items(playableQueue, key = { it.id }) { item ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable {
                         val player = controller ?: return@clickable
-                        val index = queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.indexOfFirst { it.id == item.id }
+                        val index = playableQueue.indexOfFirst { it.id == item.id }
                         if (index >= 0) player.seekTo(index, 0L)
                         player.play()
                         showQueue = false
