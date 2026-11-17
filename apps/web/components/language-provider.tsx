@@ -42,7 +42,7 @@ const ru: Record<string, string> = {
   "Select at least one matched track.": "Выбери хотя бы один найденный трек.",
   "Could not save this track.": "Не удалось сохранить этот трек.",
   "Import failed.": "Ошибка импорта.",
-  "Added to your SONORA library:": "Добавлено в медиатеку SONORA:",
+  "Added to your SONORA favorites:": "Добавлено в избранное SONORA:",
   "Original": "Оригинал",
   "Speed up": "Ускорить",
   "Slowed": "Замедлить",
