@@ -1,7 +1,10 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ListMusic, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
+import {
+  ChevronDown, ListMusic, Maximize2, Minimize2, Pause, Play, Repeat, Repeat1,
+  SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
+} from "lucide-react";
 import { useLanguage } from "./language-provider";
 import { useAuth } from "./auth-provider";
 
@@ -17,6 +20,7 @@ export type PlayerTrack = {
   sourceUrl: string;
 };
 
+type RepeatMode = "off" | "all" | "one";
 type PlayerContextValue = {
   currentTrack: PlayerTrack | null;
   isPlaying: boolean;
@@ -37,47 +41,93 @@ function timeLabel(value: number) {
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
 }
 
+function mediaErrorMessage(code?: number) {
+  switch (code) {
+    case 1: return "Playback was interrupted. Press play to try again.";
+    case 2: return "Network error while loading this track. Check your connection.";
+    case 3: return "This audio stream could not be decoded by the browser.";
+    case 4: return "This track is unavailable from its provider or its format is unsupported.";
+    default: return "This track could not be played. Try another source.";
+  }
+}
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
   const tokenRef = useRef("");
+  const startedAtRef = useRef(0);
   const { accessToken } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [playbackError, setPlaybackError] = useState("");
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(0.85);
+  const [muted, setMuted] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
   const { t } = useLanguage();
 
-  async function getToken() {
-    return tokenRef.current;
-  }
-
-  useEffect(() => {
-    tokenRef.current = accessToken;
-  }, [accessToken]);
+  useEffect(() => { tokenRef.current = accessToken; }, [accessToken]);
 
   async function recordEvent(track: PlayerTrack, eventType: "play" | "complete" | "skip", listenedMs: number) {
-    const token = await getToken();
-    if (!token) return;
+    const token = tokenRef.current;
+    // Provider history currently accepts Jamendo IDs only. Other providers still play normally.
+    if (!token || !track.id.startsWith("jamendo:")) return;
+    const providerTrackId = track.id.slice("jamendo:".length);
     try {
       await fetch(`${API}/api/v1/provider-history`, {
-        method: "POST",
-        credentials: "include",
+        method: "POST", credentials: "include",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          providerTrackId: track.id, title: track.title, artistName: track.artist,
-          albumName: track.album, durationSeconds: track.durationSeconds,
+          providerTrackId, title: track.title, artistName: track.artist,
+          albumName: track.album, durationSeconds: Math.max(1, Math.round(track.durationSeconds || 1)),
           artworkUrl: track.artworkUrl, licenseUrl: track.licenseUrl, sourceUrl: track.sourceUrl,
           eventType, listenedMs: Math.max(0, Math.round(listenedMs * 1000))
         })
       });
-    } catch {
-      // Playback remains available when history recording is offline.
+    } catch { /* Listening history must never interrupt playback. */ }
+  }
+
+  async function startTrack(track: PlayerTrack, index: number) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (!track.audioUrl || !/^https?:\/\//i.test(track.audioUrl)) {
+      setPlaybackError("This result has no playable audio stream. Open the provider page for details.");
+      setIsPlaying(false);
+      setIsLoading(false);
+      return;
+    }
+    currentRef.current = track;
+    setCurrentTrack(track);
+    setQueueIndex(index);
+    setCurrentTime(0);
+    setDuration(track.durationSeconds || 0);
+    setBuffered(0);
+    setPlaybackError("");
+    setIsLoading(true);
+    audio.pause();
+    audio.src = track.audioUrl;
+    audio.load();
+    try {
+      await audio.play();
+      setPlaybackError("");
+    } catch (error) {
+      setIsPlaying(false);
+      setIsLoading(false);
+      const name = error instanceof Error ? error.name : "";
+      setPlaybackError(name === "NotAllowedError"
+        ? "Your browser blocked playback. Tap Play once more to allow audio."
+        : name === "NotSupportedError"
+          ? "The provider returned an audio format this browser cannot play."
+          : "The audio stream did not start. Check your connection or try another track.");
     }
   }
 
@@ -85,8 +135,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
     if (currentRef.current?.id === track.id) {
-      if (audio.paused) void audio.play().catch(() => setIsPlaying(false));
-      else audio.pause();
+      if (audio.paused) {
+        setPlaybackError("");
+        setIsLoading(true);
+        void audio.play().catch((error: unknown) => {
+          setIsPlaying(false); setIsLoading(false);
+          setPlaybackError(error instanceof Error && error.name === "NotAllowedError"
+            ? "Tap Play again to allow audio in your browser."
+            : "Could not resume this audio stream.");
+        });
+      } else audio.pause();
       return;
     }
     if (currentRef.current && audio.currentTime > 0) {
@@ -95,79 +153,122 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const selectedQueue = nextQueue?.length ? nextQueue : [track];
     const index = Math.max(0, selectedQueue.findIndex((item) => item.id === track.id));
     setQueue(selectedQueue);
-    setQueueIndex(index);
-    currentRef.current = track;
-    setCurrentTrack(track);
-    setCurrentTime(0);
-    setDuration(track.durationSeconds || 0);
-    audio.src = track.audioUrl;
-    audio.load();
-    void audio.play().catch(() => setIsPlaying(false));
+    void startTrack(track, index);
   }
 
   function playAt(index: number, recordSkip = true) {
     const track = queue[index];
-    if (track) {
-      const audio = audioRef.current;
-      if (recordSkip && currentRef.current && audio && audio.currentTime > 0) {
-        void recordEvent(currentRef.current, "skip", audio.currentTime);
-      }
-      setQueueIndex(index);
-      currentRef.current = track;
-      setCurrentTrack(track);
-      setCurrentTime(0);
-      setDuration(track.durationSeconds || 0);
-      if (audio) {
-        audio.src = track.audioUrl;
-        audio.load();
-        void audio.play().catch(() => setIsPlaying(false));
-      }
+    const audio = audioRef.current;
+    if (!track || !audio) return;
+    if (recordSkip && currentRef.current && audio.currentTime > 0) {
+      void recordEvent(currentRef.current, "skip", audio.currentTime);
     }
+    void startTrack(track, index);
+  }
+
+  function nextTrack() {
+    if (!queue.length) return;
+    if (shuffle && queue.length > 1) {
+      let next = queueIndex;
+      while (next === queueIndex) next = Math.floor(Math.random() * queue.length);
+      playAt(next);
+    } else if (queueIndex < queue.length - 1) playAt(queueIndex + 1);
+    else if (repeatMode === "all") playAt(0);
+    else setIsPlaying(false);
+  }
+
+  function previousTrack() {
+    const audio = audioRef.current;
+    if (audio && audio.currentTime > 3) {
+      audio.currentTime = 0;
+      setCurrentTime(0);
+      return;
+    }
+    if (queueIndex > 0) playAt(queueIndex - 1);
+    else if (repeatMode === "all" && queue.length) playAt(queue.length - 1);
+    else if (audio) { audio.currentTime = 0; setCurrentTime(0); }
   }
 
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio || !currentRef.current) return;
-    if (audio.paused) void audio.play().catch(() => setIsPlaying(false));
-    else audio.pause();
+    if (audio.paused) {
+      setPlaybackError("");
+      setIsLoading(true);
+      void audio.play().catch((error: unknown) => {
+        setIsPlaying(false); setIsLoading(false);
+        setPlaybackError(error instanceof Error && error.name === "NotAllowedError"
+          ? "Tap Play again to allow audio in your browser."
+          : "Could not start this audio stream.");
+      });
+    } else audio.pause();
   }
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onPlay = () => {
-      setIsPlaying(true);
-      const track = currentRef.current;
-      if (track) void recordEvent(track, "play", audio.currentTime);
-    };
-    const onPause = () => setIsPlaying(false);
+    const onPlay = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); };
+    const onPlaying = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); };
+    const onPause = () => { setIsPlaying(false); setIsLoading(false); };
+    const onWaiting = () => { if (!audio.paused) setIsLoading(true); };
+    const onCanPlay = () => setIsLoading(false);
     const onTime = () => setCurrentTime(audio.currentTime || 0);
     const onDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    const onProgress = () => {
+      try {
+        if (audio.buffered.length && Number.isFinite(audio.duration) && audio.duration > 0) {
+          setBuffered(audio.buffered.end(audio.buffered.length - 1));
+        }
+      } catch { /* A stream may not expose a seekable buffered range. */ }
+    };
     const onEnded = () => {
       const track = currentRef.current;
       if (track) void recordEvent(track, "complete", audio.duration || audio.currentTime);
-      if (queueIndex < queue.length - 1) playAt(queueIndex + 1, false);
+      if (repeatMode === "one") { audio.currentTime = 0; void audio.play().catch(() => setPlaybackError("Could not replay this track.")); }
+      else if (shuffle && queue.length > 1) nextTrack();
+      else if (queueIndex < queue.length - 1) playAt(queueIndex + 1, false);
+      else if (repeatMode === "all" && queue.length) playAt(0, false);
       else setIsPlaying(false);
     };
+    const onError = () => {
+      setIsLoading(false); setIsPlaying(false);
+      setPlaybackError(mediaErrorMessage(audio.error?.code));
+    };
     audio.addEventListener("play", onPlay);
+    audio.addEventListener("playing", onPlaying);
     audio.addEventListener("pause", onPause);
+    audio.addEventListener("waiting", onWaiting);
+    audio.addEventListener("stalled", onWaiting);
+    audio.addEventListener("canplay", onCanPlay);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onDuration);
     audio.addEventListener("durationchange", onDuration);
+    audio.addEventListener("progress", onProgress);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
     return () => {
       audio.removeEventListener("play", onPlay);
+      audio.removeEventListener("playing", onPlaying);
       audio.removeEventListener("pause", onPause);
+      audio.removeEventListener("waiting", onWaiting);
+      audio.removeEventListener("stalled", onWaiting);
+      audio.removeEventListener("canplay", onCanPlay);
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onDuration);
       audio.removeEventListener("durationchange", onDuration);
+      audio.removeEventListener("progress", onProgress);
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
     };
-  }, [queue, queueIndex]);
+  }, [queue, queueIndex, repeatMode, shuffle]);
 
   useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = volume;
+    audio.muted = muted;
+    try { localStorage.setItem("sonora-player-settings", JSON.stringify({ volume, muted, repeatMode, shuffle, playbackMode })); } catch {}
+  }, [volume, muted, repeatMode, shuffle, playbackMode]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -176,41 +277,127 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.preservesPitch = true;
   }, [playbackMode]);
 
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("sonora-player-settings") || "{}") as {
+        volume?: number; muted?: boolean; repeatMode?: RepeatMode; shuffle?: boolean;
+        playbackMode?: "original" | "speed" | "slowed";
+      };
+      if (typeof saved.volume === "number") setVolume(Math.min(1, Math.max(0, saved.volume)));
+      if (typeof saved.muted === "boolean") setMuted(saved.muted);
+      if (saved.repeatMode === "off" || saved.repeatMode === "all" || saved.repeatMode === "one") setRepeatMode(saved.repeatMode);
+      if (typeof saved.shuffle === "boolean") setShuffle(saved.shuffle);
+      if (saved.playbackMode === "original" || saved.playbackMode === "speed" || saved.playbackMode === "slowed") setPlaybackMode(saved.playbackMode);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!currentTrack || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentTrack.title, artist: currentTrack.artist,
+        album: currentTrack.album || "SONORA",
+        artwork: currentTrack.artworkUrl ? [
+          { src: currentTrack.artworkUrl, sizes: "96x96", type: "image/jpeg" },
+          { src: currentTrack.artworkUrl, sizes: "512x512", type: "image/jpeg" }
+        ] : []
+      });
+      navigator.mediaSession.setActionHandler("play", togglePlay);
+      navigator.mediaSession.setActionHandler("pause", togglePlay);
+      navigator.mediaSession.setActionHandler("previoustrack", previousTrack);
+      navigator.mediaSession.setActionHandler("nexttrack", nextTrack);
+      navigator.mediaSession.setActionHandler("seekto", (details) => {
+        const audio = audioRef.current;
+        if (audio && typeof details.seekTime === "number") audio.currentTime = details.seekTime;
+      });
+    } catch { /* Media Session is optional and browser-dependent. */ }
+  }, [currentTrack, isPlaying, queue, queueIndex, repeatMode, shuffle]);
+
   const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
 
   return (
     <PlayerContext.Provider value={value}>
       {children}
-      <audio ref={audioRef} preload="none" />
+      <audio ref={audioRef} preload="metadata" playsInline />
       {currentTrack && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#10111a]/95 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 shadow-[0_-16px_50px_rgba(0,0,0,.35)] backdrop-blur-2xl md:px-8">
-          <div className="mx-auto max-w-[1440px]">
-            <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); }} className="mb-2 h-1 w-full cursor-pointer accent-violet-300" aria-label={t("Seek through track")} />
-            <div className="flex items-center gap-3">
-              {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt="" className="h-11 w-11 rounded-xl object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-300/10"><ListMusic size={18}/></div>}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{currentTrack.title}</p>
-                <p className="truncate text-xs text-slate-400">{currentTrack.artist}</p>
+        <>
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#10111a]/96 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_50px_rgba(0,0,0,.45)] backdrop-blur-2xl md:px-8">
+            <div className="mx-auto max-w-[1440px]">
+              <div className="mb-1.5 flex items-center gap-2 text-[10px] tabular-nums text-slate-500">
+                <span>{timeLabel(currentTime)}</span>
+                <div className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-white/20" style={{ width: `${duration ? Math.min(100, buffered / duration * 100) : 0}%` }}/>
+                  <div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>
+                  <input aria-label={t("Seek through track")} type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} disabled={!duration} onChange={(event) => {
+                    const next = Number(event.target.value);
+                    if (audioRef.current && Number.isFinite(next)) { audioRef.current.currentTime = next; setCurrentTime(next); }
+                  }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"/>
+                </div>
+                <span>{timeLabel(duration)}</span>
               </div>
-              <span className="hidden text-[11px] tabular-nums text-slate-500 sm:block">{timeLabel(currentTime)} / {timeLabel(duration)}</span>
-              <button type="button" onClick={() => playAt(Math.max(0, queueIndex - 1))} disabled={queueIndex <= 0} aria-label={t("Previous track")} className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipBack size={18}/></button>
-              <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 place-items-center rounded-full bg-violet-200 text-[#171323]"><span>{isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>}</span></button>
-              <button type="button" onClick={() => playAt(Math.min(queue.length - 1, queueIndex + 1))} disabled={queueIndex >= queue.length - 1} aria-label={t("Next track")} className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipForward size={18}/></button>
-              <div className="hidden items-center gap-2 md:flex"><Volume2 size={16} className="text-slate-400"/><input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-20 accent-violet-300"/></div>
-              <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} className="rounded-lg p-2 text-slate-400 hover:bg-white/10"><ListMusic size={18}/></button>
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                <button type="button" onClick={() => setExpanded(true)} aria-label={t("Open full player")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:bg-white/[0.04] sm:flex-none sm:w-[28%]">
+                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-violet-300/10">
+                    {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="h-full w-full object-cover"/> : <div className="grid h-full w-full place-items-center text-violet-200"><ListMusic size={19}/></div>}
+                  </div>
+                  <div className="min-w-0"><p className="truncate text-xs font-semibold sm:text-sm">{currentTrack.title}</p><p className="truncate text-[11px] text-slate-400">{currentTrack.artist}</p></div>
+                </button>
+                <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+                  <button type="button" onClick={() => setShuffle((v) => !v)} aria-label={t("Shuffle")} aria-pressed={shuffle} className={`hidden rounded-lg p-2 sm:block ${shuffle ? "text-violet-200" : "text-slate-500 hover:text-white"}`}><Shuffle size={17}/></button>
+                  <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="rounded-lg p-2 text-slate-300 hover:bg-white/10"><SkipBack size={18}/></button>
+                  <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/30">
+                    {isLoading ? <LoaderCircle size={18} className="animate-spin"/> : isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" className="ml-0.5"/>}
+                  </button>
+                  <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="rounded-lg p-2 text-slate-300 hover:bg-white/10"><SkipForward size={18}/></button>
+                  <button type="button" onClick={() => setRepeatMode((m) => m === "off" ? "all" : m === "all" ? "one" : "off")} aria-label={t("Repeat")} aria-pressed={repeatMode !== "off"} className={`hidden rounded-lg p-2 sm:block ${repeatMode !== "off" ? "text-violet-200" : "text-slate-500 hover:text-white"}`}>{repeatMode === "one" ? <Repeat1 size={17}/> : <Repeat size={17}/>}</button>
+                </div>
+                <div className="hidden shrink-0 items-center gap-2 md:flex">
+                  <button type="button" onClick={() => setMuted((v) => !v)} aria-label={muted ? t("Unmute") : t("Mute")} className="rounded-lg p-2 text-slate-400 hover:text-white">{muted || volume === 0 ? <VolumeX size={17}/> : <Volume2 size={17}/>}</button>
+                  <input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} onChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} className="w-20 accent-violet-300"/>
+                </div>
+                <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} aria-pressed={queueOpen} className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10"><ListMusic size={19}/></button>
+              </div>
+              {playbackError && <p role="status" className="mt-2 flex items-start gap-2 rounded-lg border border-rose-300/15 bg-rose-300/5 px-3 py-2 text-[11px] leading-4 text-rose-200"><AlertCircle size={14} className="mt-0.5 shrink-0"/>{playbackError}</p>}
+              {queueOpen && <div className="mt-3 max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-black/40 p-2">
+                <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")}><X size={14}/></button></div>
+                {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}>
+                  {item.artworkUrl ? <img src={item.artworkUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover"/> : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/5"><ListMusic size={13}/></span>}
+                  <span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-24 truncate text-slate-500">{item.artist}</span>
+                  {index === queueIndex && isPlaying && <span className="text-violet-200">♫</span>}
+                </button>)}
+              </div>}
             </div>
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-              <span className="mr-1 text-[10px] uppercase tracking-wider text-slate-500">{t("Playback version")}</span>
-              <button type="button" onClick={() => setPlaybackMode("original")} aria-pressed={playbackMode === "original"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "original" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Original")}</button>
-              <button type="button" onClick={() => setPlaybackMode("speed")} aria-pressed={playbackMode === "speed"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "speed" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Speed up")} · 1.25×</button>
-              <button type="button" onClick={() => setPlaybackMode("slowed")} aria-pressed={playbackMode === "slowed"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "slowed" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Slowed")} · 0.8×</button>
-            </div>
-            {queueOpen && <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-2">
-              <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")}><X size={14}/></button></div>
-              {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}><span className="w-5 text-slate-600">{index + 1}</span><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-28 truncate text-slate-500">{item.artist}</span></button>)}
-            </div>}
           </div>
-        </div>
+          {expanded && <div className="fixed inset-0 z-[60] overflow-y-auto bg-[#090a12] px-5 pb-[max(28px,env(safe-area-inset-bottom))] pt-[max(22px,env(safe-area-inset-top))]">
+            <div className="mx-auto flex min-h-full w-full max-w-xl flex-col">
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => setExpanded(false)} aria-label={t("Minimize player")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ChevronDown size={23}/></button>
+                <div className="text-center"><p className="text-[10px] font-semibold uppercase tracking-[.24em] text-violet-200">SONORA</p><p className="mt-1 text-xs text-slate-500">{t("Now playing")}</p></div>
+                <button type="button" onClick={() => { setQueueOpen((v) => !v); setExpanded(false); }} aria-label={t("Open queue")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ListMusic size={21}/></button>
+              </div>
+              <div className="flex flex-1 flex-col justify-center py-8">
+                <div className="mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
+                  {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="h-full w-full object-cover"/> : <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>}
+                </div>
+                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("Source")}</a></div>
+                <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
+                <div className="mt-7 flex items-center justify-between">
+                  <button type="button" onClick={()=>setShuffle(v=>!v)} aria-label={t("Shuffle")} className={shuffle?"text-violet-200":"text-slate-500"}><Shuffle size={21}/></button>
+                  <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="text-slate-200"><SkipBack size={27}/></button>
+                  <button type="button" onClick={togglePlay} aria-label={isPlaying?t("Pause"):t("Play")} className="grid h-16 w-16 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-xl shadow-violet-950/30">{isLoading?<LoaderCircle size={27} className="animate-spin"/>:isPlaying?<Pause size={28} fill="currentColor"/>:<Play size={28} fill="currentColor"/>}</button>
+                  <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="text-slate-200"><SkipForward size={27}/></button>
+                  <button type="button" onClick={()=>setRepeatMode(m=>m==="off"?"all":m==="all"?"one":"off")} aria-label={t("Repeat")} className={repeatMode!=="off"?"text-violet-200":"text-slate-500"}>{repeatMode==="one"?<Repeat1 size={21}/>:<Repeat size={21}/>}</button>
+                </div>
+                <div className="mt-8 flex items-center gap-3"><VolumeX size={17} className="text-slate-500"/><input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={muted?0:volume} onChange={event=>{setVolume(Number(event.target.value));setMuted(false);}} className="flex-1 accent-violet-300"/><Volume2 size={17} className="text-slate-400"/></div>
+                {playbackError && <p role="status" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 p-3 text-sm text-rose-200">{playbackError}</p>}
+                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                  {(["original","speed","slowed"] as const).map(mode=><button key={mode} type="button" onClick={()=>setPlaybackMode(mode)} aria-pressed={playbackMode===mode} className={`rounded-full px-4 py-2 text-xs ${playbackMode===mode?"bg-violet-200 text-[#171323]":"border border-white/10 text-slate-400"}`}>{mode==="original"?t("Original"):mode==="speed"?t("Speed up")+" · 1.25×":t("Slowed")+" · 0.8×"}</button>)}
+                </div>
+              </div>
+              <div className="flex justify-center pb-2"><button type="button" onClick={()=>{setQueueOpen(true);setExpanded(false);}} className="flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm text-slate-300"><ListMusic size={17}/>{t("Open queue")} · {queue.length}</button></div>
+            </div>
+          </div>}
+        </>
       )}
     </PlayerContext.Provider>
   );
