@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, CheckCircle2, Clock3, Headphones, ListMusic, Music2, SkipForward } from "lucide-react";
+import { useLanguage } from "../../components/language-provider";
 
 type HistoryItem = {
   id: string;
@@ -35,6 +36,7 @@ function eventLabel(event: HistoryItem["event_type"]) {
 }
 
 export default function HistoryPage() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
