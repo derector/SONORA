@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, AudioLines, Clock3, Compass, FileUp, Headphones, Heart, Library, ListMusic, Search, Settings, Sparkles } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
+import { useAuth } from "../components/auth-provider";
 
 const mixes = [
   { title: "Afterglow", detail: "Warm electronic · 42 tracks", color: "from-fuchsia-500/35 to-violet-950", mark: "✳" },
@@ -11,6 +12,7 @@ const mixes = [
 
 export default function Home() {
   const { t } = useLanguage();
+  const { user, loading } = useAuth();
   return (
     <main className="mx-auto flex min-h-screen max-w-[1440px] gap-5 px-4 py-5 md:px-8">
       <aside className="hidden w-60 shrink-0 flex-col rounded-3xl border border-white/[0.07] bg-white/[0.025] p-5 md:flex">
@@ -36,7 +38,7 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 py-3">
           <div className="md:hidden flex items-center gap-2 font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
           <div className="hidden text-sm text-slate-400 md:block">{t("Tuesday, your next favorite is waiting.")}</div>
-          <div className="flex items-center gap-3"><a href="/settings" aria-label={t("Settings")} className="rounded-full border border-white/10 p-2 text-slate-300 hover:bg-white/5"><Settings size={16}/></a><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> {t("Preview experience")}</span></div>
+          <div className="flex items-center gap-3"><a href="/settings" aria-label={t("Settings")} className="rounded-full border border-white/10 p-2 text-slate-300 hover:bg-white/5"><Settings size={16}/></a><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a>{loading ? <span className="h-9 w-20 animate-pulse rounded-full bg-white/10" /> : user ? <a href="/profile" aria-label={t("Your profile")} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1.5 pr-3 text-xs text-slate-200 hover:bg-white/10">{user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="grid h-7 w-7 place-items-center rounded-full bg-violet-200/20 text-violet-100">{(user.displayName || user.username || user.email).slice(0,1).toUpperCase()}</span>}<span className="max-w-24 truncate">{user.displayName || user.username || t("Your profile")}</span></a> : <a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a>}<span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> {t("Preview experience")}</span></div>
         </header>
 
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
