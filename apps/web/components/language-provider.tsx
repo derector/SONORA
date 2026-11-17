@@ -51,7 +51,6 @@ const ru: Record<string, string> = {
   "tracks": "треков",
   "Volume": "Громкость",
   "Seek through track": "Перемотка трека",
-  "Previous track": "Предыдущий трек",
   "Next track": "Следующий трек",
   "Toggle queue": "Открыть очередь",
   "Close queue": "Закрыть очередь",
