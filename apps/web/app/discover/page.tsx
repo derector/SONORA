@@ -108,12 +108,12 @@ export default function DiscoverPage() {
   return (
     <main className="mx-auto min-h-screen max-w-[1440px] px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> Back to SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
+        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> {t("Back to SONORA")}</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
         <div className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
       </header>
 
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> Discover independent music</p>
+        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> {t("Discover independent music")}</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Find your next frequency.")}</h1>
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent tracks from Jamendo. Every result carries its creator, source and Creative Commons license details. Playback is offered only where the track and provider terms permit it.")}</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
@@ -124,12 +124,12 @@ export default function DiscoverPage() {
       </section>
 
       <div className="mt-9 flex items-end justify-between gap-4">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Open catalog</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks to explore")}</h2></div>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Open catalog")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks to explore")}</h2></div>
         <span className="text-xs text-slate-500">{t("Powered by Jamendo")}</span>
       </div>
 
       {loading ? (
-        <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> Loading the catalog…</div>
+        <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading the catalog…")}</div>
       ) : error ? (
         <div className="mt-6 rounded-2xl border border-amber-300/15 bg-amber-300/5 p-6">
           <p className="font-medium text-amber-100">{t("Catalog connection is not ready.")}</p>
@@ -152,10 +152,10 @@ export default function DiscoverPage() {
               </div>
               <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20" aria-label={`${currentTrack?.id === track.id && isPlaying ? "Pause" : "Play"} ${track.title}`}>{currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? "Pause" : "Play track"}</button>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
-                <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> CC license</span>
+                <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> {t("CC license")}</span>
                 <div className="flex items-center gap-3 text-slate-400">
                   <a href={track.licenseUrl} target="_blank" rel="noreferrer" className="hover:text-white">{t("License")}</a>
-                  <a href={track.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">Jamendo <ExternalLink size={11}/></a>
+                  <a href={track.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">{t("Jamendo")} <ExternalLink size={11}/></a>
                 </div>
               </div>
               <p className="mt-2 text-[10px] leading-4 text-slate-600">Artist: {track.artist} · Source: Jamendo · License terms apply.</p>
@@ -164,7 +164,7 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">SONORA · Independent music discovery · Rights and attribution stay attached to every track</footer>
+      <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Independent music discovery · Rights and attribution stay attached to every track")}</footer>
     </main>
   );
 }
