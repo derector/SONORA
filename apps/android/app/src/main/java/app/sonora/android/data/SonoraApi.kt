@@ -114,6 +114,56 @@ object SonoraApi {
         return parseTracks(request(path).optJSONArray("items"))
     }
 
+    data class Playlist(val id: String, val title: String, val description: String? = null, val trackCount: Int = 0)
+
+    fun getPlaylists(): List<Playlist> {
+        val items = request("/api/v1/playlists", authenticated = true).optJSONArray("items")
+        val result = mutableListOf<Playlist>()
+        if (items != null) for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            result += Playlist(item.optString("id"), item.optString("title"), item.optString("description").takeIf { it.isNotBlank() && it != "null" })
+        }
+        return result
+    }
+
+    fun createPlaylist(title: String): Playlist {
+        val item = request("/api/v1/playlists", "POST", JSONObject().put("title", title.trim()), authenticated = true)
+            .optJSONObject("playlist") ?: throw IOException("Playlist was not returned by the server.")
+        return Playlist(item.optString("id"), item.optString("title"), item.optString("description").takeIf { it.isNotBlank() && it != "null" })
+    }
+
+    fun addTrackToPlaylist(playlistId: String, track: Track) {
+        if (track.provider != "Audius" && track.provider != "Jamendo") throw IOException("This provider is not supported in playlists.")
+        request(
+            "/api/v1/playlists/${java.net.URLEncoder.encode(playlistId, "UTF-8")}/provider-tracks",
+            "POST",
+            JSONObject().put("provider", track.provider.lowercase()).put("providerTrackId", track.providerTrackId),
+            authenticated = true
+        )
+    }
+
+    fun getPlaylistTracks(playlistId: String): List<Track> {
+        val playlist = request("/api/v1/playlists/${java.net.URLEncoder.encode(playlistId, "UTF-8")}", authenticated = true)
+            .optJSONObject("playlist") ?: return emptyList()
+        val items = playlist.optJSONArray("provider_playlist_tracks") ?: return emptyList()
+        val resolved = mutableListOf<Track>()
+        for (i in 0 until items.length()) {
+            val saved = items.optJSONObject(i) ?: continue
+            val provider = saved.optString("provider")
+            val providerId = saved.optString("provider_track_id")
+            val path = when (provider) {
+                "audius" -> "/api/v1/providers/audius/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                "jamendo" -> "/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                else -> continue
+            }
+            try {
+                val fresh = parseTracks(request(path).optJSONArray("items")).firstOrNull()
+                if (fresh != null && fresh.playable) resolved += fresh
+            } catch (_: Exception) { }
+        }
+        return resolved
+    }
+
     fun search(query: String): List<Track> {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
         return parseTracks(result.optJSONArray("tracks")).filter { it.playable }
