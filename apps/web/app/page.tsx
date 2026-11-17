@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, AudioLines, Clock3, Compass, FileUp, Headphones, Heart, Library, ListMusic, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, AudioLines, Clock3, Compass, FileUp, Headphones, Heart, Library, ListMusic, Search, Settings, Sparkles } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
 
 const mixes = [
@@ -23,6 +23,7 @@ export default function Home() {
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> {t("Liked tracks")}</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> {t("Listening history")}</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> {t("Playlists")}</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/settings"><Settings size={17}/> {t("Settings")}</a>
         </nav>
         <div className="mt-auto rounded-2xl border border-white/[0.07] bg-gradient-to-br from-violet-500/15 to-transparent p-4">
           <Sparkles className="mb-3 text-violet-200" size={18}/>
@@ -35,7 +36,7 @@ export default function Home() {
         <header className="flex items-center justify-between gap-4 py-3">
           <div className="md:hidden flex items-center gap-2 font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
           <div className="hidden text-sm text-slate-400 md:block">{t("Tuesday, your next favorite is waiting.")}</div>
-          <div className="flex items-center gap-3"><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> {t("Preview experience")}</span></div>
+          <div className="flex items-center gap-3"><a href="/settings" aria-label={t("Settings")} className="rounded-full border border-white/10 p-2 text-slate-300 hover:bg-white/5"><Settings size={16}/></a><a href="/import" className="text-xs text-slate-400 hover:text-white">{t("Import tracks")}</a><a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a><span className="hidden rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-slate-300 sm:inline-flex"><span className="mr-2 mt-1 h-2 w-2 rounded-full bg-amber-300"/> {t("Preview experience")}</span></div>
         </header>
 
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
