@@ -1,4 +1,7 @@
+"use client";
+
 import { ArrowUpRight, AudioLines, Clock3, Compass, Headphones, Heart, Library, ListMusic, Search, Sparkles } from "lucide-react";
+import { useLanguage } from "../components/language-provider";
 
 const mixes = [
   { title: "Afterglow", detail: "Warm electronic · 42 tracks", color: "from-fuchsia-500/35 to-violet-950", mark: "✳" },
@@ -7,6 +10,7 @@ const mixes = [
 ];
 
 export default function Home() {
+  const { t } = useLanguage();
   return (
     <main className="mx-auto flex min-h-screen max-w-[1440px] gap-5 px-4 py-5 md:px-8">
       <aside className="hidden w-60 shrink-0 flex-col rounded-3xl border border-white/[0.07] bg-white/[0.025] p-5 md:flex">
