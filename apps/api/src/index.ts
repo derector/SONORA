@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 16_384 });
@@ -7,6 +8,8 @@ const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+
+await app.register(cookie);
 
 await app.register(cors, {
   origin: process.env.CORS_ORIGIN?.split(",").map((value) => value.trim()) ?? ["http://localhost:3000"],
@@ -171,7 +174,7 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
 });
 
 app.post<{ Body: { refresh_token?: string } }>("/api/v1/auth/refresh", async (request, reply) => {
-  const refreshToken = request.body?.refresh_token;
+  const refreshToken = request.cookies.sonora_refresh;
   if (!cleanText(refreshToken, 10, 4096)) {
     return reply.code(400).send(authError(400, "A valid refresh token is required."));
   }
