@@ -67,7 +67,7 @@ export default function SearchPage() {
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] px-4 py-6 pb-40 md:px-8">
+    <main className="mx-auto w-full min-w-0 max-w-[1440px] overflow-x-clip px-4 py-6 pb-40 md:px-8">
       <header className="flex items-center justify-between">
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> {t("Back to SONORA")}</Link>
         <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</span>
@@ -96,12 +96,12 @@ export default function SearchPage() {
 
       {!loading && tracks.length > 0 && <section className="mt-9">
         <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Playable catalog results")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks")}</h2></div><span className="text-xs text-slate-500">{tracks.length} {t("matches")}</span></div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {tracks.map((track) => <article key={track.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
-            {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={22}/></div>}
+        <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+          {tracks.map((track) => <article key={track.id} className="flex w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
+            <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-violet-300/10"><Music2 size={22} className="text-violet-200"/>{track.artworkUrl && <img src={track.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</div>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.provider} · {track.rightsLabel || track.provider} {track.durationSeconds ? "· " + duration(track.durationSeconds) : ""}</p></div>
-            <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
-            <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
+            <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="shrink-0 rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
+            <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="shrink-0 rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
           </article>)}
         </div>
       </section>}
@@ -118,7 +118,7 @@ export default function SearchPage() {
 
       {!loading && metadata.length > 0 && <section className="mt-10">
         <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("MusicBrainz identifies recordings and releases. It does not provide audio playback.")}</p></div>
-        <div className="space-y-2">{metadata.map((item) => <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl border border-white/[0.06] px-4 py-3 hover:bg-white/[0.03]"><Disc3 size={18} className="text-slate-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm">{item.title}</p><p className="truncate text-xs text-slate-500">{item.artist}{item.album ? " · " + item.album : ""}</p></div><span className="text-[10px] text-slate-500">{item.provider}</span><ExternalLink size={14} className="text-slate-500"/></a>)}</div>
+        <div className="w-full min-w-0 space-y-2">{metadata.map((item) => <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/[0.06] px-4 py-3 hover:bg-white/[0.03]"><Disc3 size={18} className="text-slate-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm">{item.title}</p><p className="truncate text-xs text-slate-500">{item.artist}{item.album ? " · " + item.album : ""}</p></div><span className="text-[10px] text-slate-500">{item.provider}</span><ExternalLink size={14} className="text-slate-500"/></a>)}</div>
       </section>}
       <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Federated discovery · Every playable result remains attributed to its source")}</footer>
     </main>
