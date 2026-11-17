@@ -107,21 +107,21 @@ export default function PlaylistsPage() {
         <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> PLAYLISTS</span>
       </header>
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">Your personal collection</p>
-        <h1 className="mt-3 text-3xl font-semibold md:text-5xl">Sound, in your order.</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your personal collection")}</p>
+        <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{t("Sound, in your order.")}</h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.")}</p>
       </section>
 
       {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> Restoring your session…</div> : !token ? (
         <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-7">
-          <h2 className="text-xl font-semibold">Sign in to see your library.</h2>
-          <p className="mt-2 text-sm text-slate-400">Your playlists are private to your account until you choose otherwise.</p>
-          <Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">Sign in or create account</Link>
+          <h2 className="text-xl font-semibold">{t("Sign in to see your library.")}</h2>
+          <p className="mt-2 text-sm text-slate-400">{t("Your playlists are private to your account until you choose otherwise.")}</p>
+          <Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in or create account")}</Link>
         </section>
       ) : (
         <>
           <form onSubmit={createPlaylist} className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6">
-            <div className="flex items-center gap-2"><Plus className="text-violet-200" size={18}/><h2 className="font-semibold">Create a playlist</h2></div>
+            <div className="flex items-center gap-2"><Plus className="text-violet-200" size={18}/><h2 className="font-semibold">{t("Create a playlist")}</h2></div>
             <div className="mt-5 grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
               <input value={title} onChange={(event) => setTitle(event.target.value)} required minLength={1} maxLength={80} placeholder="Playlist name" className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
               <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder="A short description (optional)" className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
@@ -129,8 +129,8 @@ export default function PlaylistsPage() {
             </div>
           </form>
           <section className="mt-9">
-            <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Your library</p><h2 className="mt-2 text-2xl font-semibold">Your playlists</h2></div><span className="text-xs text-slate-500">{playlists.length} total</span></div>
-            {playlists.length === 0 ? <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center"><Disc3 className="mx-auto text-slate-500" size={28}/><p className="mt-3 font-medium">Your first playlist starts here.</p><p className="mt-1 text-sm text-slate-500">Create one above. You can add catalog tracks as the music catalog is connected.</p></div> : (
+            <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Your library")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Your playlists")}</h2></div><span className="text-xs text-slate-500">{playlists.length} total</span></div>
+            {playlists.length === 0 ? <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center"><Disc3 className="mx-auto text-slate-500" size={28}/><p className="mt-3 font-medium">{t("Your first playlist starts here.")}</p><p className="mt-1 text-sm text-slate-500">{t("Create one above. You can add catalog tracks as the music catalog is connected.")}</p></div> : (
               <div className="grid gap-3 sm:grid-cols-2">
                 {playlists.map((playlist) => <article key={playlist.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-300/10 text-violet-200"><Disc3 size={22}/></div><div className="min-w-0 flex-1"><h3 className="truncate font-medium">{playlist.title}</h3><p className="mt-1 truncate text-xs text-slate-500">{playlist.description || "No description"} · {playlist.is_public ? "Public" : "Private"}</p></div><button type="button" onClick={() => void deletePlaylist(playlist.id)} aria-label={`Delete ${playlist.title}`} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button></article>)}
               </div>
