@@ -199,7 +199,12 @@ private fun SonoraApp() {
                             finally { busy = false }
                         }
                     }, ::play)
-                    "Медиатека" -> LibraryScreen(SonoraApi.isSignedIn(), { tab = "Профиль" })
+                    "Медиатека" -> LibraryScreen(
+                        signedIn = authStep == "signed",
+                        currentTrack = current,
+                        openProfile = { tab = "Профиль" },
+                        play = ::play
+                    )
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
                         scope.launch(Dispatchers.IO) {
                             runCatching { File(item.localPath).delete() }
@@ -421,12 +426,124 @@ private fun formatTime(milliseconds: Long): String {
 }
 
 @Composable
-private fun LibraryScreen(signedIn: Boolean, openProfile: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(Ink).padding(22.dp)) {
-        Text("Медиатека", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(14.dp))
-        Text(if (signedIn) "Твои плейлисты и любимые треки будут здесь." else "Войди, чтобы синхронизировать медиатеку между сайтом и приложением.", color = Muted)
-        if (!signedIn) Button(onClick = openProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Войти в SONORA") }
+private fun LibraryScreen(
+    signedIn: Boolean,
+    currentTrack: Track?,
+    openProfile: () -> Unit,
+    play: (Track) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var playlists by remember { mutableStateOf<List<SonoraApi.Playlist>>(emptyList()) }
+    var selected by remember { mutableStateOf<SonoraApi.Playlist?>(null) }
+    var playlistTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var title by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+
+    fun refreshPlaylists() {
+        scope.launch {
+            busy = true
+            try {
+                playlists = withContext(Dispatchers.IO) { SonoraApi.getPlaylists() }
+                error = ""
+            } catch (e: Exception) { error = e.message ?: "Не удалось загрузить плейлисты" }
+            finally { busy = false }
+        }
+    }
+
+    LaunchedEffect(signedIn) {
+        if (signedIn) refreshPlaylists()
+        else { playlists = emptyList(); selected = null; playlistTracks = emptyList() }
+    }
+
+    Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Медиатека", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (signedIn) IconButton(onClick = { refreshPlaylists() }, enabled = !busy) {
+                Icon(Icons.Default.Refresh, "Обновить", tint = Lime)
+            }
+        }
+        if (!signedIn) {
+            Text("Войди, чтобы синхронизировать плейлисты между сайтом и приложением.", color = Muted)
+            Button(onClick = openProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Войти в SONORA") }
+        } else {
+            OutlinedTextField(
+                value = title, onValueChange = { title = it.take(80) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Название нового плейлиста") }, singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = {
+                        if (title.isNotBlank() && !busy) scope.launch {
+                            busy = true
+                            try {
+                                val created = withContext(Dispatchers.IO) { SonoraApi.createPlaylist(title) }
+                                title = ""
+                                playlists = listOf(created) + playlists
+                                selected = created
+                                playlistTracks = emptyList()
+                                error = ""
+                            } catch (e: Exception) { error = e.message ?: "Не удалось создать плейлист" }
+                            finally { busy = false }
+                        }
+                    }, enabled = title.isNotBlank() && !busy) { Icon(Icons.Default.Add, "Создать", tint = Lime) }
+                }
+            )
+            Spacer(Modifier.height(12.dp))
+            if (selected == null) {
+                Text("Твои плейлисты", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (playlists.isEmpty() && !busy) Text("Пока нет плейлистов. Создай первый выше.", color = Muted, modifier = Modifier.padding(top = 10.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
+                    items(playlists, key = { it.id }) { playlist ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
+                                .clickable {
+                                    selected = playlist
+                                    scope.launch {
+                                        busy = true
+                                        try { playlistTracks = withContext(Dispatchers.IO) { SonoraApi.getPlaylistTracks(playlist.id) }; error = "" }
+                                        catch (e: Exception) { error = e.message ?: "Не удалось открыть плейлист" }
+                                        finally { busy = false }
+                                    }
+                                }.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.QueueMusic, null, tint = Lime, modifier = Modifier.size(28.dp))
+                            Text(playlist.title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                            Icon(Icons.Default.ChevronRight, null, tint = Muted)
+                        }
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { selected = null; playlistTracks = emptyList() }) { Icon(Icons.Default.ArrowBack, "Назад", tint = Lime) }
+                    Text(selected!!.title, color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
+                if (currentTrack != null) {
+                    OutlinedButton(
+                        onClick = {
+                            val target = selected!!
+                            scope.launch {
+                                busy = true
+                                try {
+                                    withContext(Dispatchers.IO) { SonoraApi.addTrackToPlaylist(target.id, currentTrack) }
+                                    playlistTracks = withContext(Dispatchers.IO) { SonoraApi.getPlaylistTracks(target.id) }
+                                    error = ""
+                                } catch (e: Exception) { error = e.message ?: "Не удалось добавить трек" }
+                                finally { busy = false }
+                            }
+                        }, enabled = !busy && (currentTrack.provider == "Audius" || currentTrack.provider == "Jamendo")
+                    ) {
+                        Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("Добавить текущий трек")
+                    }
+                }
+                if (playlistTracks.isEmpty() && !busy) Text("В этом плейлисте пока нет доступных треков.", color = Muted, modifier = Modifier.padding(top = 10.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
+                    items(playlistTracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, {}) }
+                }
+            }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
+            if (error.isNotBlank()) Text(error, color = Color(0xFFFF9A8D), modifier = Modifier.padding(top = 8.dp))
+        }
     }
 }
 
