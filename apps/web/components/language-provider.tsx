@@ -14,7 +14,7 @@ const ru: Record<string, string> = {
   "Your saved music":"Твоя сохранённая музыка","Keep the good ones close.":"Сохраняй любимое рядом.","Jamendo tracks you save are stored in your SONORA account with their original source and license details.":"Сохранённые треки Jamendo хранятся в аккаунте SONORA вместе с исходными ссылками и сведениями о лицензии.","Loading your favorites…":"Загружаем избранное…","Sign in to see your saved tracks.":"Войди, чтобы увидеть сохранённые треки.","Sign in or create account":"Войти или создать аккаунт","Your favorites shelf is empty.":"Здесь пока пусто.","Save a track from Discover and it will appear here.":"Сохрани трек в разделе «Обзор», и он появится здесь.","Explore music":"Открыть музыку","Your collection":"Твоя коллекция","Saved tracks":"Сохранённые треки",
   "Your listening trail":"Твоя музыкальная история","Recently heard.":"Недавно прослушано.","Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.":"Здесь реальные события воспроизведения SONORA. Запуски, завершения и пропуски записываются отдельно.","Loading listening history…":"Загружаем историю…","Sign in to see your history.":"Войди, чтобы увидеть историю.","Your listening history is empty.":"История пока пуста.","Play a track in Discover and it will appear here.":"Включи трек в разделе «Обзор», и он появится здесь.","Your activity":"Твоя активность","Listening events":"События прослушивания","Finished":"Дослушано","Skipped":"Пропущено","Played":"Воспроизведено",
   "Your personal collection":"Твоя личная коллекция","Sound, in your order.":"Музыка в твоём порядке.","Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.":"Создавай плейлисты и управляй ими. Они хранятся в аккаунте SONORA, а не только в браузере.","Restoring your session…":"Восстанавливаем сессию…","Sign in to see your library.":"Войди, чтобы открыть медиатеку.","Your playlists are private to your account until you choose otherwise.":"Твои плейлисты приватны, пока ты не решишь иначе.","Sign in or create account":"Войти или создать аккаунт","Create a playlist":"Создать плейлист","Playlist name":"Название плейлиста","A short description (optional)":"Краткое описание (необязательно)","Create":"Создать","Your library":"Медиатека","Your playlists":"Твои плейлисты","Your first playlist starts here.":"Начни с первого плейлиста.","Create one above. You can add catalog tracks as the music catalog is connected.":"Создай его выше. Добавление треков станет доступно через каталог.","No description":"Без описания","Public":"Публичный","Private":"Приватный","Playlist created.":"Плейлист создан.","Playlist deleted.":"Плейлист удалён.","Delete":"Удалить",
-  "Previous track":"Предыдущий трек","Next track":"Следующий трек","Toggle queue":"Открыть очередь","Close queue":"Закрыть очередь","Up next ·":"Далее ·","Seek through track":"Перемотка трека","Volume":"Громкость","Original":"Оригинал","Speed up":"Ускорить","Slowed":"Замедлить","Playback version":"Версия воспроизведения"
+  "Previous track":"Предыдущий трек","Next track":"Следующий трек","Toggle queue":"Открыть очередь","Close queue":"Закрыть очередь","Up next ·":"Далее ·","Seek through track":"Перемотка трека","Volume":"Громкость","Original":"Оригинал","Speed up":"Ускорить","Slowed":"Замедлить","Playback version":"Версия воспроизведения",
   "Import tracks": "Импорт музыки",
   "Bring your music together": "Собери всю музыку в одном месте",
   "Import tracks from other platforms.": "Импортируй треки с других площадок.",
@@ -57,6 +57,11 @@ const ru: Record<string, string> = {
   "Close queue": "Закрыть очередь",
   "Import": "Импорт",
   "IMPORT": "ИМПОРТ",
+  "Open catalog": "Открытый каталог",
+  "Jamendo": "Jamendo",
+  "FAVORITES": "ИЗБРАННОЕ",
+  "HISTORY": "ИСТОРИЯ",
+  "PLAYLISTS": "ПЛЕЙЛИСТЫ",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
