@@ -174,7 +174,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playAt(next);
     } else if (queueIndex < queue.length - 1) playAt(queueIndex + 1);
     else if (repeatMode === "all") playAt(0);
-    else setIsPlaying(false);
+    else { const audio = audioRef.current; if (audio) audio.pause(); setIsPlaying(false); }
   }
 
   function previousTrack() {
@@ -302,8 +302,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           { src: currentTrack.artworkUrl, sizes: "512x512", type: "image/jpeg" }
         ] : []
       });
-      navigator.mediaSession.setActionHandler("play", togglePlay);
-      navigator.mediaSession.setActionHandler("pause", togglePlay);
+      navigator.mediaSession.setActionHandler("play", () => { if (audioRef.current?.paused) togglePlay(); });
+      navigator.mediaSession.setActionHandler("pause", () => { if (audioRef.current && !audioRef.current.paused) togglePlay(); });
       navigator.mediaSession.setActionHandler("previoustrack", previousTrack);
       navigator.mediaSession.setActionHandler("nexttrack", nextTrack);
       navigator.mediaSession.setActionHandler("seekto", (details) => {
