@@ -88,6 +88,20 @@ object SonoraApi {
         } catch (_: Exception) { false }
     }
 
+    fun restoreSession(): Boolean {
+        if (prefs.getString("access_token", null).isNullOrBlank()) return false
+        if (!prefs.getString("refresh_cookie", null).isNullOrBlank()) {
+            if (refreshSession()) return true
+        }
+        return try {
+            request("/api/v1/auth/me", authenticated = true)
+            true
+        } catch (_: Exception) {
+            logout()
+            false
+        }
+    }
+
     fun logout() { prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply() }
     fun email(): String = prefs.getString("email", "").orEmpty()
     fun isSignedIn(): Boolean = prefs.getString("access_token", null) != null
