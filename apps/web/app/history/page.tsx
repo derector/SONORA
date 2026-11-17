@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, CheckCircle2, Clock3, Headphones, ListMusic, Music2, SkipForward } from "lucide-react";
-import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
 type HistoryItem = {
   id: string;
@@ -40,7 +39,6 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState("");
-  const { playTrack } = usePlayer();
 
   useEffect(() => {
     let active = true;
@@ -68,16 +66,6 @@ export default function HistoryPage() {
     return () => { active = false; };
   }, []);
 
-  function replay(item: HistoryItem) {
-    const track: PlayerTrack = {
-      id: item.provider_track_id, title: item.title, artist: item.artist_name, album: item.album_name,
-      durationSeconds: item.duration_seconds, artworkUrl: item.artwork_url,
-      audioUrl: "", licenseUrl: item.license_url, sourceUrl: item.source_url
-    };
-    // The original stream URL is intentionally not stored in history. Reopen the
-    // licensed catalog entry to obtain a fresh provider stream URL.
-    window.location.href = `/discover?q=${encodeURIComponent(item.title)}`;
-  }
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
