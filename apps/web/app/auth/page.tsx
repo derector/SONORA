@@ -138,10 +138,10 @@ export default function AuthPage() {
             <form onSubmit={verifyCode}>
               <ShieldCheck className="mb-4 text-violet-200" size={28}/>
               <h1 className="text-2xl font-semibold">{t("Check your inbox.")}</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{t("Enter the six-digit code sent to")} <span className="text-slate-200">{email}</span>.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{t("Enter the eight-digit code sent to")} <span className="text-slate-200">{email}</span>.</p>
               <label className="mt-7 block text-xs font-medium text-slate-400">{t("Verification code")}</label>
-              <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} required placeholder="000000" className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-center text-2xl tracking-[.55em] outline-none transition focus:border-violet-300/60"/>
-              <button disabled={busy || code.length !== 6} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{busy && <LoaderCircle className="animate-spin" size={16}/>} Verify and continue</button>
+              <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" autoComplete="one-time-code" maxLength={8} required placeholder="00000000" className="mt-2 w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-center text-2xl tracking-[.55em] outline-none transition focus:border-violet-300/60"/>
+              <button disabled={busy || code.length !== 8} className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{busy && <LoaderCircle className="animate-spin" size={16}/>} Verify and continue</button>
               <button type="button" onClick={() => { setStep("details"); setCode(""); setMessage(""); setError(""); }} className="mt-4 w-full text-xs text-slate-500 hover:text-white">{t("Change email or request another code")}</button>
             </form>
           ) : (
