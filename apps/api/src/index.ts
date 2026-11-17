@@ -937,6 +937,42 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
   }
 });
 
+// Audius public discovery catalog. Read-only endpoints are public; only API-accessible,
+// non-gated tracks are returned as playable. The provider remains the audio host.
+app.get<{ Querystring: { sort?: string; limit?: string } }>("/api/v1/providers/audius/tracks", async (request, reply) => {
+  const sort = request.query.sort === "latest" ? "latest" : "trending";
+  const limit = Math.min(30, Math.max(1, Number(request.query.limit) || 24));
+  try {
+    const params = new URLSearchParams({ limit: String(limit), app_name: "SONORA" });
+    if (sort === "trending") params.set("time", "week");
+    const response = await fetch(`https://api.audius.co/v1/tracks/${sort}?${params.toString()}`, {
+      headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json() as { data?: Array<{
+      id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
+      is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
+      user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
+    }> };
+    const items = (payload.data ?? []).flatMap((track) => {
+      if (!track.id || !track.title || track.is_streamable !== true || track.is_stream_gated === true) return [];
+      return [{
+        id: `audius:${track.id}`, providerTrackId: track.id, title: track.title,
+        artist: track.user?.name ?? track.user?.handle ?? "Audius creator",
+        album: track.album?.playlist_name ?? null, durationSeconds: track.duration ?? 0,
+        artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
+        audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
+        licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
+        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+      }];
+    });
+    return { provider: "Audius", sort, items, sourceCount: payload.data?.length ?? 0 };
+  } catch (error) {
+    request.log.warn({ err: error }, "Audius discovery catalog unavailable");
+    return reply.code(502).send(authError(502, "Audius catalog is temporarily unavailable."));
+  }
+});
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
