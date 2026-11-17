@@ -48,7 +48,7 @@ export default function DiscoverPage() {
     try {
       const params = new URLSearchParams({ limit: "24" });
       if (selectedSource === "audius") params.set("sort", selectedSort);
-      else if (search.trim()) params.set("q", search.trim());
+      else params.set("q", search.trim() || "music");
       const endpoint = selectedSource === "audius" ? "audius" : "jamendo";
       const response = await fetch(`${API}/api/v1/providers/${endpoint}/tracks?${params.toString()}`);
       const result = await response.json() as Result;
