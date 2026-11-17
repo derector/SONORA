@@ -108,36 +108,36 @@ export default function DiscoverPage() {
   return (
     <main className="mx-auto min-h-screen max-w-[1440px] px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> Back to SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">History</Link></div>
+        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> Back to SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
         <div className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
       </header>
 
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> Discover independent music</p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">Find your next frequency.</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Explore independent tracks from Jamendo. Every result carries its creator, source and Creative Commons license details. Playback is offered only where the track and provider terms permit it.</p>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Find your next frequency.")}</h1>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent tracks from Jamendo. Every result carries its creator, source and Creative Commons license details. Playback is offered only where the track and provider terms permit it.")}</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tracks, artists or moods" className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
-          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">Search</button>
+          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
       </section>
 
       <div className="mt-9 flex items-end justify-between gap-4">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Open catalog</p><h2 className="mt-2 text-2xl font-semibold">Tracks to explore</h2></div>
-        <span className="text-xs text-slate-500">Powered by Jamendo</span>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">Open catalog</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks to explore")}</h2></div>
+        <span className="text-xs text-slate-500">{t("Powered by Jamendo")}</span>
       </div>
 
       {loading ? (
         <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> Loading the catalog…</div>
       ) : error ? (
         <div className="mt-6 rounded-2xl border border-amber-300/15 bg-amber-300/5 p-6">
-          <p className="font-medium text-amber-100">Catalog connection is not ready.</p>
+          <p className="font-medium text-amber-100">{t("Catalog connection is not ready.")}</p>
           <p className="mt-2 text-sm leading-6 text-slate-400">{error}</p>
-          <p className="mt-3 text-xs text-slate-500">The provider API key must be configured server-side. No demo tracks are substituted.</p>
+          <p className="mt-3 text-xs text-slate-500">{t("The provider API key must be configured server-side. No demo tracks are substituted.")}</p>
         </div>
       ) : tracks.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-8 text-center text-sm text-slate-400">No tracks found. Try another search.</div>
+        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-8 text-center text-sm text-slate-400">{t("No tracks found. Try another search.")}</div>
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {tracks.map((track) => (
@@ -154,7 +154,7 @@ export default function DiscoverPage() {
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
                 <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> CC license</span>
                 <div className="flex items-center gap-3 text-slate-400">
-                  <a href={track.licenseUrl} target="_blank" rel="noreferrer" className="hover:text-white">License</a>
+                  <a href={track.licenseUrl} target="_blank" rel="noreferrer" className="hover:text-white">{t("License")}</a>
                   <a href={track.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">Jamendo <ExternalLink size={11}/></a>
                 </div>
               </div>
