@@ -483,9 +483,16 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
     };
     const items = (payload.results ?? []).flatMap((track) => {
       const licenseUrl = track.license_ccurl ?? "";
-      const commerciallyUsable = /creativecommons\.org\/licenses\/(by|by-sa|by-nd)\//i.test(licenseUrl) ||
-        /creativecommons\.org\/publicdomain\/zero\//i.test(licenseUrl);
-      if (!commerciallyUsable || !track.audio || !track.id) return [];
+      const licensePath = licenseUrl.toLowerCase().replace(/^https?:\\/\\/(www\\.)?creativecommons\\.org\\//, "");
+      const isCcZero = licensePath.startsWith("publicdomain/zero/");
+      const licenseSlug = licensePath.match(/^licenses\\/(by(?:-nc)?(?:-sa|-nd)?)(?:\\/|$)/)?.[1] ?? "";
+      const isKnownCcLicense = isCcZero || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(licenseSlug);
+      const isNonCommercialLicense = licenseSlug.includes("-nc");
+      // Jamendo API access is non-commercial in this deployment. Track-level
+      // NC licenses are allowed; unknown licenses are always rejected.
+      // Commercial API approval does not override a track's NC license.
+      const licenseAllowed = isKnownCcLicense && (nonCommercialMode || !isNonCommercialLicense);
+      if (!licenseAllowed || !track.audio || !track.id) return [];
       return [{
         id: track.id,
         title: track.name,
