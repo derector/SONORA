@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  ChevronDown, ListMusic, Maximize2, Minimize2, Pause, Play, Repeat, Repeat1,
+  ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1,
   SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
 } from "lucide-react";
 import { useLanguage } from "./language-provider";
@@ -55,7 +55,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
   const tokenRef = useRef("");
-  const startedAtRef = useRef(0);
   const { accessToken } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
@@ -80,8 +79,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   async function recordEvent(track: PlayerTrack, eventType: "play" | "complete" | "skip", listenedMs: number) {
     const token = tokenRef.current;
     // Provider history currently accepts Jamendo IDs only. Other providers still play normally.
-    if (!token || !track.id.startsWith("jamendo:")) return;
-    const providerTrackId = track.id.slice("jamendo:".length);
+    if (!token) return;
+    const providerTrackId = track.id.startsWith("jamendo:") ? track.id.slice("jamendo:".length) : track.id;
+    if (!/^[0-9]{1,24}$/.test(providerTrackId)) return;
     try {
       await fetch(`${API}/api/v1/provider-history`, {
         method: "POST", credentials: "include",
@@ -207,7 +207,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onPlay = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); };
+    const onPlay = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); const track = currentRef.current; if (track) void recordEvent(track, "play", audio.currentTime); };
     const onPlaying = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); };
     const onPause = () => { setIsPlaying(false); setIsLoading(false); };
     const onWaiting = () => { if (!audio.paused) setIsLoading(true); };
