@@ -34,6 +34,9 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.work.*
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import app.sonora.android.data.OfflineDatabase
 import coil.compose.AsyncImage
 import app.sonora.android.data.SonoraApi
 import app.sonora.android.data.Track
@@ -191,11 +194,25 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 
 @Composable
 private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
+    val context = LocalContext.current
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (track.provider == "Jamendo" && track.downloadUrl != null) {
+            IconButton(onClick = {
+                val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
+                    .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                    .setInputData(workDataOf(
+                        "url" to track.downloadUrl, "id" to track.id,
+                        "provider" to track.provider, "title" to track.title,
+                        "artist" to track.artist, "artwork" to track.artworkUrl,
+                        "duration" to track.durationSeconds
+                    )).build()
+                WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.id, ExistingWorkPolicy.KEEP, request)
+            }) { Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime) }
         }
         IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
     }
@@ -243,10 +260,27 @@ private fun LibraryScreen(signedIn: Boolean, openProfile: () -> Unit) {
 
 @Composable
 private fun DownloadsScreen() {
+    val context = LocalContext.current
+    val offline by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
     Column(Modifier.fillMaxSize().background(Ink).padding(22.dp)) {
         Text("Офлайн", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Text("Здесь появятся треки, загруженные из источников, которые разрешают офлайн-копирование. Скачивание защищённых потоков не выполняется.", color = Muted)
+        Text(offline.size.toString() + " треков сохранено на устройстве", color = Muted, modifier = Modifier.padding(top = 6.dp, bottom = 16.dp))
+        if (offline.isEmpty()) {
+            Text("Здесь появятся загруженные треки. Сейчас офлайн-копии доступны только для Jamendo-записей, если API вернул отдельную ссылку скачивания и лицензию.", color = Muted)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(offline, key = { it.id }) { track ->
+                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
+                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                            Text(track.title, color = Color.White, maxLines = 1)
+                            Text(track.artist, color = Muted, fontSize = 12.sp)
+                        }
+                        Icon(Icons.Default.CheckCircle, null, tint = Lime)
+                    }
+                }
+            }
+        }
     }
 }
 
