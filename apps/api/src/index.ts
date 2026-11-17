@@ -487,7 +487,7 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
         .replace("http://creativecommons.org/", "")
         .replace("https://creativecommons.org/", "")
         .replace("https://www.creativecommons.org/", "");
-      const licensePath = normalizedLicenseUrl.replace(/^\\/+/, "");
+      const licensePath = normalizedLicenseUrl;
       const isCcZero = licensePath.startsWith("publicdomain/zero/");
       const licenseSlug = licensePath.startsWith("licenses/") ? licensePath.split("/")[1] ?? "" : "";
       const isKnownCcLicense = isCcZero || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(licenseSlug);
