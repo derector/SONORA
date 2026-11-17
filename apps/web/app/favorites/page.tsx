@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Trash2 } from "lucide-react";
+import { useLanguage } from "../../components/language-provider";
 
 type Favorite = {
   provider_track_id: string;
@@ -24,6 +25,7 @@ function duration(seconds: number | null) {
 }
 
 export default function FavoritesPage() {
+  const { t } = useLanguage();
   const [token, setToken] = useState("");
   const [items, setItems] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
