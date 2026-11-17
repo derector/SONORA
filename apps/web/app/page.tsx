@@ -16,7 +16,7 @@ export default function Home() {
           <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="#"><Compass size={17}/> Discover</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/discover"><Search size={17}/> Search</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> Your library</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="#"><Heart size={17}/> Liked tracks</a>
+          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> Liked tracks</a>
           <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> Playlists</a>
         </nav>
         <div className="mt-auto rounded-2xl border border-white/[0.07] bg-gradient-to-br from-violet-500/15 to-transparent p-4">
