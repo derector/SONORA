@@ -933,7 +933,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
       results?: Array<{
         id: string; name: string; duration: number; artist_name: string;
         album_name?: string; image?: string; album_image?: string;
-        audio?: string; audiodownload?: string; license_ccurl?: string;
+        audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string;
         shareurl?: string; releasedate?: string;
       }>;
     };
@@ -961,7 +961,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
         durationSeconds: track.duration,
         artworkUrl: track.album_image ?? track.image ?? null,
         audioUrl: track.audio,
-        downloadUrl: track.audiodownload ?? null,
+        downloadUrl: track.audiodownload_allowed === true ? track.audiodownload ?? null : null,
         licenseUrl,
         sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
         provider: "Jamendo"
@@ -1049,7 +1049,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
-          image?: string; album_image?: string; audio?: string; audiodownload?: string; license_ccurl?: string; shareurl?: string;
+          image?: string; album_image?: string; audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string; shareurl?: string;
         }> };
         for (const track of payload.results ?? []) {
           const licenseUrl = track.license_ccurl ?? "";
@@ -1061,7 +1061,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
             id: `jamendo:${track.id}`, providerTrackId: track.id, provider: "Jamendo",
             title: track.name, artist: track.artist_name, album: track.album_name ?? null,
             durationSeconds: track.duration, artworkUrl: track.album_image ?? track.image ?? null,
-            audioUrl: track.audio, downloadUrl: track.audiodownload ?? null, licenseUrl, sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+            audioUrl: track.audio, downloadUrl: track.audiodownload_allowed === true ? track.audiodownload ?? null : null, licenseUrl, sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
             playable: true, rightsLabel: "Creative Commons"
           });
         }
