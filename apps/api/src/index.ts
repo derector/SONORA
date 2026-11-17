@@ -458,8 +458,9 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
       format: "json",
       limit: String(limit),
       offset: String((page - 1) * limit),
-      order: "popularity_total",
-      include: "musicinfo",
+      order: q ? "relevance" : "popularity_total",
+      include: "licenses,musicinfo",
+      type: "single albumtrack",
       audioformat: "mp32"
     });
     if (q) params.set("search", q);
