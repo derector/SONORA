@@ -60,6 +60,8 @@ app.get("/api/v1", async () => ({
     "/api/v1/auth/refresh",
     "/api/v1/auth/me",
     "/api/v1/auth/logout",
+    "/api/v1/profile",
+    "/api/v1/profile/avatar",
     "/api/v1/catalog/tracks",
     "/api/v1/catalog/search",
     "/api/v1/search/music",
@@ -167,7 +169,7 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
       }
     }
 
-    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
+    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 90 });
 
     return {
       ok: true,
