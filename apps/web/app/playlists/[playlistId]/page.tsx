@@ -184,7 +184,7 @@ export default function PlaylistDetailPage() {
               {results.map((track) => <div key={track.id} className="flex items-center gap-3 py-3">
                 {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-11 w-11 rounded-lg object-cover"/> : <div className="grid h-11 w-11 place-items-center rounded-lg bg-violet-300/10"><Music2 size={18}/></div>}
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist} · {track.provider}</p></div>
-                <button type="button" onClick={() => void addTrack(track)} disabled={savingId === track.id || saved.some((item) => item.provider_track_id === track.id)} className="rounded-lg border border-violet-200/20 p-2 text-violet-200 hover:bg-violet-200/10 disabled:opacity-40" aria-label={t("Add track")} >{savingId === track.id ? <LoaderCircle size={16} className="animate-spin"/> : <Plus size={16}/>}</button>
+                <button type="button" onClick={() => void addTrack(track)} disabled={savingId === track.id || saved.some((item) => item.provider === track.provider.toLowerCase() && item.provider_track_id === (track.providerTrackId ?? track.id.replace(/^audius:/, "")))} className="rounded-lg border border-violet-200/20 p-2 text-violet-200 hover:bg-violet-200/10 disabled:opacity-40" aria-label={t("Add track")} >{savingId === track.id ? <LoaderCircle size={16} className="animate-spin"/> : <Plus size={16}/>}</button>
               </div>)}
             </div>}
           </section>
