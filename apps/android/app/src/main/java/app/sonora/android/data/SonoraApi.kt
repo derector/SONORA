@@ -142,6 +142,18 @@ object SonoraApi {
         )
     }
 
+    fun removeTrackFromPlaylist(playlistId: String, track: Track) {
+        val provider = track.provider.lowercase()
+        val playlist = java.net.URLEncoder.encode(playlistId, "UTF-8")
+        val providerId = java.net.URLEncoder.encode(track.providerTrackId, "UTF-8")
+        request("/api/v1/playlists/$playlist/provider-tracks/$provider/$providerId", "DELETE", authenticated = true)
+    }
+
+    fun deletePlaylist(playlistId: String) {
+        val id = java.net.URLEncoder.encode(playlistId, "UTF-8")
+        request("/api/v1/playlists/$id", "DELETE", authenticated = true)
+    }
+
     fun getPlaylistTracks(playlistId: String): List<Track> {
         val playlist = request("/api/v1/playlists/${java.net.URLEncoder.encode(playlistId, "UTF-8")}", authenticated = true)
             .optJSONObject("playlist") ?: return emptyList()
