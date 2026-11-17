@@ -30,7 +30,6 @@ export default function DiscoverPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTrack, setActiveTrack] = useState<string | null>(null);
 
   async function loadTracks(search = "") {
     setLoading(true);
@@ -102,7 +101,7 @@ export default function DiscoverPage() {
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
               </div>
-              <audio controls preload="none" src={track.audioUrl} onPlay={() => setActiveTrack(track.id)} onPause={() => setActiveTrack((current) => current === track.id ? null : current)} className="mt-4 h-10 w-full" aria-label={`Play ${track.title} by ${track.artist}`}/>
+              <audio controls preload="none" src={track.audioUrl} className="mt-4 h-10 w-full" aria-label={`Play ${track.title} by ${track.artist}`}/>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
                 <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> CC license</span>
                 <div className="flex items-center gap-3 text-slate-400">
