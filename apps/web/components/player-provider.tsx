@@ -170,7 +170,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [volume]);
 
   const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
-  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
     <PlayerContext.Provider value={value}>
@@ -179,9 +178,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       {currentTrack && (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#10111a]/95 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 shadow-[0_-16px_50px_rgba(0,0,0,.35)] backdrop-blur-2xl md:px-8">
           <div className="mx-auto max-w-[1440px]">
-            <div className="mb-2 h-1 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-violet-300" style={{ width: `${progress}%` }} />
-            </div>
+            <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); }} className="mb-2 h-1 w-full cursor-pointer accent-violet-300" aria-label="Seek through track" />
             <div className="flex items-center gap-3">
               {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt="" className="h-11 w-11 rounded-xl object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-300/10"><ListMusic size={18}/></div>}
               <div className="min-w-0 flex-1">
