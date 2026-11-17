@@ -69,7 +69,9 @@ app.get("/api/v1", async () => ({
     "/api/v1/playlists/:playlistId/tracks/:trackId",
     "/api/v1/favorites",
     "/api/v1/favorites/:trackId",
-    "/api/v1/history"
+    "/api/v1/history",
+    "/api/v1/provider-favorites",
+    "/api/v1/provider-favorites/:providerTrackId"
   ]
 }));
 
@@ -599,9 +601,9 @@ app.delete<{ Params: { providerTrackId: string } }>("/api/v1/provider-favorites/
   return { ok: true };
 });
 
-// Jamendo API access is configured for non-commercial use. Known CC BY and
-// CC BY-NC variants are accepted; unknown licenses are rejected. Attribution
-// and license links are returned with every catalog item.
+// Jamendo API access is configured for non-commercial use. Known Creative Commons
+// licenses are accepted; unknown licenses are rejected. Attribution and license links
+// are returned with every catalog item.
 app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1/providers/jamendo/tracks", async (request, reply) => {
   const clientId = process.env.JAMENDO_CLIENT_ID;
   const nonCommercialMode = process.env.JAMENDO_USE_MODE === "noncommercial";
