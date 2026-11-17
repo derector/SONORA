@@ -41,13 +41,13 @@ function timeLabel(value: number) {
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
 }
 
-function mediaErrorMessage(code?: number) {
+function mediaErrorMessage(code: number | undefined, t: (value: string) => string) {
   switch (code) {
-    case 1: return "Playback was interrupted. Press play to try again.";
-    case 2: return "Network error while loading this track. Check your connection.";
-    case 3: return "This audio stream could not be decoded by the browser.";
-    case 4: return "This track is unavailable from its provider or its format is unsupported.";
-    default: return "This track could not be played. Try another source.";
+    case 1: return t("Playback was interrupted. Press play to try again.");
+    case 2: return t("Network error while loading this track. Check your connection.");
+    case 3: return t("This audio stream could not be decoded by the browser.");
+    case 4: return t("This track is unavailable from its provider or its format is unsupported.");
+    default: return t("This track could not be played. Try another source.");
   }
 }
 
@@ -100,7 +100,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
     if (!track.audioUrl || !/^https?:\/\//i.test(track.audioUrl)) {
-      setPlaybackError("This result has no playable audio stream. Open the provider page for details.");
+      setPlaybackError(t("This result has no playable audio stream. Open the provider page for details."));
       setIsPlaying(false);
       setIsLoading(false);
       return;
@@ -124,10 +124,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
       const name = error instanceof Error ? error.name : "";
       setPlaybackError(name === "NotAllowedError"
-        ? "Your browser blocked playback. Tap Play once more to allow audio."
+        ? t("Your browser blocked playback. Tap Play once more to allow audio.")
         : name === "NotSupportedError"
-          ? "The provider returned an audio format this browser cannot play."
-          : "The audio stream did not start. Check your connection or try another track.");
+          ? t("The provider returned an audio format this browser cannot play.")
+          : t("The audio stream did not start. Check your connection or try another track."));
     }
   }
 
@@ -141,8 +141,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         void audio.play().catch((error: unknown) => {
           setIsPlaying(false); setIsLoading(false);
           setPlaybackError(error instanceof Error && error.name === "NotAllowedError"
-            ? "Tap Play again to allow audio in your browser."
-            : "Could not resume this audio stream.");
+            ? t("Tap Play again to allow audio in your browser.")
+            : t("Could not resume this audio stream."));
         });
       } else audio.pause();
       return;
@@ -198,8 +198,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       void audio.play().catch((error: unknown) => {
         setIsPlaying(false); setIsLoading(false);
         setPlaybackError(error instanceof Error && error.name === "NotAllowedError"
-          ? "Tap Play again to allow audio in your browser."
-          : "Could not start this audio stream.");
+          ? t("Tap Play again to allow audio in your browser.")
+          : t("Could not start this audio stream."));
       });
     } else audio.pause();
   }
@@ -224,7 +224,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onEnded = () => {
       const track = currentRef.current;
       if (track) void recordEvent(track, "complete", audio.duration || audio.currentTime);
-      if (repeatMode === "one") { audio.currentTime = 0; void audio.play().catch(() => setPlaybackError("Could not replay this track.")); }
+      if (repeatMode === "one") { audio.currentTime = 0; void audio.play().catch(() => setPlaybackError(t("Could not replay this track."))); }
       else if (shuffle && queue.length > 1) nextTrack();
       else if (queueIndex < queue.length - 1) playAt(queueIndex + 1, false);
       else if (repeatMode === "all" && queue.length) playAt(0, false);
@@ -232,7 +232,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const onError = () => {
       setIsLoading(false); setIsPlaying(false);
-      setPlaybackError(mediaErrorMessage(audio.error?.code));
+      setPlaybackError(mediaErrorMessage(audio.error?.code, t));
     };
     audio.addEventListener("play", onPlay);
     audio.addEventListener("playing", onPlaying);
