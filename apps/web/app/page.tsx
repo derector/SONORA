@@ -34,7 +34,7 @@ export default function Home() {
           if (!response.ok) throw new Error(data.error || "Audius catalog is unavailable.");
           return data.items ?? [];
         }),
-        fetch(`${API}/api/v1/providers/jamendo/tracks?limit=8`).then(async (response) => {
+        fetch(`${API}/api/v1/providers/jamendo/tracks?q=music&limit=8`).then(async (response) => {
           const data = await response.json() as CatalogResponse;
           if (!response.ok) throw new Error(data.error || "Jamendo catalog is unavailable.");
           return data.items ?? [];
@@ -119,7 +119,7 @@ export default function Home() {
 
         <section className="mt-12">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-            <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Live music catalogs")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Trending tracks")}</h2><p className="mt-1 text-xs text-slate-500">{t("Real tracks supplied by Audius and Jamendo")}</p></div>
+            <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Live music catalogs")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Music to explore")}</h2><p className="mt-1 text-xs text-slate-500">{t("Live selections from Audius and Jamendo")}</p></div>
             <a href="/discover" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white">{t("View full catalog")} <ArrowUpRight size={13}/></a>
           </div>
           {catalogLoading ? <div className="flex min-h-40 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading the catalog…")}</div> : tracks.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 text-sm text-slate-400">{catalogError || t("No tracks are available right now.")} <a href="/discover" className="ml-2 text-violet-200 hover:text-white">{t("Open Discover")}</a></div> : (
