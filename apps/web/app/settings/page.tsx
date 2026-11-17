@@ -15,6 +15,10 @@ export default function SettingsPage() {
           <div><p className="text-sm font-semibold tracking-[.22em]">SONORA</p><p className="mt-1 text-xs text-slate-500">{t("Site settings")}</p></div>
         </div>
         <h1 className="mt-8 text-3xl font-semibold">{t("Settings")}</h1>
+        <Link href="/profile" className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.025] p-5 transition hover:bg-white/[0.05]">
+          <span><span className="block text-sm font-semibold">{t("Your profile")}</span><span className="mt-1 block text-xs text-slate-500">{t("Manage your SONORA identity and account details.")}</span></span>
+          <span className="text-violet-200">→</span>
+        </Link>
         <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
           <h2 className="text-base font-semibold">{t("Language")}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-400">{t("Choose the interface language")}</p>
