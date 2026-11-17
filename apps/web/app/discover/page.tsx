@@ -66,7 +66,7 @@ export default function DiscoverPage() {
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> Discover independent music</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">Find your next frequency.</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Explore independent tracks from Jamendo. Every playable result includes its creator, source and Creative Commons license.</p>
+        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">Explore independent tracks from Jamendo. Every playable result includes its creator, source and Creative Commons license. Provider access stays disabled until its API usage terms are configured.</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tracks, artists or moods" className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
