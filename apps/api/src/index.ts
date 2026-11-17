@@ -459,7 +459,7 @@ app.get<{ Querystring: { q?: string; limit?: string; page?: string } }>("/api/v1
       limit: String(limit),
       offset: String((page - 1) * limit),
       order: q ? "relevance" : "popularity_total",
-      include: "licenses,musicinfo",
+      include: "licenses musicinfo",
       type: "single albumtrack",
       audioformat: "mp32"
     });
