@@ -51,3 +51,20 @@ A recommendation response should expose its source and reason, and should never 
 - Audius API: https://docs.audius.co/api/
 - Spotify Web Playback SDK: https://developer.spotify.com/documentation/web-playback-sdk/reference
 - Apple MusicKit JS: https://js-cdn.music.apple.com/musickit/v3/docs/iframe.html?id=user-authorization--page
+
+
+## Moozza assessment (2026-11-18)
+
+The official Moozza site describes VK library, playlists, recommendations, offline cache, radio and local-file playback in its Android app. Its public privacy policy names an internal service host (`api.mozza.tech`) but does not publish a developer API, OAuth client registration, SDK, endpoint specification, or third-party account-linking contract. The policy describes VK authentication and music access as app/device-side behavior; it does not grant SONORA permission to reuse Moozza sessions, tokens, or audio streams.
+
+Decision:
+- Show Moozza as an optional external Android companion from SONORA Settings.
+- Link only to the official Google Play listing and official Moozza website.
+- Do not scrape its private API, extract app tokens, proxy its streams, or request VK credentials in SONORA.
+- Revisit native SONORA ↔ Moozza integration only if the developer provides a documented API/SDK and explicit permission. A support/partnership request may be sent to support@mozza.tech, but no request has been sent.
+- This is an outbound handoff, not a connected provider: no shared login, synchronized library, SONORA queue control, or playback inside the SONORA player.
+
+References:
+- https://www.mozza.tech/
+- https://www.mozza.tech/privacy/
+- https://play.google.com/store/apps/details?id=ru.euphoria.moozza.new
