@@ -560,7 +560,7 @@ app.post<{ Body: {
       typeof durationSeconds !== "number" || !Number.isInteger(durationSeconds) || durationSeconds < 1 ||
       (artworkUrl !== null && artworkUrl !== undefined &&
         (typeof artworkUrl !== "string" || artworkUrl.length > 2048 || !artworkUrl.startsWith("https://"))) ||
-      typeof licenseUrl !== "string" || licenseUrl.length > 2048 || !licenseUrl.startsWith("https://creativecommons.org/") ||
+      typeof licenseUrl !== "string" || licenseUrl.length > 2048 || !(licenseUrl.startsWith("https://creativecommons.org/") || licenseUrl.startsWith("http://creativecommons.org/")) ||
       typeof sourceUrl !== "string" || sourceUrl.length > 2048 || !sourceUrl.startsWith("https://www.jamendo.com/") ||
       !["play", "complete", "skip"].includes(eventType ?? "") ||
       (listenedMs !== undefined && (typeof listenedMs !== "number" || !Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86400000))) {
@@ -570,7 +570,7 @@ app.post<{ Body: {
     user_id: auth.user.id, provider: "jamendo", provider_track_id: providerTrackId,
     title: title.trim(), artist_name: artistName.trim(), album_name: albumName?.trim() || null,
     duration_seconds: durationSeconds, artwork_url: artworkUrl ?? null,
-    license_url: licenseUrl, source_url: sourceUrl, event_type: eventType,
+    license_url: licenseUrl.replace(/^http:/, "https:"), source_url: sourceUrl, event_type: eventType,
     listened_ms: listenedMs ?? 0
   }).select("id,event_type,listened_ms,occurred_at").single();
   if (error) {
