@@ -509,6 +509,17 @@ private fun LibraryScreen(
                         ) {
                             Icon(Icons.Default.QueueMusic, null, tint = Lime, modifier = Modifier.size(28.dp))
                             Text(playlist.title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(start = 12.dp))
+                            IconButton(onClick = {
+                                scope.launch {
+                                    busy = true
+                                    try {
+                                        withContext(Dispatchers.IO) { SonoraApi.deletePlaylist(playlist.id) }
+                                        playlists = playlists.filterNot { it.id == playlist.id }
+                                        error = ""
+                                    } catch (e: Exception) { error = e.message ?: "Не удалось удалить плейлист" }
+                                    finally { busy = false }
+                                }
+                            }, enabled = !busy) { Icon(Icons.Default.DeleteOutline, "Удалить плейлист", tint = Muted) }
                             Icon(Icons.Default.ChevronRight, null, tint = Muted)
                         }
                     }
