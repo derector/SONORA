@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Search, ShieldCheck } from "lucide-react";
+import { usePlayer } from "../../components/player-provider";
 
 type Track = {
   id: string;
@@ -33,6 +34,7 @@ export default function DiscoverPage() {
   const [token, setToken] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [savingFavorite, setSavingFavorite] = useState<string>("");
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
 
   async function loadTracks(search = "") {
     setLoading(true);
@@ -104,7 +106,7 @@ export default function DiscoverPage() {
   return (
     <main className="mx-auto min-h-screen max-w-[1440px] px-4 py-6 md:px-8">
       <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> Back to SONORA</Link>
+        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> Back to SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">History</Link></div>
         <div className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
       </header>
 
@@ -146,7 +148,7 @@ export default function DiscoverPage() {
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
               </div>
-              <audio controls preload="none" src={track.audioUrl} className="mt-4 h-10 w-full" aria-label={`Play ${track.title} by ${track.artist}`}/>
+              <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20" aria-label={`${currentTrack?.id === track.id && isPlaying ? "Pause" : "Play"} ${track.title}`}>{currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? "Pause" : "Play track"}</button>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
                 <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> CC license</span>
                 <div className="flex items-center gap-3 text-slate-400">
