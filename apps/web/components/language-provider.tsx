@@ -100,7 +100,6 @@ const ru: Record<string, string> = {
   "Account security":"Безопасность аккаунта",
   "Your session is restored from a secure HttpOnly cookie. Access tokens are refreshed automatically while you use SONORA and when you return to the site.":"Сессия восстанавливается из защищённой HttpOnly-cookie. Токены доступа автоматически обновляются во время работы и при возвращении на сайт.",
   "Account session active":"Сессия аккаунта активна",
-  "Your language choice is saved on this device.":"Выбор языка сохраняется на этом устройстве.",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
