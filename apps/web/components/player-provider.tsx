@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ListMusic, Pause, Play, SkipBack, SkipForward, Volume2, X } from "lucide-react";
+import { useLanguage } from "./language-provider";
 
 export type PlayerTrack = {
   id: string;
@@ -47,6 +48,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(0.85);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
+  const { t } = useLanguage();
 
   async function getToken() {
     if (tokenRef.current) return tokenRef.current;
@@ -169,6 +172,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (audioRef.current) audioRef.current.volume = volume;
   }, [volume]);
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.playbackRate = playbackMode === "speed" ? 1.25 : playbackMode === "slowed" ? 0.8 : 1;
+    audio.preservesPitch = true;
+  }, [playbackMode]);
+
   const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
 
   return (
@@ -178,7 +188,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       {currentTrack && (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#10111a]/95 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-3 shadow-[0_-16px_50px_rgba(0,0,0,.35)] backdrop-blur-2xl md:px-8">
           <div className="mx-auto max-w-[1440px]">
-            <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); }} className="mb-2 h-1 w-full cursor-pointer accent-violet-300" aria-label="Seek through track" />
+            <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(event) => { if (audioRef.current) audioRef.current.currentTime = Number(event.target.value); }} className="mb-2 h-1 w-full cursor-pointer accent-violet-300" aria-label={t("Seek through track")} />
             <div className="flex items-center gap-3">
               {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt="" className="h-11 w-11 rounded-xl object-cover" /> : <div className="grid h-11 w-11 place-items-center rounded-xl bg-violet-300/10"><ListMusic size={18}/></div>}
               <div className="min-w-0 flex-1">
@@ -186,14 +196,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                 <p className="truncate text-xs text-slate-400">{currentTrack.artist}</p>
               </div>
               <span className="hidden text-[11px] tabular-nums text-slate-500 sm:block">{timeLabel(currentTime)} / {timeLabel(duration)}</span>
-              <button type="button" onClick={() => playAt(Math.max(0, queueIndex - 1))} disabled={queueIndex <= 0} aria-label="Previous track" className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipBack size={18}/></button>
-              <button type="button" onClick={togglePlay} aria-label={isPlaying ? "Pause" : "Play"} className="grid h-10 w-10 place-items-center rounded-full bg-violet-200 text-[#171323]"><span>{isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>}</span></button>
-              <button type="button" onClick={() => playAt(Math.min(queue.length - 1, queueIndex + 1))} disabled={queueIndex >= queue.length - 1} aria-label="Next track" className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipForward size={18}/></button>
-              <div className="hidden items-center gap-2 md:flex"><Volume2 size={16} className="text-slate-400"/><input aria-label="Volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-20 accent-violet-300"/></div>
-              <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label="Toggle queue" className="rounded-lg p-2 text-slate-400 hover:bg-white/10"><ListMusic size={18}/></button>
+              <button type="button" onClick={() => playAt(Math.max(0, queueIndex - 1))} disabled={queueIndex <= 0} aria-label={t("Previous track")} className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipBack size={18}/></button>
+              <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 place-items-center rounded-full bg-violet-200 text-[#171323]"><span>{isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor"/>}</span></button>
+              <button type="button" onClick={() => playAt(Math.min(queue.length - 1, queueIndex + 1))} disabled={queueIndex >= queue.length - 1} aria-label={t("Next track")} className="rounded-full p-2 text-slate-300 hover:bg-white/10 disabled:opacity-30"><SkipForward size={18}/></button>
+              <div className="hidden items-center gap-2 md:flex"><Volume2 size={16} className="text-slate-400"/><input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} className="w-20 accent-violet-300"/></div>
+              <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} className="rounded-lg p-2 text-slate-400 hover:bg-white/10"><ListMusic size={18}/></button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+              <span className="mr-1 text-[10px] uppercase tracking-wider text-slate-500">{t("Playback version")}</span>
+              <button type="button" onClick={() => setPlaybackMode("original")} aria-pressed={playbackMode === "original"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "original" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Original")}</button>
+              <button type="button" onClick={() => setPlaybackMode("speed")} aria-pressed={playbackMode === "speed"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "speed" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Speed up")} · 1.25×</button>
+              <button type="button" onClick={() => setPlaybackMode("slowed")} aria-pressed={playbackMode === "slowed"} className={"rounded-full px-3 py-1.5 text-[10px] font-medium transition " + (playbackMode === "slowed" ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-400 hover:text-white")}>{t("Slowed")} · 0.8×</button>
             </div>
             {queueOpen && <div className="mt-3 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-2">
-              <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>Up next · {queue.length} tracks</span><button type="button" onClick={() => setQueueOpen(false)} aria-label="Close queue"><X size={14}/></button></div>
+              <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")}><X size={14}/></button></div>
               {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}><span className="w-5 text-slate-600">{index + 1}</span><span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-28 truncate text-slate-500">{item.artist}</span></button>)}
             </div>}
           </div>
