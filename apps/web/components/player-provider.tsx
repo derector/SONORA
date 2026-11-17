@@ -54,6 +54,7 @@ function mediaErrorMessage(code: number | undefined, t: (value: string) => strin
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
+  const fallbackAttemptsRef = useRef<Set<string>>(new Set());
   const tokenRef = useRef("");
   const { accessToken } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
@@ -233,7 +234,45 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     };
     const onError = () => {
       setIsLoading(false); setIsPlaying(false);
-      setPlaybackError(mediaErrorMessage(audio.error?.code, t));
+      const failedTrack = currentRef.current;
+      if (!failedTrack || fallbackAttemptsRef.current.has(failedTrack.id) || !API) {
+        setPlaybackError(mediaErrorMessage(audio.error?.code, t));
+        return;
+      }
+      fallbackAttemptsRef.current.add(failedTrack.id);
+      const query = [failedTrack.title, failedTrack.artist].filter(Boolean).join(" ");
+      void fetch(`${API}/api/v1/search/music?${new URLSearchParams({ q: query, type: "tracks", limit: "20" }).toString()}`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Alternative catalog search failed");
+          return await response.json() as { tracks?: Array<PlayerTrack & { provider?: string; playable?: boolean }> };
+        })
+        .then((result) => {
+          const normalize = (value: string) => value.normalize("NFKD").toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+          const wantedTitle = normalize(failedTrack.title);
+          const wantedArtist = normalize(failedTrack.artist);
+          const candidate = (result.tracks ?? []).find((item) => {
+            if (!item.playable || !item.audioUrl || item.id === failedTrack.id) return false;
+            const titleMatch = normalize(item.title) === wantedTitle;
+            const artist = normalize(item.artist);
+            const artistMatch = artist === wantedArtist || artist.includes(wantedArtist) || wantedArtist.includes(artist);
+            const durationMatch = !failedTrack.durationSeconds || !item.durationSeconds || Math.abs(item.durationSeconds - failedTrack.durationSeconds) <= 8;
+            return titleMatch && artistMatch && durationMatch;
+          });
+          if (!candidate) {
+            setPlaybackError(mediaErrorMessage(audio.error?.code, t));
+            return;
+          }
+          const resolved: PlayerTrack = {
+            id: candidate.id, title: candidate.title, artist: candidate.artist,
+            album: candidate.album ?? null, durationSeconds: candidate.durationSeconds ?? 0,
+            artworkUrl: candidate.artworkUrl ?? failedTrack.artworkUrl,
+            audioUrl: candidate.audioUrl, licenseUrl: candidate.licenseUrl ?? "", sourceUrl: candidate.sourceUrl ?? ""
+          };
+          setQueue((items) => items.map((item, index) => index === queueIndex ? resolved : item));
+          setPlaybackError(t("Original source unavailable. Playing a matching track from another playable catalog."));
+          void startTrack(resolved, queueIndex);
+        })
+        .catch(() => setPlaybackError(mediaErrorMessage(audio.error?.code, t)));
     };
     audio.addEventListener("play", onPlay);
     audio.addEventListener("playing", onPlaying);
