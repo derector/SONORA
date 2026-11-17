@@ -21,6 +21,17 @@ Create an application and obtain the ID from [Jamendo Developer Portal](https://
 
 Jamendo discovery returns provider metadata, a stream URL, artist attribution, source link and the exact Creative Commons license URL. It does not silently insert provider tracks into SONORA's own database.
 
+## API usage permission
+
+Jamendo's API terms distinguish the track's Creative Commons license from permission to use the API itself. The published API terms state that API use is free for non-commercial purposes; commercial use requires contacting Jamendo's licensing team for a quote/permission. Therefore SONORA does **not** assume that a CC track license automatically authorizes commercial API use.
+
+The backend refuses to call Jamendo unless one of these server-side settings is explicitly set:
+
+- `JAMENDO_USE_MODE=noncommercial` for a strictly non-commercial deployment; or
+- `JAMENDO_COMMERCIAL_APPROVED=true` only after SONORA has obtained written commercial permission from Jamendo.
+
+See [Jamendo API Terms, clause 3.3](https://devportal.jamendo.com/api_terms_of_use).
+
 ## Rights guardrails
 
 The current provider endpoint only returns items with a license URL matching CC BY, CC BY-SA, CC BY-ND or CC0. Non-commercial-only licenses are excluded because they would not be appropriate for a potentially commercial music platform. The user interface keeps attribution, provider source and license links visible beside each player.
@@ -29,6 +40,6 @@ This allow-list is a technical first filter, not legal advice or a substitute fo
 
 ## Not yet complete
 
-- A Jamendo client ID must be configured in Railway before the live discovery page can retrieve tracks.
+- A Jamendo client ID and a permitted API usage mode must be configured in Railway before the live discovery page can retrieve tracks.
 - Provider results have not yet been tested with a real Jamendo application ID.
 - Full-length commercial catalog licensing is a separate future integration. Spotify and Apple catalog APIs do not grant SONORA a blanket right to redistribute recordings.
