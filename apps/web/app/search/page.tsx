@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
@@ -28,12 +28,11 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (query.trim().length < 2) return;
+  const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
+    if (searchQuery.trim().length < 2) return;
     setLoading(true); setError(""); setSearched(true);
     try {
-      const params = new URLSearchParams({ q: query.trim(), type: kind, limit: "15" });
+      const params = new URLSearchParams({ q: searchQuery.trim(), type: searchKind, limit: "15" });
       const response = await fetch(`${API}/api/v1/search/music?${params.toString()}`);
       const data = await response.json() as SearchResponse;
       if (!response.ok) throw new Error(data.error || "Music search is temporarily unavailable.");
@@ -47,10 +46,24 @@ export default function SearchPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void runSearch(query, kind);
   }
 
+  useEffect(() => {
+    const initialQuery = new URLSearchParams(window.location.search).get("q") ?? "";
+    if (initialQuery.trim().length >= 2) {
+      setQuery(initialQuery);
+      void runSearch(initialQuery, "all");
+    }
+  }, [runSearch]);
+
   const providerLabels: Record<string, string> = {
-    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz", audiusArtists: "Audius artists"
+    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz",
+    audiusArtists: "Audius artists", musicbrainzArtists: "MusicBrainz artists"
   };
 
   return (
