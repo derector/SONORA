@@ -260,7 +260,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
     };
-  }, [queue, queueIndex, repeatMode, shuffle]);
+  }, [queue, queueIndex, repeatMode, shuffle, t]);
 
   useEffect(() => {
     const audio = audioRef.current;
