@@ -194,6 +194,19 @@ object SonoraApi {
         return resolved
     }
 
+    fun getJamendoFavoriteTracks(): List<Track> {
+        val ids = getJamendoFavoriteIds()
+        val resolved = mutableListOf<Track>()
+        for (id in ids) {
+            try {
+                val fresh = parseTracks(request("/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(id, "UTF-8")}").optJSONArray("items"))
+                    .firstOrNull { it.providerTrackId == id && it.playable }
+                if (fresh != null) resolved += fresh
+            } catch (_: Exception) { }
+        }
+        return resolved
+    }
+
     fun getJamendoFavoriteIds(): Set<String> {
         val items = request("/api/v1/provider-favorites", authenticated = true).optJSONArray("items")
         val ids = mutableSetOf<String>()
