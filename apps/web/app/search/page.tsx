@@ -56,7 +56,7 @@ export default function SearchPage() {
   async function toggleFavorite(track: Track) {
     if (track.provider !== "Jamendo") return;
     const numericId = track.id;
-    if (!/^\\d{1,24}$/.test(numericId)) return;
+    if (!/^\d{1,24}$/.test(numericId)) return;
     setFavoriteError("");
     setFavoriteBusy((prev) => new Set(prev).add(track.id));
     try {
