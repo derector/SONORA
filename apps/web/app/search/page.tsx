@@ -66,7 +66,7 @@ export default function SearchPage() {
   }, [runSearch]);
 
   const providerLabels: Record<string, string> = {
-    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz",
+    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz", soundcloud: "SoundCloud",
     audiusArtists: "Audius artists", musicbrainzArtists: "MusicBrainz artists"
   };
 
@@ -121,7 +121,7 @@ export default function SearchPage() {
       </section>}
 
       {!loading && metadata.length > 0 && <section className="mt-10">
-        <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("MusicBrainz identifies recordings and releases. It does not provide audio playback.")}</p></div>
+        <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("Metadata-only results link to their original source. They are not playable inside SONORA.")}</p></div>
         <div className="w-full min-w-0 space-y-2">{metadata.map((item) => <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/[0.06] px-4 py-3 hover:bg-white/[0.03]"><Disc3 size={18} className="text-slate-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm">{item.title}</p><p className="truncate text-xs text-slate-500">{item.artist}{item.album ? " · " + item.album : ""}</p></div><span className="text-[10px] text-slate-500">{item.provider}</span><ExternalLink size={14} className="text-slate-500"/></a>)}</div>
       </section>}
       <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Federated discovery · Every playable result remains attributed to its source")}</footer>
