@@ -119,10 +119,11 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     }
                 }
 
-                if (!partialFile.exists() || partialFile.length() <= 0L ||
-                    (totalBytes > 0L && partialFile.length() != totalBytes) || !looksLikeMp3(partialFile)) {
+                val sizeMismatch = totalBytes > 0L && partialFile.length() != totalBytes
+                val invalidAudio = !partialFile.exists() || partialFile.length() <= 0L || !looksLikeMp3(partialFile)
+                if (sizeMismatch || invalidAudio) {
                     partialFile.delete()
-                    return@withContext if (totalBytes > 0L && partialFile.length() != totalBytes) Result.retry() else Result.failure()
+                    return@withContext if (sizeMismatch) Result.retry() else Result.failure()
                 }
 
                 backupFile.delete()
