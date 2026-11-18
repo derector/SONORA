@@ -194,6 +194,29 @@ object SonoraApi {
         return resolved
     }
 
+    fun getJamendoFavoriteIds(): Set<String> {
+        val items = request("/api/v1/provider-favorites", authenticated = true).optJSONArray("items")
+        val ids = mutableSetOf<String>()
+        if (items != null) for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            item.optString("provider_track_id").takeIf { it.matches(Regex("^[0-9]{1,24}$")) }?.let(ids::add)
+        }
+        return ids
+    }
+
+
+    fun saveJamendoFavorite(trackId: String) {
+        if (!trackId.matches(Regex("^[0-9]{1,24}$"))) throw IOException("Invalid Jamendo track ID.")
+        request("/api/v1/provider-favorites", "POST", JSONObject().put("providerTrackId", trackId), authenticated = true)
+    }
+
+
+    fun removeJamendoFavorite(trackId: String) {
+        if (!trackId.matches(Regex("^[0-9]{1,24}$"))) throw IOException("Invalid Jamendo track ID.")
+        request("/api/v1/provider-favorites/${java.net.URLEncoder.encode(trackId, "UTF-8")}", "DELETE", authenticated = true)
+    }
+
+
     fun search(query: String): List<Track> {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
         return parseTracks(result.optJSONArray("tracks")).filter { it.playable }
