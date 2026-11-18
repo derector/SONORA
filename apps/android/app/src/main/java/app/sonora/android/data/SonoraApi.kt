@@ -180,26 +180,33 @@ object SonoraApi {
         request("/api/v1/playlists/$id", "DELETE", authenticated = true)
     }
 
-    fun getPlaylistTracks(playlistId: String): List<Track> {
+    suspend fun getPlaylistTracks(playlistId: String): List<Track> {
         val playlist = request("/api/v1/playlists/${java.net.URLEncoder.encode(playlistId, "UTF-8")}", authenticated = true)
             .optJSONObject("playlist") ?: return emptyList()
         val items = playlist.optJSONArray("provider_playlist_tracks") ?: return emptyList()
-        val resolved = mutableListOf<Track>()
-        for (i in 0 until items.length()) {
-            val saved = items.optJSONObject(i) ?: continue
-            val provider = saved.optString("provider")
-            val providerId = saved.optString("provider_track_id")
-            val path = when (provider) {
-                "audius" -> "/api/v1/providers/audius/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
-                "jamendo" -> "/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
-                else -> continue
+        val savedTracks = (0 until items.length()).mapNotNull { index ->
+            items.optJSONObject(index)?.let { saved ->
+                val provider = saved.optString("provider")
+                val providerId = saved.optString("provider_track_id")
+                val path = when (provider) {
+                    "audius" -> "/api/v1/providers/audius/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                    "jamendo" -> "/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                    else -> null
+                }
+                path
             }
-            try {
-                val fresh = parseTracks(request(path).optJSONArray("items")).firstOrNull()
-                if (fresh != null && fresh.playable) resolved += fresh
-            } catch (_: Exception) { }
         }
-        return resolved
+        return coroutineScope {
+            savedTracks.map { path ->
+                async(Dispatchers.IO) {
+                    try {
+                        parseTracks(request(path).optJSONArray("items")).firstOrNull { it.playable }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
     }
 
     suspend fun getJamendoFavoriteTracks(): List<Track> {
