@@ -66,7 +66,7 @@ export default function SearchPage() {
   }, [runSearch]);
 
   const providerLabels: Record<string, string> = {
-    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz",
+    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz", spotify: "Spotify", spotifyArtists: "Spotify artists",
     audiusArtists: "Audius artists", musicbrainzArtists: "MusicBrainz artists"
   };
 
