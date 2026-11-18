@@ -66,7 +66,6 @@ app.get("/api/v1", async () => ({
     "/api/v1/catalog/search",
     "/api/v1/search/music",
     "/api/v1/providers/jamendo/tracks",
-    "/api/v1/providers/archive/tracks",
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
@@ -1226,7 +1225,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   return {
-    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit),
+    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit * 2),
     artists: artists.slice(0, limit), providers
   };
 });
