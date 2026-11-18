@@ -91,6 +91,8 @@ function parseRows(raw: string): ParsedTrack[] {
 export default function ImportPage() {
   const { t } = useLanguage();
   const [source, setSource] = useState("Spotify");
+  const [playlistName, setPlaylistName] = useState("Imported playlist");
+  const [createdPlaylistId, setCreatedPlaylistId] = useState("");
   const [raw, setRaw] = useState("");
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
@@ -148,31 +150,47 @@ export default function ImportPage() {
     if (!token) return;
     const selected = rows.filter((row) => row.selectedId && !row.imported);
     if (!selected.length) { setError(t("Select at least one matched track.")); return; }
-    setSaving(true); setError(""); setNotice("");
-    let success = 0;
+    if (!playlistName.trim()) { setError(t("Enter a playlist name.")); return; }
+    setSaving(true); setError(""); setNotice(""); setCreatedPlaylistId("");
     const next = [...rows];
-    for (const row of selected) {
-      try {
-        const response = await fetch(`${API}/api/v1/provider-favorites`, {
-          method: "POST", credentials: "include",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ providerTrackId: row.selectedId })
-        });
-        const result = await response.json() as ApiResult;
-        if (!response.ok) throw new Error(result.error || t("Could not save this track."));
-        const index = next.findIndex((item) => item.key === row.key);
-        if (index >= 0) next[index] = { ...next[index], imported: true };
-        success++;
-      } catch (err) {
-        const index = next.findIndex((item) => item.key === row.key);
-        if (index >= 0) next[index] = { ...next[index], error: err instanceof Error ? err.message : t("Import failed.") };
+    let success = 0;
+    try {
+      const createResponse = await fetch(`${API}/api/v1/playlists`, {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: playlistName.trim().slice(0, 80), description: `Imported from ${source}`, isPublic: false })
+      });
+      const createResult = await createResponse.json() as { playlist?: { id?: string }; error?: string };
+      if (!createResponse.ok || !createResult.playlist?.id) throw new Error(createResult.error || t("Could not create the playlist."));
+      const playlistId = createResult.playlist.id;
+      setCreatedPlaylistId(playlistId);
+      for (const row of selected) {
+        try {
+          const trackId = row.selectedId.replace(/^jamendo:/, "");
+          if (!/^\\d{1,24}$/.test(trackId)) throw new Error(t("This match is not a valid Jamendo track."));
+          const response = await fetch(`${API}/api/v1/playlists/${encodeURIComponent(playlistId)}/provider-tracks`, {
+            method: "POST", credentials: "include",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ provider: "jamendo", providerTrackId: trackId })
+          });
+          const result = await response.json() as { error?: string };
+          if (!response.ok) throw new Error(result.error || t("Could not add this track."));
+          const index = next.findIndex((item) => item.key === row.key);
+          if (index >= 0) next[index] = { ...next[index], imported: true, error: undefined };
+          success++;
+        } catch (err) {
+          const index = next.findIndex((item) => item.key === row.key);
+          if (index >= 0) next[index] = { ...next[index], error: err instanceof Error ? err.message : t("Import failed.") };
+        }
       }
+      setRows(next);
+      setNotice(t("Playlist created and tracks imported:") + ` ${success}/${selected.length}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("Import failed."));
+    } finally {
+      setSaving(false);
     }
-    setRows(next);
-    setNotice(t("Added to your SONORA favorites:") + ` ${success}/${selected.length}`);
-    setSaving(false);
   }
-
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
       <header className="flex items-center justify-between">
@@ -193,6 +211,7 @@ export default function ImportPage() {
       ) : (
         <>
           <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8">
+            <label className="mb-5 block text-xs font-medium text-slate-400">{t("Playlist name")}<input value={playlistName} onChange={(event) => setPlaylistName(event.target.value)} maxLength={80} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11111b] px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
             <label className="block text-xs font-medium text-slate-400">{t("Source platform")}
               <select value={source} onChange={(event) => setSource(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11111b] px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60">
                 {["Spotify","Apple Music","YouTube Music","SoundCloud","Yandex Music","VK Music","Telegram","Other / CSV"].map((name) => <option key={name}>{name}</option>)}
@@ -230,7 +249,7 @@ export default function ImportPage() {
         <h2 className="text-sm font-semibold">{t("How importing works")}</h2>
         <p className="mt-2 text-xs leading-5 text-slate-400">{t("Export a playlist as CSV from the source service, or paste lines in Artist - Track title format. Plain playlist URLs alone do not expose protected track metadata. SONORA imports matches from its own licensed Jamendo catalog; it does not download audio from Spotify, Apple Music or other services.")}</p>
       </section>
-      {notice && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{notice}</p>}
+      {notice && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{notice}{createdPlaylistId && <Link href={`/playlists/${createdPlaylistId}`} className="ml-3 underline underline-offset-4">{t("Open imported playlist")}</Link>}</p>}
       {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
     </main>
   );
