@@ -2,11 +2,11 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
+import { ArrowLeft, AudioLines, Download, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
-type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
+type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string; downloadUrl?: string | null };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; releaseDate?: string | null; sourceUrl: string; playable: false };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
@@ -106,6 +106,7 @@ export default function SearchPage() {
             <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-violet-300/10"><Music2 size={22} className="text-violet-200"/>{track.artworkUrl && <img src={track.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</div>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.provider} · {track.rightsLabel || track.provider} {track.durationSeconds ? "· " + duration(track.durationSeconds) : ""}</p></div>
             <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="shrink-0 rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
+            {track.downloadUrl && <a href={track.downloadUrl} download aria-label={t("Download track")} title={t("Download track")} className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-violet-200"><Download size={16}/></a>}
             <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="shrink-0 rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
           </article>)}
         </div>
