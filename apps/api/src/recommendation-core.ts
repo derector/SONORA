@@ -28,6 +28,8 @@ export function rankRecommendations(
   taste: TasteSignal[],
   limit = 20
 ): RankedRecommendation[] {
+  if (limit <= 0 || candidates.length === 0) return [];
+
   const liked = taste.filter((s) => s.liked && !s.skipped);
   const skipped = taste.filter((s) => s.skipped);
   const likedArtists = new Set(liked.map((s) => normalize(s.artist ?? "")).filter(Boolean));
@@ -56,13 +58,14 @@ export function rankRecommendations(
   ranked.sort((a, b) => b.score - a.score || normalize(a.title).localeCompare(normalize(b.title)));
   const artistCounts = new Map<string, number>();
   const output: RankedRecommendation[] = [];
+  const outputLimit = Math.max(1, Math.min(50, limit));
   for (const track of ranked) {
     const artistKey = normalize(track.artist);
     const count = artistCounts.get(artistKey) ?? 0;
     if (count >= 2) continue;
     artistCounts.set(artistKey, count + 1);
     output.push(track);
-    if (output.length >= Math.max(1, Math.min(50, limit))) break;
+    if (output.length >= outputLimit) break;
   }
   return output;
 }
