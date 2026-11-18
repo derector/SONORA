@@ -122,7 +122,7 @@ private fun SonoraApp() {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val id = mediaItem?.mediaId ?: return
-                (activeQueue + tracks).firstOrNull { it.id == id }?.let { current = it }
+                (activeQueue + tracks).firstOrNull { it.canonicalKey == id }?.let { current = it }
             }
         }
         player.addListener(listener)
@@ -133,7 +133,7 @@ private fun SonoraApp() {
     fun mediaItem(track: Track, url: String): MediaItem {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) }).build()
-        return MediaItem.Builder().setMediaId(track.id).setUri(url).setMediaMetadata(metadata).build()
+        return MediaItem.Builder().setMediaId(track.canonicalKey).setUri(url).setMediaMetadata(metadata).build()
     }
 
     fun startTrack(track: Track, local: Boolean = false) {
@@ -150,9 +150,9 @@ private fun SonoraApp() {
             return
         }
         val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
-            .distinctBy { it.id }
+            .distinctBy { it.canonicalKey }
         activeQueue = queue
-        val selectedIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        val selectedIndex = queue.indexOfFirst { it.canonicalKey == track.canonicalKey }.coerceAtLeast(0)
         player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
         player.prepare()
         player.play()
@@ -208,7 +208,7 @@ private fun SonoraApp() {
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
                         scope.launch(Dispatchers.IO) {
                             runCatching { File(item.localPath).delete() }
-                            OfflineDatabase.get(context).offlineTracks().delete(item.id)
+                            OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
                     "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
@@ -257,7 +257,7 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, openPlayer) }
+            items(tracks, key = { it.canonicalKey }) { track -> TrackRow(track, { play(track) }, openPlayer) }
         }
     }
 }
@@ -269,7 +269,7 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.canonicalKey }) { TrackRow(it, { play(it) }, {}) } }
     }
 }
 
@@ -280,12 +280,12 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(workDataOf(
-                "url" to track.downloadUrl, "id" to track.id,
+                "url" to track.downloadUrl, "id" to track.providerTrackId,
                 "provider" to track.provider, "title" to track.title,
                 "artist" to track.artist, "artwork" to track.artworkUrl,
                 "duration" to track.durationSeconds
             )).build()
-        WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.id, ExistingWorkPolicy.KEEP, request)
+        WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.canonicalKey, ExistingWorkPolicy.KEEP, request)
     }
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) enqueueDownload()
@@ -333,7 +333,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
-    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.id } }
+    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.canonicalKey } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
     var speed by remember(controller) { mutableFloatStateOf(controller?.playbackParameters?.speed ?: 1f) }
@@ -355,10 +355,10 @@ private fun FullPlayer(
             }
             Text("Следующие треки", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(playableQueue, key = { it.id }) { item ->
+                items(playableQueue, key = { it.canonicalKey }) { item ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable {
                         val player = controller ?: return@clickable
-                        val index = playableQueue.indexOfFirst { it.id == item.id }
+                        val index = playableQueue.indexOfFirst { it.canonicalKey == item.canonicalKey }
                         if (index >= 0) player.seekTo(index, 0L)
                         player.play()
                         showQueue = false
@@ -368,7 +368,7 @@ private fun FullPlayer(
                             Text(item.title, color = Color.White, maxLines = 1)
                             Text(item.artist, color = Muted, fontSize = 12.sp)
                         }
-                        if (item.id == track?.id) Icon(Icons.Default.GraphicEq, null, tint = Lime)
+                        if (item.canonicalKey == track?.canonicalKey) Icon(Icons.Default.GraphicEq, null, tint = Lime)
                     }
                 }
             }
@@ -557,7 +557,7 @@ private fun LibraryScreen(
                 }
                 if (playlistTracks.isEmpty() && !busy) Text("В этом плейлисте пока нет доступных треков.", color = Muted, modifier = Modifier.padding(top = 10.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
-                    items(playlistTracks, key = { it.id }) { track ->
+                    items(playlistTracks, key = { it.canonicalKey }) { track ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -574,7 +574,7 @@ private fun LibraryScreen(
                                     busy = true
                                     try {
                                         withContext(Dispatchers.IO) { SonoraApi.removeTrackFromPlaylist(target.id, track) }
-                                        playlistTracks = playlistTracks.filterNot { it.id == track.id }
+                                        playlistTracks = playlistTracks.filterNot { it.canonicalKey == track.canonicalKey }
                                         error = ""
                                     } catch (e: Exception) { error = e.message ?: "Не удалось удалить трек" }
                                     finally { busy = false }
@@ -601,7 +601,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
             Text("Здесь появятся загруженные треки. Скачивание доступно только для источников, которые явно разрешают офлайн-копирование.", color = Muted)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(offline, key = { it.id }) { track ->
+                items(offline, key = { "${it.provider.lowercase()}:${it.id}" }) { track ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { onPlay(track) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
