@@ -1201,7 +1201,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     ).slice(0, limit * 2).map((group) => ({
       ...group.primary, duplicateCount: group.matches.length,
       catalogMatches: group.matches.map((match) => ({
-        provider: match.provider, title: match.title, artist: match.artist, sourceUrl: match.sourceUrl
+        provider: (match as Record<string, unknown>).provider, title: match.title, artist: match.artist, sourceUrl: (match as Record<string, unknown>).sourceUrl
       }))
     })),
     metadata: metadata.slice(0, limit),
