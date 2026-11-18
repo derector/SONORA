@@ -10,7 +10,8 @@ type Track = {
   artworkUrl: string | null; audioUrl: string; licenseUrl: string; sourceUrl: string; provider: string;
 };
 type Candidate = Track;
-type ImportRow = { key: string; title: string; artist: string; candidates: Candidate[]; selectedId: string; imported: boolean; error?: string };
+type ParsedTrack = { title: string; artist: string; album?: string };
+type ImportRow = { key: string; title: string; artist: string; album?: string; candidates: Candidate[]; selectedId: string; imported: boolean; error?: string };
 type ApiResult = { items?: Track[]; error?: string; session?: { access_token?: string } };
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -28,8 +29,44 @@ function parseCsvLine(line: string): string[] {
   values.push(current.trim());
   return values;
 }
-function parseRows(raw: string): { title: string; artist: string }[] {
-  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+function parseRows(raw: string): ParsedTrack[] {
+  const input = raw.trim();
+  if (!input) return [];
+  if (input.startsWith("{") || input.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(input);
+      const found: ParsedTrack[] = [];
+      const seen = new Set<string>();
+      const getText = (value: unknown): string => typeof value === "string" ? value.trim() : "";
+      const artistText = (value: unknown): string => {
+        if (typeof value === "string") return value.trim();
+        if (Array.isArray(value)) return value.map((entry) => typeof entry === "string" ? entry : entry && typeof entry === "object" ? getText((entry as Record<string, unknown>).name) : "").filter(Boolean).join(", ");
+        if (value && typeof value === "object") {
+          const obj = value as Record<string, unknown>;
+          if (Array.isArray(obj.items)) return artistText(obj.items);
+          return getText(obj.name) || getText(obj.artistName);
+        }
+        return "";
+      };
+      const visit = (value: unknown, depth = 0) => {
+        if (depth > 7 || value == null) return;
+        if (Array.isArray(value)) { for (const item of value) visit(item, depth + 1); return; }
+        if (typeof value !== "object") return;
+        const obj = value as Record<string, unknown>;
+        const title = getText(obj.trackName) || getText(obj.name) || getText(obj.title) || getText(obj.songName);
+        const artist = artistText(obj.artistName ?? obj.artists ?? obj.artist ?? obj.performer);
+        const album = getText(obj.albumName) || getText(obj.collectionName) || (typeof obj.album === "string" ? getText(obj.album) : artistText(obj.album));
+        if (title && artist) {
+          const key = (title + "|" + artist).toLocaleLowerCase();
+          if (!seen.has(key)) { seen.add(key); found.push({ title, artist, album: album || undefined }); }
+        }
+        for (const [key, child] of Object.entries(obj)) if (["tracks","items","track","playlist","songs","entries","data"].includes(key.toLowerCase())) visit(child, depth + 1);
+      };
+      visit(parsed);
+      if (found.length) return found;
+    } catch { /* Invalid JSON falls back to CSV/text parsing. */ }
+  }
+  const lines = input.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
   const header = parseCsvLine(lines[0]).map((v) => v.toLowerCase().replace(/[^a-z]/g, ""));
   const titleIndex = header.findIndex((v) => ["trackname", "track", "title", "song", "songname"].includes(v));
@@ -38,15 +75,15 @@ function parseRows(raw: string): { title: string; artist: string }[] {
   if (titleIndex >= 0) {
     return lines.slice(1).map((line) => {
       const cells = parseCsvLine(line);
-      const title = cells[titleIndex] || "";
-      const artist = artistIndex >= 0 ? cells[artistIndex] || "" : "";
-      return { title: title.trim(), artist: artist.trim() };
+      return { title: (cells[titleIndex] || "").trim(), artist: (artistIndex >= 0 ? cells[artistIndex] || "" : "").trim(), album: (albumIndex >= 0 ? cells[albumIndex] || "" : "").trim() || undefined };
     }).filter((row) => row.title);
   }
   return lines.map((line) => {
-    const cleaned = line.replace(/https?:\/\/\S+/gi, "").replace(/^[-*•\s]+/, "").trim();
-    const split = cleaned.split(/\s+[–—-]\s+/, 2);
+    const cleaned = line.replace(/https?:\\/\\/\\S+/gi, "").replace(/^[-*•\\s]+/, "").trim();
+    const split = cleaned.split(/\\s+[–—-]\\s+/, 2);
     if (split.length === 2) return { artist: split[0].trim(), title: split[1].trim() };
+    const cells = parseCsvLine(line);
+    if (cells.length >= 2) return { title: cells[0].trim(), artist: cells[1].trim(), album: cells[2]?.trim() || undefined };
     return { artist: "", title: cleaned };
   }).filter((row) => row.title && !/^https?:/i.test(row.title));
 }
