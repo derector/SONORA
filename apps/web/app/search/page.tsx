@@ -90,6 +90,23 @@ export default function SearchPage() {
         {Object.entries(providers).map(([key, status]) => <span key={key} className={`rounded-full border px-3 py-1.5 text-[11px] ${status.ok ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-200" : "border-amber-300/15 bg-amber-300/5 text-amber-200"}`}>{providerLabels[key] || key}: {status.ok ? status.count + " " + t("results") : t("unavailable")}</span>)}
       </section>}
 
+      {searched && query.trim().length >= 2 && <section className="mt-7 rounded-2xl border border-sky-300/10 bg-sky-300/[0.025] p-4">
+        <div className="mb-3"><h2 className="text-base font-semibold">{t("Web music discovery")}</h2><p className="mt-1 text-xs text-slate-400">{t("Open targeted public web searches for this query. Web links are discovery results, not verified playable tracks.")}</p></div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["Google", `https://www.google.com/search?q=${encodeURIComponent(query + " song music track")}`],
+            ["Bing", `https://www.bing.com/search?q=${encodeURIComponent(query + " song music track")}`],
+            ["DuckDuckGo", `https://duckduckgo.com/?q=${encodeURIComponent(query + " song music track")}`],
+            ["Yandex", `https://yandex.com/search/?text=${encodeURIComponent(query + " music track song")}`],
+            ["LightAudio", `https://www.google.com/search?q=${encodeURIComponent("site:lightaudio.ru/mp3 " + query)}`],
+            ["SoundCloud", `https://soundcloud.com/search/sounds?q=${encodeURIComponent(query)}`],
+            ["Bandcamp", `https://bandcamp.com/search?q=${encodeURIComponent(query)}`],
+            ["Genius lyrics", `https://genius.com/search?q=${encodeURIComponent(query)}`],
+            ["MusicBrainz", `https://musicbrainz.org/search?query=${encodeURIComponent(query)}&type=recording&method=indexed`]
+          ].map(([label, href]) => <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 transition hover:border-sky-300/30 hover:bg-sky-300/5">{label}<ExternalLink size={12} className="ml-1 inline"/></a>)}
+        </div>
+      </section>}
+
       {error && <p role="alert" className="mt-6 rounded-2xl border border-rose-300/15 bg-rose-300/5 p-4 text-sm text-rose-200">{error}</p>}
       {loading && <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Searching connected catalogs…")}</div>}
       {!loading && searched && !error && tracks.length === 0 && artists.length === 0 && metadata.length === 0 && <div className="mt-8 rounded-3xl border border-white/10 p-10 text-center text-sm text-slate-400">{t("No matches found. Try another title or artist.")}</div>}
