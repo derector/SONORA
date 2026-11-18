@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, AudioLines, Clock3, Compass, Heart, Headphones, Library, ListMusic, Music2, Pause, Play, Search, Settings, Sparkles, LoaderCircle } from "lucide-react";
+import { ArrowUpRight, AudioLines, Clock3, Compass, Download, Heart, Headphones, Library, ListMusic, Music2, Pause, Play, Search, Settings, Sparkles, LoaderCircle } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
 import { useAuth } from "../components/auth-provider";
 import { usePlayer, type PlayerTrack } from "../components/player-provider";
 
-type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean };
+type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean; downloadUrl?: string | null };
 type CatalogResponse = { items?: CatalogTrack[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
@@ -132,6 +132,7 @@ export default function Home() {
               {tracks.map((track) => <article key={track.id} className="group flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 transition hover:-translate-y-0.5 hover:bg-white/[0.05]">
                 <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-violet-300/10">{track.artworkUrl ? <img src={track.artworkUrl} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center"><Music2 className="text-violet-200"/></div>}</div>
                 <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 text-[10px] text-slate-500">{track.provider} · {duration(track.durationSeconds)}</p></div>
+                {track.downloadUrl && <a href={track.downloadUrl} download aria-label={t("Download track")} title={t("Download track")} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 text-slate-300 transition hover:bg-white/5 hover:text-violet-200"><Download size={16}/></a>}
                 <button type="button" onClick={() => startTrack(track)} disabled={!track.audioUrl || track.playable === false} aria-label={currentTrack?.id === track.id && isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-200 text-[#171323] transition hover:scale-105 disabled:opacity-40">{currentTrack?.id === track.id && isPlaying ? <Pause size={16} fill="currentColor"/> : <Play size={16} fill="currentColor"/>}</button>
               </article>)}
             </div>
