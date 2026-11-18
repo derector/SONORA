@@ -1046,22 +1046,20 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           artworkUrl100?: string; previewUrl?: string; trackViewUrl?: string;
           trackTimeMillis?: number; kind?: string;
         }> };
-        const before = tracks.length;
         for (const track of payload.results ?? []) {
-          if (!track.trackId || !track.trackName || !track.artistName || !track.previewUrl || !track.trackViewUrl) continue;
-          let preview: URL; let source: URL;
-          try { preview = new URL(track.previewUrl); source = new URL(track.trackViewUrl); } catch { continue; }
-          if (preview.protocol !== "https:" || source.protocol !== "https:" ||
-              !preview.hostname.endsWith("itunes.apple.com") && !preview.hostname.endsWith("apple.com")) continue;
-          tracks.push({
-            id: `itunes:${track.trackId}`, providerTrackId: String(track.trackId), provider: "iTunes",
-            title: track.trackName, artist: track.artistName, album: track.collectionName ?? null,
-            durationSeconds: 30, artworkUrl: track.artworkUrl100 ?? null,
-            audioUrl: preview.href, licenseUrl: "https://www.apple.com/legal/internet-services/itunes/",
-            sourceUrl: source.href, playable: true, rightsLabel: "30-second preview"
+          if (!track.trackId || !track.trackName || !track.artistName || !track.trackViewUrl) continue;
+          let source: URL;
+          try { source = new URL(track.trackViewUrl); } catch { continue; }
+          if (source.protocol !== "https:" || !(source.hostname.endsWith("itunes.apple.com") || source.hostname.endsWith("apple.com"))) continue;
+          metadata.push({
+            id: `itunes:${track.trackId}`, provider: "Apple/iTunes", title: track.trackName,
+            artist: track.artistName, album: track.collectionName ?? null,
+            durationSeconds: track.trackTimeMillis ? Math.round(track.trackTimeMillis / 1000) : null,
+            artworkUrl: track.artworkUrl100 ?? null, sourceUrl: source.href,
+            playable: false, rightsLabel: "Apple store listing"
           });
         }
-        providers.itunes = { ok: true, count: tracks.length - before };
+        providers.itunes = { ok: true, count: metadata.filter((item) => item.provider === "Apple/iTunes").length };
       } catch (error) {
         providers.itunes = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
