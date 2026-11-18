@@ -1020,6 +1020,26 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
+
+// Spotify metadata search via OAuth client-credentials. This does not grant playback access.
+let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
+async function getSpotifyToken(): Promise<string> {
+  const clientId = process.env.SPOTIFY_CLIENT_ID;
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) throw new Error("Spotify credentials are not configured");
+  if (spotifyTokenCache && spotifyTokenCache.expiresAt > Date.now() + 60000) return spotifyTokenCache.token;
+  const response = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { Authorization: "Basic " + Buffer.from(clientId + ":" + clientSecret).toString("base64"), "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=client_credentials", signal: AbortSignal.timeout(9000)
+  });
+  if (!response.ok) throw new Error("Spotify token request HTTP " + response.status);
+  const payload = await response.json() as { access_token?: string; expires_in?: number };
+  if (!payload.access_token) throw new Error("Spotify token response incomplete");
+  spotifyTokenCache = { token: payload.access_token, expiresAt: Date.now() + (payload.expires_in ?? 3600) * 1000 };
+  return spotifyTokenCache.token;
+}
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
@@ -1103,6 +1123,22 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         providers.audius = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
+
+    tasks.push((async () => {
+      try {
+        const token = await getSpotifyToken();
+        const params = new URLSearchParams({ q: q, type: "track", limit: String(limit) });
+        const response = await fetch("https://api.spotify.com/v1/search?" + params.toString(), { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(9000) });
+        if (!response.ok) throw new Error("Spotify search HTTP " + response.status);
+        const payload = await response.json() as { tracks?: { items?: Array<{ id: string; name: string; duration_ms?: number; external_urls?: { spotify?: string }; artists?: Array<{ name: string }>; album?: { name?: string } }> } };
+        const before = metadata.length;
+        for (const track of payload.tracks?.items ?? []) {
+          if (!track.id || !track.name) continue;
+          metadata.push({ id: track.id, provider: "Spotify", title: track.name, artist: (track.artists ?? []).map((a) => a.name).join(", "), album: track.album?.name ?? null, durationSeconds: track.duration_ms ? Math.round(track.duration_ms / 1000) : null, releaseDate: null, sourceUrl: track.external_urls?.spotify ?? ("https://open.spotify.com/track/" + track.id), playable: false });
+        }
+        providers.spotify = { ok: true, count: metadata.length - before };
+      } catch (error) { providers.spotify = { ok: false, count: 0, error: error instanceof Error ? error.message : "Spotify unavailable" }; }
+    })());
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
@@ -1132,6 +1168,22 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     })());
   }
   if (type !== "tracks") {
+
+    tasks.push((async () => {
+      try {
+        const token = await getSpotifyToken();
+        const params = new URLSearchParams({ q: q, type: "artist", limit: String(limit) });
+        const response = await fetch("https://api.spotify.com/v1/search?" + params.toString(), { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(9000) });
+        if (!response.ok) throw new Error("Spotify artist search HTTP " + response.status);
+        const payload = await response.json() as { artists?: { items?: Array<{ id: string; name: string; followers?: { total?: number }; external_urls?: { spotify?: string }; images?: Array<{ url: string }> }> } };
+        const before = artists.length;
+        for (const artist of payload.artists?.items ?? []) {
+          if (!artist.id || !artist.name) continue;
+          artists.push({ id: "spotify-artist:" + artist.id, provider: "Spotify", name: artist.name, handle: null, followerCount: artist.followers?.total ?? null, imageUrl: artist.images?.[0]?.url ?? null, sourceUrl: artist.external_urls?.spotify ?? ("https://open.spotify.com/artist/" + artist.id) });
+        }
+        providers.spotifyArtists = { ok: true, count: artists.length - before };
+      } catch (error) { providers.spotifyArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Spotify unavailable" }; }
+    })());
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, limit: String(limit) });
