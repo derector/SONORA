@@ -2,7 +2,7 @@ name: SONORA Android APK
 
 on:
   push:
-    branches: [android-native, "fix/android-*"]
+    branches: [android-native]
     paths:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
