@@ -122,6 +122,51 @@ function authError(statusCode: number, message: string) {
   return { statusCode, error: message };
 }
 
+function audiusSourceUrl(permalink: unknown, handle?: string): string {
+  const fallback = handle ? `https://audius.co/${encodeURIComponent(handle)}` : "https://audius.co";
+  if (typeof permalink !== "string" || !permalink.trim()) return fallback;
+  try {
+    const url = new URL(permalink, "https://audius.co");
+    if (url.protocol !== "https:" || !["audius.co", "www.audius.co"].includes(url.hostname)) return fallback;
+    url.hostname = "audius.co";
+    return url.toString();
+  } catch {
+    return fallback;
+  }
+}
+
+let nextMusicBrainzRequestAt = 0;
+async function waitMusicBrainzSlot(): Promise<void> {
+  const now = Date.now();
+  const slot = Math.max(now, nextMusicBrainzRequestAt);
+  nextMusicBrainzRequestAt = slot + 1_000;
+  if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now));
+}
+
+async function fetchProvider(url: string, init: RequestInit = {}, beforeAttempt?: () => Promise<void>): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await beforeAttempt?.();
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(9_000) });
+      if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+        const retryAfterSeconds = Number(response.headers.get("retry-after"));
+        const delayMs = response.status === 429
+          ? (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? Math.min(retryAfterSeconds * 1_000, 5_000) : 1_000)
+          : 350;
+        await response.body?.cancel();
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Music provider request failed.");
+}
+
 app.get("/health", async () => ({
   status: "ok",
   service: "sonora-api",
@@ -644,7 +689,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
   if (!playlist) return reply.code(404).send(authError(404, "Playlist not found."));
   if (provider === "audius") {
     try {
-      const response = await fetch(`https://api.audius.co/v1/tracks/${encodeURIComponent(providerTrackId)}?app_name=SONORA`, {
+      const response = await fetchProvider(`https://api.audius.co/v1/tracks/${encodeURIComponent(providerTrackId)}?app_name=SONORA`, {
         headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
       });
       if (!response.ok) return reply.code(502).send(authError(502, "Audius could not verify this track."));
@@ -686,7 +731,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
       client_id: clientId, format: "json", id: providerTrackId,
       include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32"
     });
-    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+    const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
@@ -925,7 +970,7 @@ app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", a
       client_id: clientId, format: "json", id: providerTrackId,
       include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32"
     });
-    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+    const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
@@ -1007,7 +1052,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
     });
     if (trackId) params.set("id", trackId);
     else if (q) params.set("search", q);
-    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
+    const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
       headers: { Accept: "application/json" },
       signal: AbortSignal.timeout(10000)
     });
@@ -1074,7 +1119,7 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
     const params = new URLSearchParams({ limit: String(limit), app_name: "SONORA" });
     if (sort === "trending" && !trackId) params.set("time", "week");
     const path = trackId ? `tracks/${encodeURIComponent(trackId)}` : `tracks/${sort}`;
-    const response = await fetch(`https://api.audius.co/v1/${path}?${params.toString()}`, {
+    const response = await fetchProvider(`https://api.audius.co/v1/${path}?${params.toString()}`, {
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1132,7 +1177,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           client_id: clientId, format: "json", limit: String(limit), order: "relevance",
           include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32", search: q
         });
-        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, { signal: AbortSignal.timeout(9000) });
+        const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, { signal: AbortSignal.timeout(9000) });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
@@ -1160,7 +1205,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
+        const response = await fetchProvider(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
           headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1193,10 +1238,9 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
-        const response = await fetch(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
-          headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
-          signal: AbortSignal.timeout(9000)
-        });
+        const response = await fetchProvider(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
+          headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" }
+        }, waitMusicBrainzSlot);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { recordings?: Array<{
           id: string; title: string; length?: number; "first-release-date"?: string;
@@ -1222,7 +1266,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/users/search?${params.toString()}`, {
+        const response = await fetchProvider(`https://api.audius.co/v1/users/search?${params.toString()}`, {
           headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1248,10 +1292,9 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
       tasks.push((async () => {
         try {
           const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
-          const response = await fetch(`https://musicbrainz.org/ws/2/artist/?${params.toString()}`, {
-            headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
-            signal: AbortSignal.timeout(9000)
-          });
+          const response = await fetchProvider(`https://musicbrainz.org/ws/2/artist/?${params.toString()}`, {
+            headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" }
+          }, waitMusicBrainzSlot);
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const payload = await response.json() as { artists?: Array<{
             id: string; name: string; country?: string; disambiguation?: string; type?: string;
