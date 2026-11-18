@@ -33,12 +33,8 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val providerName = provider.trim().lowercase().replaceFirstChar { it.titlecase() }
         val downloadAllowed = inputData.getBoolean("downloadAllowed", false)
         val licenseUrl = inputData.getString("licenseUrl").orEmpty()
-        val allowedLicense = licenseUrl.startsWith("https://creativecommons.org/licenses/") ||
-            licenseUrl.startsWith("http://creativecommons.org/licenses/") ||
-            licenseUrl.startsWith("https://creativecommons.org/publicdomain/zero/") ||
-            licenseUrl.startsWith("http://creativecommons.org/publicdomain/zero/")
         if (!provider.equals("Jamendo", ignoreCase = true) || !downloadAllowed ||
-            !allowedLicense || !isJamendoHost(url)) return@withContext Result.failure()
+            !isAllowedCreativeCommonsLicense(licenseUrl) || !isSecureJamendoUrl(url)) return@withContext Result.failure()
 
         val directory = File(applicationContext.filesDir, "offline")
         if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
@@ -67,7 +63,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 .build()
             client.newCall(requestBuilder.build()).execute().use { response ->
                 // Reject redirects to hosts outside Jamendo.
-                if (!isJamendoHost(response.request.url.toString())) return@withContext Result.failure()
+                if (!isSecureJamendoUrl(response.request.url.toString())) return@withContext Result.failure()
                 if (response.code == 416) {
                     partialFile.delete()
                     return@withContext Result.retry()
@@ -172,9 +168,19 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         }
     }
 
-    private fun isJamendoHost(rawUrl: String): Boolean {
-        val host = rawUrl.toHttpUrlOrNull()?.host?.lowercase() ?: return false
-        return host == "jamendo.com" || host.endsWith(".jamendo.com")
+    private fun isSecureJamendoUrl(rawUrl: String): Boolean {
+        val parsed = rawUrl.toHttpUrlOrNull() ?: return false
+        val host = parsed.host.lowercase()
+        return parsed.scheme == "https" && (host == "jamendo.com" || host.endsWith(".jamendo.com"))
+    }
+
+    private fun isAllowedCreativeCommonsLicense(rawUrl: String): Boolean {
+        val parsed = rawUrl.toHttpUrlOrNull() ?: return false
+        if (parsed.scheme != "https") return false
+        val host = parsed.host.lowercase()
+        if (host != "creativecommons.org" && host != "www.creativecommons.org") return false
+        val path = parsed.encodedPath.lowercase()
+        return path.startsWith("/licenses/") || path.startsWith("/publicdomain/zero/")
     }
 
     private fun looksLikeMp3(file: File): Boolean {
