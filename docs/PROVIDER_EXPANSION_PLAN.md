@@ -78,3 +78,18 @@ Before implementing any new provider:
 
 ## Agent task protocol
 Research agents should receive this document and `docs/AGENT_HANDOFF.md`, a single scope, exact branch and read-only boundary. Findings must include evidence URLs, files checked, confirmed facts vs guesses, risks, and prioritized actions. Agents may not touch production, credentials, or user data. Code changes are sequentially reviewed and tested; do not let agents edit overlapping files.
+
+
+## Live API probes (2026-11-18)
+
+Checked live endpoints before integration:
+- ccMixter Query API: `https://ccmixter.org/api/query?f=json&search=ambient&limit=2` returned JSON records containing `upload_id`, `upload_name`, artist/user identifiers, tags, `file_page_url`, `license_url`, `license_name`, descriptions, and nested `files[]`. A sample result was a ZIP archive containing FLAC texture snippets, not a conventional music track. Do not mark ccMixter entries playable without inspecting their file types; reject archive/sample-pack files in the music player. Official docs support JSON, XML, CSV and other formats and document license filtering.
+- Internet Archive Advanced Search: `https://archive.org/advancedsearch.php?q=mediatype%3Aaudio&fl%5B%5D=identifier&fl%5B%5D=title&rows=2&output=json` returned valid JSON with `response.numFound` and `response.docs[]` identifiers/titles. The broad query yielded millions of results, so production queries must be narrowed and followed by metadata lookup before playback. Search records are not playable URLs.
+- Internet Archive item metadata: `https://archive.org/metadata/{identifier}`; inspect `files[]` and allow only verified audio formats with a separate rights check. Use the stable public download path by item ID/file name, not changing internal data-node hostnames.
+
+### Integration gates from live probes
+1. Search results do not prove audio file availability or license suitability.
+2. Reject ZIP bundles, non-audio formats and unavailable files unless a verified playable path exists.
+3. For ccMixter, preserve explicit attribution, license name/link, artist and source page. Do not assume every result is a song.
+4. For Internet Archive, narrow searches and verify item metadata/file formats/rights before exposing playback. Never auto-label all Archive tracks Public Domain.
+5. Adapter should use server-side fetch, bounded pagination, timeouts, caching and provider-isolated errors. Add diagnostic state; port to Android only after web adapter passes tests.
