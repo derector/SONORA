@@ -28,7 +28,14 @@ export function rankRecommendations(
   taste: TasteSignal[],
   limit = 20
 ): RankedRecommendation[] {
-  if (limit <= 0 || candidates.length === 0) return [];
+  const requestedLimit = Number.isFinite(limit) ? Math.floor(limit) : 20;
+  if (requestedLimit <= 0 || candidates.length === 0) return [];
+
+  // Provider-qualified IDs are expected; repeated catalog rows for the same ID must not
+  // produce duplicate recommendations.
+  const uniqueCandidates = Array.from(
+    new Map(candidates.filter((track) => track.id.trim()).map((track) => [track.id, track])).values()
+  );
 
   const liked = taste.filter((s) => s.liked && !s.skipped);
   const skipped = taste.filter((s) => s.skipped);
@@ -42,7 +49,7 @@ export function rankRecommendations(
       if (key) genreWeights.set(key, (genreWeights.get(key) ?? 0) + weight);
     }
   }
-  const ranked = candidates.map((track) => {
+  const ranked = uniqueCandidates.map((track) => {
     const artist = normalize(track.artist);
     const genres = (track.genres ?? []).map(normalize).filter(Boolean);
     const reasons: string[] = [];
@@ -58,9 +65,12 @@ export function rankRecommendations(
   ranked.sort((a, b) => b.score - a.score || normalize(a.title).localeCompare(normalize(b.title)));
   const artistCounts = new Map<string, number>();
   const output: RankedRecommendation[] = [];
-  const outputLimit = Math.max(1, Math.min(50, limit));
+  const outputLimit = Math.max(1, Math.min(50, requestedLimit));
   for (const track of ranked) {
-    const artistKey = normalize(track.artist);
+    // Unknown artist metadata should not be treated as one giant artist and suppress
+    // unrelated tracks. Use the track identity as its independent fallback key.
+    const normalizedArtist = normalize(track.artist);
+    const artistKey = normalizedArtist || `track:${track.id}`;
     const count = artistCounts.get(artistKey) ?? 0;
     if (count >= 2) continue;
     artistCounts.set(artistKey, count + 1);
