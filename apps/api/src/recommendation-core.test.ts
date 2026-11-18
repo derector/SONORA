@@ -46,4 +46,25 @@ describe("rankRecommendations", () => {
   it("returns an empty result for an empty catalog", () => {
     assert.deepEqual(rankRecommendations([], [], 20), []);
   });
+  it("ranks matching liked genres and penalizes skipped genres", () => {
+    const result = rankRecommendations([
+      { id: "liked", title: "Track L", artist: "Artist L", genres: ["electronic"] },
+      { id: "skipped", title: "Track S", artist: "Artist S", genres: ["metal"] },
+      { id: "neutral", title: "Track N", artist: "Artist N", genres: ["ambient"] }
+    ], [
+      { artist: "Favorite", genres: ["electronic"], liked: true },
+      { artist: "Avoid", genres: ["metal"], skipped: true }
+    ]);
+    assert.equal(result[0]?.id, "liked");
+    assert.ok(result.find((track) => track.id === "skipped")!.score < result.find((track) => track.id === "neutral")!.score);
+  });
+
+  it("sorts equal-score candidates deterministically by normalized title", () => {
+    const result = rankRecommendations([
+      { id: "z", title: "Zebra", artist: "Z" },
+      { id: "a", title: "Alpha", artist: "A" }
+    ], []);
+    assert.deepEqual(result.map((track) => track.id), ["a", "z"]);
+  });
+
 });
