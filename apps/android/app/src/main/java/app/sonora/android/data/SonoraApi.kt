@@ -29,7 +29,7 @@ object SonoraApi {
         )
     }
 
-    private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false): JSONObject {
+    private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false, retryAuth: Boolean = true): JSONObject {
         val builder = Request.Builder().url(BASE + path).header("Accept", "application/json")
         if (body != null) builder.header("Content-Type", "application/json").method(method, body.toString().toRequestBody(jsonType))
         else if (method != "GET") builder.method(method, ByteArray(0).toRequestBody(null))
@@ -38,6 +38,10 @@ object SonoraApi {
             builder.header("Authorization", "Bearer $token")
         }
         val response = http.newCall(builder.build()).execute()
+        if (authenticated && response.code == 401 && retryAuth) {
+            response.close()
+            if (refreshSession()) return request(path, method, body, authenticated, retryAuth = false)
+        }
         response.use {
             it.header("Set-Cookie")?.let { cookie ->
                 val value = Regex("sonora_refresh=([^;]+)").find(cookie)?.groupValues?.getOrNull(1)
