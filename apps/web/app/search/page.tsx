@@ -79,6 +79,17 @@ export default function SearchPage() {
   }
 
   useEffect(() => {
+    if (!accessToken) { setFavoriteIds(new Set()); return; }
+    let active = true;
+    fetch(`${API}/api/v1/provider-favorites`, { credentials: "include", headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async (response) => response.ok ? response.json() as Promise<{ items?: Array<{ provider_track_id?: string }> }> : null)
+      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => `jamendo:${item.provider_track_id}`).filter(Boolean))); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [accessToken]);
+
+
+  useEffect(() => {
     const initialQuery = new URLSearchParams(window.location.search).get("q") ?? "";
     if (initialQuery.trim().length >= 2) {
       setQuery(initialQuery);
