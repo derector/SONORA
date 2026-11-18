@@ -162,10 +162,15 @@ private fun SonoraApp() {
     fun play(track: Track) = startTrack(track)
 
     fun playOffline(track: OfflineTrack) {
+        val file = safeOfflineFile(context, track.localPath)
+        if (file == null) {
+            message = "Офлайн-файл не найден или путь недействителен"
+            return
+        }
         val localTrack = Track(
             id = track.id, providerTrackId = track.id, provider = track.provider,
             title = track.title, artist = track.artist, durationSeconds = track.durationSeconds,
-            artworkUrl = track.artworkUrl, audioUrl = android.net.Uri.fromFile(File(track.localPath)).toString(),
+            artworkUrl = track.artworkUrl, audioUrl = android.net.Uri.fromFile(file).toString(),
             playable = true
         )
         startTrack(localTrack, local = true)
@@ -207,7 +212,7 @@ private fun SonoraApp() {
                     )
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
                         scope.launch(Dispatchers.IO) {
-                            runCatching { File(item.localPath).delete() }
+                            safeOfflineFile(context, item.localPath)?.delete()
                             OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
@@ -619,6 +624,12 @@ private fun LibraryScreen(
         }
     }
 }
+
+private fun safeOfflineFile(context: Context, path: String): File? = runCatching {
+    val offlineDirectory = File(context.filesDir, "offline").canonicalFile
+    val file = File(path).canonicalFile
+    if (file.isFile && file.parentFile == offlineDirectory) file else null
+}.getOrNull()
 
 @Composable
 private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTrack) -> Unit) {
