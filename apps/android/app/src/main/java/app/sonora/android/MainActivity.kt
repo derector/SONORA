@@ -280,7 +280,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(workDataOf(
-                "url" to track.downloadUrl, "id" to track.providerTrackId,
+                "url" to track.downloadUrl, "id" to track.providerTrackId.ifBlank { track.id },
                 "provider" to track.provider, "title" to track.title,
                 "artist" to track.artist, "artwork" to track.artworkUrl,
                 "duration" to track.durationSeconds
