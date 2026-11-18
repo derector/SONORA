@@ -1190,7 +1190,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
       try {
         // Internet Archive is metadata-only here. Playback requires a separate
         // item-level rights and file-format verification flow.
-        const luceneSafe = q.replace(/[+\-!(){}\[\]^"~*?:\\\\]/g, "\\\\  await Promise.all(tasks);");
+        const luceneSafe = q.replace(/[^\\p{L}\\p{N}\\s]/gu, " ").replace(/\\s+/g, " ").trim().slice(0, 100);
         const params = new URLSearchParams({
           q: `mediatype:audio AND title:"${luceneSafe}"`,
           rows: String(limit),
