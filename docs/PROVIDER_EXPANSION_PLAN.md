@@ -93,3 +93,19 @@ Checked live endpoints before integration:
 3. For ccMixter, preserve explicit attribution, license name/link, artist and source page. Do not assume every result is a song.
 4. For Internet Archive, narrow searches and verify item metadata/file formats/rights before exposing playback. Never auto-label all Archive tracks Public Domain.
 5. Adapter should use server-side fetch, bounded pagination, timeouts, caching and provider-isolated errors. Add diagnostic state; port to Android only after web adapter passes tests.
+
+
+## Commercial-provider feasibility scan (agent research, pending source-by-source verification)
+
+This scan is a planning signal, not legal approval. Check each provider's official terms before implementing any OAuth or embedded playback.
+
+- Spotify: catalog metadata and official embed/player are separate from audio access. Full playback is premium/SDK-controlled; no direct audio URL. Because SONORA is a multi-provider product, policy prohibits certain stream/content integrations across services. Do not integrate playback in the unified SONORA player without written policy clearance. A metadata result can link to Spotify, but re-check API scope and branding requirements.
+- Apple Music: official MusicKit / Apple Music API; catalog metadata and subscriber playback are provider-controlled. Requires user authorization/developer setup. Never extract/download protected files.
+- Deezer: public metadata API and official embeds may be available, but playback limitations/subscription/access requirements must be verified against current official docs before build.
+- SoundCloud: oEmbed and limited API paths may be viable for embeds/metadata; direct playback SDK/API access depends on official approval/access and terms.
+- VK Music: no verified public third-party full-track playback SDK/API found in this scan. Treat results as metadata/deep links only. Avoid reverse-engineered private endpoints, app-token intercepts, session/cookie extraction or impersonation methods.
+- Audiomack: API/oEmbed access appears limited; only implement verified public embed/metadata paths.
+- YouTube Music: no official audio-only playback API. Keep video embeds only if terms and UX fit; do not extract streams or use private reverse-engineered endpoints.
+
+Suggested future UI: provider-specific search result cards and "Open in provider" actions, clearly labeled embed/preview/playable modes; preserve SONORA's own full playback player for Audius, Jamendo and verified licensed open catalogs only.
+
