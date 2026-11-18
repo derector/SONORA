@@ -42,6 +42,38 @@ function authError(statusCode: number, message: string) {
   return { statusCode, error: message };
 }
 
+function audiusSourceUrl(permalink: unknown, handle?: string): string {
+  const fallback = handle ? `https://audius.co/${encodeURIComponent(handle)}` : "https://audius.co";
+  if (typeof permalink !== "string" || !permalink.trim()) return fallback;
+  try {
+    const url = new URL(permalink, "https://audius.co");
+    if (url.protocol !== "https:" || !["audius.co", "www.audius.co"].includes(url.hostname)) return fallback;
+    url.hostname = "audius.co";
+    return url.toString();
+  } catch {
+    return fallback;
+  }
+}
+
+async function fetchProvider(url: string, init: RequestInit = {}): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(9000) });
+      if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+        await response.body?.cancel();
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        continue;
+      }
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Music provider request failed.");
+}
+
 app.get("/health", async () => ({
   status: "ok",
   service: "sonora-api",
@@ -987,8 +1019,8 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
     const params = new URLSearchParams({ limit: String(limit), app_name: "SONORA" });
     if (sort === "trending" && !trackId) params.set("time", "week");
     const path = trackId ? `tracks/${encodeURIComponent(trackId)}` : `tracks/${sort}`;
-    const response = await fetch(`https://api.audius.co/v1/${path}?${params.toString()}`, {
-      headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+    const response = await fetchProvider(`https://api.audius.co/v1/${path}?${params.toString()}`, {
+      headers: { Accept: "application/json" }
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const payload = await response.json() as { data?: Array<{
@@ -1010,7 +1042,7 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
         artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
         licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+        sourceUrl: audiusSourceUrl(track.permalink, track.user?.handle), provider: "Audius", playable: true
       }];
     });
     return { provider: "Audius", sort, items, sourceCount: records.length };
@@ -1045,7 +1077,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           client_id: clientId, format: "json", limit: String(limit), order: "relevance",
           include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32", search: q
         });
-        const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, { signal: AbortSignal.timeout(9000) });
+        const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
@@ -1073,8 +1105,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+        const response = await fetchProvider(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
+          headers: { Accept: "application/json" }
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { data?: Array<{
@@ -1086,7 +1118,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         for (const track of payload.data ?? []) {
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
-          const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
+          const sourceUrl = audiusSourceUrl(track.permalink, track.user?.handle);
           const streamable = track.is_streamable === true && track.is_stream_gated !== true;
           tracks.push({
             id: `audius:${track.id}`, providerTrackId: track.id, provider: "Audius",
@@ -1106,9 +1138,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
-        const response = await fetch(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
-          headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
-          signal: AbortSignal.timeout(9000)
+        const response = await fetchProvider(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
+          headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" }
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { recordings?: Array<{
@@ -1135,8 +1166,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/users/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+        const response = await fetchProvider(`https://api.audius.co/v1/users/search?${params.toString()}`, {
+          headers: { Accept: "application/json" }
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { data?: Array<{
