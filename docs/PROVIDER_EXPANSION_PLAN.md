@@ -109,3 +109,33 @@ This scan is a planning signal, not legal approval. Check each provider's offici
 
 Suggested future UI: provider-specific search result cards and "Open in provider" actions, clearly labeled embed/preview/playable modes; preserve SONORA's own full playback player for Audius, Jamendo and verified licensed open catalogs only.
 
+
+
+## Research agent findings (2026-11-18)
+
+The read-only catalog agent recommends the adapter schema separating full stream, preview, embed-only and metadata-only; each result should preserve source, license, license URL, attribution and download permission. Deduplicate by stable provider URL/ID and balance results across sources rather than letting one provider monopolize the result list.
+
+
+Candidate scan (treat as research leads, reconfirm official terms before integration):
+- Internet Archive: promising open metadata search; candidate audio records may have multiple formats and derivative files. Rights and file verification are item-specific.
+- ccMixter: API and CC licensing metadata; results can include sample/archive bundles, so validate file formats and reject ZIP/sample packs as normal songs.
+- FreePD: no confirmed API; do not scrape without permission or an approved data/feed route.
+- Musopen: potential classical catalog; verify token/API and rights per recording before connecting.
+- Freesound: primarily effects/field recordings, not an on-demand music catalog; keep it separate as a future SFX feature.
+- Mixkit: no reliable official API confirmed; avoid scraping.
+- Pixabay: public API not confirmed to provide a music catalog; do not claim music coverage from image/video API.
+- Free Music Archive: limitations on API/hotlink use; not a quick integration.
+- Radio Browser: live radio stations, not track-on-demand, so use a separate radio-provider model.
+
+## Live Internet Archive probe
+
+Advanced Search endpoint returned valid JSON, fields identifier/title/creator/licenseurl/format. The broad audio query returned a large catalog; production query should narrow by title and include only metadata in initial integration. A metadata probe confirmed that records can contain original MP3 plus unrelated derivatives. Initial integration therefore exposes metadata only and links to archive item page. Playback/download must remain disabled until a separate rights + file-format verifier is implemented and tested.
+
+## Live ccMixter probe
+
+Public query returned JSON with track/item ID, title, creator, source page, license name/URL, descriptions and file records. A returned sample was a ZIP archive containing FLAC texture snippets. This is a real reason to validate media types before showing a track as playable.
+
+## Agent research run links
+- Provider/catalog report: https://agent.tinyfish.ai/runs/999491f2-11ab-48ab-854f-0dd1e57a1a33
+- Commercial-provider feasibility: https://agent.tinyfish.ai/runs/34af7b48-21b1-4f5b-95eb-ad9d0e0b511b
+- Architecture audit: timed out and did not return a reliable report: https://agent.tinyfish.ai/runs/776039f1-2455-45c3-b351-3e3643fb6c12
