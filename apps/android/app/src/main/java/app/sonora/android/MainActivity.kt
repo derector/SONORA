@@ -359,8 +359,18 @@ private fun FullPlayer(
     val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.id } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
-    var speed by remember(controller) { mutableFloatStateOf(controller?.playbackParameters?.speed ?: 1f) }
+    val context = LocalContext.current
+    val speedPreferences = remember(context) { context.getSharedPreferences("sonora-player-settings", 0) }
+    var speed by remember(controller, context) {
+        mutableFloatStateOf(
+            speedPreferences.getFloat("playback_speed", 1f).takeIf { it == 1f || it == 1.25f || it == 0.8f } ?: 1f
+        )
+    }
     var volume by remember(controller) { mutableFloatStateOf(controller?.volume ?: 1f) }
+
+    LaunchedEffect(controller) {
+        controller?.setPlaybackSpeed(speed)
+    }
 
     LaunchedEffect(controller, playing) {
         while (playing && controller != null) {
@@ -430,12 +440,27 @@ private fun FullPlayer(
             }, modifier = Modifier.weight(1f), colors = SliderDefaults.colors(thumbColor = Lime, activeTrackColor = Lime))
             Text("${(volume * 100).toInt()}%", color = Muted, fontSize = 11.sp)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Original" to 1f, "Speed up" to 1.25f, "Slowed" to 0.8f).forEach { (label, value) ->
+                TextButton(
+                    onClick = {
+                        speed = value
+                        speedPreferences.edit().putFloat("playback_speed", value).apply()
+                        controller?.setPlaybackSpeed(value)
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.textButtonColors(
+                        containerColor = if (speed == value) Lime else Panel,
+                        contentColor = if (speed == value) Ink else Muted
+                    )
+                ) {
+                    Text(label, fontWeight = if (speed == value) FontWeight.Bold else FontWeight.Medium, maxLines = 1)
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = {
-                speed = when (speed) { 1f -> 1.25f; 1.25f -> 1.5f; 1.5f -> 2f; 2f -> 0.8f; else -> 1f }
-                controller?.setPlaybackSpeed(speed)
-            }) { Text("${speed}×", color = Lime, fontWeight = FontWeight.Bold) }
             IconButton(onClick = {
                 shuffle = !shuffle
                 controller?.shuffleModeEnabled = shuffle
