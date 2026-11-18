@@ -34,7 +34,9 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val downloadAllowed = inputData.getBoolean("downloadAllowed", false)
         val licenseUrl = inputData.getString("licenseUrl").orEmpty()
         val allowedLicense = licenseUrl.startsWith("https://creativecommons.org/licenses/") ||
-            licenseUrl.startsWith("https://creativecommons.org/publicdomain/zero/")
+            licenseUrl.startsWith("http://creativecommons.org/licenses/") ||
+            licenseUrl.startsWith("https://creativecommons.org/publicdomain/zero/") ||
+            licenseUrl.startsWith("http://creativecommons.org/publicdomain/zero/")
         if (!provider.equals("Jamendo", ignoreCase = true) || !downloadAllowed ||
             !allowedLicense || !isJamendoHost(url)) return@withContext Result.failure()
 
