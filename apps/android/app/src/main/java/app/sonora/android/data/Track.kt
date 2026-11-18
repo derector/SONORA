@@ -16,5 +16,5 @@ data class Track(
     val playable: Boolean = false
 ) {
     val canonicalKey: String
-        get() = "${provider.trim().lowercase()}:$providerTrackId"
+        get() = "${provider.trim().lowercase()}:${providerTrackId.ifBlank { id }}"
 }
