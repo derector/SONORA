@@ -31,7 +31,7 @@ function parseCsvLine(line: string): string[] {
 }
 function parseRows(raw: string): ParsedTrack[] {
   const input = raw.trim();
-  if (!input) return [];
+  if (!input || input.length > 500_000) return [];
   if (input.startsWith("{") || input.startsWith("[")) {
     try {
       const parsed: unknown = JSON.parse(input);
@@ -49,7 +49,7 @@ function parseRows(raw: string): ParsedTrack[] {
         return "";
       };
       const visit = (value: unknown, depth = 0) => {
-        if (depth > 7 || value == null) return;
+        if (depth > 12 || value == null) return;
         if (Array.isArray(value)) { for (const item of value) visit(item, depth + 1); return; }
         if (typeof value !== "object") return;
         const obj = value as Record<string, unknown>;
@@ -57,7 +57,7 @@ function parseRows(raw: string): ParsedTrack[] {
         const artist = artistText(obj.artistName ?? obj.artists ?? obj.artist ?? obj.performer);
         const album = getText(obj.albumName) || getText(obj.collectionName) || (typeof obj.album === "string" ? getText(obj.album) : artistText(obj.album));
         if (title && artist) {
-          const key = (title + "|" + artist).toLocaleLowerCase();
+          const key = (title + "|" + artist).normalize("NFKC").toLocaleLowerCase("en");
           if (!seen.has(key)) { seen.add(key); found.push({ title, artist, album: album || undefined }); }
         }
         for (const [key, child] of Object.entries(obj)) if (["tracks","items","track","playlist","songs","entries","data"].includes(key.toLowerCase())) visit(child, depth + 1);
@@ -116,6 +116,7 @@ export default function ImportPage() {
   async function findMatches() {
     if (!token) return;
     setError(""); setNotice("");
+    if (raw.length > 500_000) { setError(t("Input is too large. Please keep the playlist export under 500 KB.")); return; }
     if (!parsed.length) { setError(t("Paste a playlist CSV or track list first.")); return; }
     if (parsed.length > 100) { setError(t("Import is limited to 100 tracks per batch.")); return; }
     setMatching(true);
@@ -133,7 +134,7 @@ export default function ImportPage() {
             const candidates = result.items ?? [];
             return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, album: item.album, candidates, selectedId: candidates[0]?.id ?? "", imported: false, error: candidates.length ? undefined : t("No licensed match found.") };
           } catch (err) {
-            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates: [], selectedId: "", imported: false, error: err instanceof Error ? err.message : t("Search failed.") };
+            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, album: item.album, candidates: [], selectedId: "", imported: false, error: err instanceof Error ? err.message : t("Search failed.") };
           }
         }));
         matched.push(...results);
@@ -148,12 +149,21 @@ export default function ImportPage() {
 
   async function importSelected() {
     if (!token) return;
-    const selected = rows.filter((row) => row.selectedId && !row.imported);
+    const selectedRows = rows.filter((row) => row.selectedId && !row.imported);
+    const seenProviderIds = new Set<string>();
+    const selected = selectedRows.filter((row) => {
+      const id = row.selectedId.replace(/^jamendo:/, "");
+      if (seenProviderIds.has(id)) return false;
+      seenProviderIds.add(id);
+      return true;
+    });
+    const duplicateCount = selectedRows.length - selected.length;
     if (!selected.length) { setError(t("Select at least one matched track.")); return; }
     if (!playlistName.trim()) { setError(t("Enter a playlist name.")); return; }
     setSaving(true); setError(""); setNotice(""); setCreatedPlaylistId("");
     const next = [...rows];
     let success = 0;
+    const failedTitles: string[] = [];
     try {
       const createResponse = await fetch(`${API}/api/v1/playlists`, {
         method: "POST", credentials: "include",
@@ -181,10 +191,13 @@ export default function ImportPage() {
         } catch (err) {
           const index = next.findIndex((item) => item.key === row.key);
           if (index >= 0) next[index] = { ...next[index], error: err instanceof Error ? err.message : t("Import failed.") };
+          failedTitles.push(row.title);
         }
       }
       setRows(next);
-      setNotice(t("Playlist created and tracks imported:") + ` ${success}/${selected.length}`);
+      const failures = failedTitles.length ? ` · ${t("Failed")}: ${failedTitles.join(", ")}` : "";
+      const duplicates = duplicateCount ? ` · ${t("Skipped duplicates")}: ${duplicateCount}` : "";
+      setNotice(t("Playlist created and tracks imported:") + ` ${success}/${selected.length}${failures}${duplicates}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("Import failed."));
     } finally {
@@ -230,7 +243,7 @@ export default function ImportPage() {
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Import review")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Choose your matches")}</h2></div><button type="button" onClick={() => void importSelected()} disabled={saving || !rows.some((row) => row.selectedId && !row.imported)} className="inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <Check size={16}/>} {t("Import selected")}</button></div>
             <div className="space-y-3">
               {rows.map((row) => <article key={row.key} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || source}{row.album ? " · " + row.album : ""}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error && !row.candidates.length ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || source}{row.album ? " · " + row.album : ""}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
                 {row.candidates.length > 0 && <div className="mt-3 grid gap-2">
                   {row.candidates.map((candidate) => <label key={candidate.id} className={"flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 " + (row.selectedId === candidate.id ? "border-violet-300/40 bg-violet-300/10" : "border-white/5 bg-black/10")}>
                     <input type="radio" name={row.key} checked={row.selectedId === candidate.id} disabled={row.imported} onChange={() => setRows((items) => items.map((item) => item.key === row.key ? { ...item, selectedId: candidate.id } : item))} className="accent-violet-300"/>
