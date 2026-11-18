@@ -287,12 +287,12 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, {}, signedIn && track.provider == "Jamendo" && track.providerTrackId in favoriteIds, { toggleFavorite(track) }) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, {}, isJamendo = track.provider == "Jamendo", isFavorite = signedIn && track.providerTrackId in favoriteIds, showFavorite = signedIn && track.provider == "Jamendo", toggleFavorite = { toggleFavorite(track) }) } }
     }
 }
 
 @Composable
-private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit, isFavorite: Boolean = false, toggleFavorite: () -> Unit = {}) {
+private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit, isJamendo: Boolean = track.provider == "Jamendo", isFavorite: Boolean = false, showFavorite: Boolean = false, toggleFavorite: () -> Unit = {}) {
     val context = LocalContext.current
     val enqueueDownload = {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
@@ -314,7 +314,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit, isFavor
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (track.provider == "Jamendo") {
+        if (showFavorite && isJamendo) {
             IconButton(onClick = toggleFavorite) { Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Удалить из избранного" else "Добавить в избранное", tint = if (isFavorite) Color(0xFFFF6B86) else Muted) }
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
