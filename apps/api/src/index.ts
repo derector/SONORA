@@ -1035,6 +1035,36 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
     tasks.push((async () => {
+      try {
+        const params = new URLSearchParams({ term: q, entity: "song", limit: String(limit), country: "US" });
+        const response = await fetch(`https://itunes.apple.com/search?${params.toString()}`, {
+          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as { results?: Array<{
+          trackId?: number; trackName?: string; artistName?: string; collectionName?: string;
+          artworkUrl100?: string; previewUrl?: string; trackViewUrl?: string;
+          trackTimeMillis?: number; kind?: string;
+        }> };
+        for (const track of payload.results ?? []) {
+          if (!track.trackId || !track.trackName || !track.artistName || !track.trackViewUrl) continue;
+          let source: URL;
+          try { source = new URL(track.trackViewUrl); } catch { continue; }
+          if (source.protocol !== "https:" || !(source.hostname.endsWith("itunes.apple.com") || source.hostname.endsWith("apple.com"))) continue;
+          metadata.push({
+            id: `itunes:${track.trackId}`, provider: "Apple/iTunes", title: track.trackName,
+            artist: track.artistName, album: track.collectionName ?? null,
+            durationSeconds: track.trackTimeMillis ? Math.round(track.trackTimeMillis / 1000) : null,
+            artworkUrl: track.artworkUrl100 ?? null, sourceUrl: source.href,
+            playable: false, rightsLabel: "Apple store listing"
+          });
+        }
+        providers.itunes = { ok: true, count: metadata.filter((item) => item.provider === "Apple/iTunes").length };
+      } catch (error) {
+        providers.itunes = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
+    tasks.push((async () => {
       const clientId = process.env.JAMENDO_CLIENT_ID;
       if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
         providers.jamendo = { ok: false, count: 0, error: "Jamendo non-commercial access is not configured." };
