@@ -1184,11 +1184,48 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
       })());
     }
   }
+  if (type !== "artists") {
+    tasks.push((async () => {
+      try {
+        // Internet Archive is metadata-only here. Playback requires a separate
+        // item-level rights and file-format verification flow.
+        const luceneSafe = q.replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+        const params = new URLSearchParams({
+          q: `mediatype:audio AND title:"${luceneSafe}"`,
+          rows: String(limit),
+          output: "json"
+        });
+        for (const field of ["identifier", "title", "creator", "licenseurl", "format"]) params.append("fl[]", field);
+        const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`, {
+          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as { response?: { numFound?: number; docs?: Array<{
+          identifier?: string; title?: string; creator?: string; licenseurl?: string; format?: string[] | string;
+        }> } };
+        const records = payload.response?.docs ?? [];
+        for (const item of records) {
+          if (!item.identifier || !item.title) continue;
+          metadata.push({
+            id: `archive:${item.identifier}`, provider: "Internet Archive", title: item.title,
+            artist: typeof item.creator === "string" ? item.creator : "Unknown creator",
+            album: null, durationSeconds: null, releaseDate: null,
+            sourceUrl: `https://archive.org/details/${encodeURIComponent(item.identifier)}`,
+            licenseUrl: typeof item.licenseurl === "string" ? item.licenseurl : null,
+            playable: false
+          });
+        }
+        providers.archive = { ok: true, count: records.filter((item) => item.identifier && item.title).length };
+      } catch (error) {
+        providers.archive = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
+  }
   await Promise.all(tasks);
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   return {
-    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit),
+    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit * 2),
     artists: artists.slice(0, limit), providers
   };
 });
