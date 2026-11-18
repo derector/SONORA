@@ -60,6 +60,8 @@ app.addHook("onRequest", async (request, reply) => {
     limit = 30; windowMs = 60_000; bucketName = "search";
   } else if (route.startsWith("/api/v1/providers/")) {
     limit = 60; windowMs = 60_000; bucketName = "providers";
+  } else if (route === "/api/v1/profile/avatar") {
+    limit = 8; windowMs = 10 * 60_000; bucketName = "avatar-upload";
   } else if (route.startsWith("/api/v1/import")) {
     limit = 15; windowMs = 10 * 60_000; bucketName = "imports";
   }
@@ -405,6 +407,13 @@ app.post<{ Body: { contentType?: string; base64?: string } }>("/api/v1/profile/a
   const image = Buffer.from(base64, "base64");
   if (!image.length || image.length > 2 * 1024 * 1024) {
     return reply.code(400).send(authError(400, "The image must be 2 MB or smaller."));
+  }
+  const isJpeg = contentType === "image/jpeg" && image[0] === 0xff && image[1] === 0xd8 && image[2] === 0xff;
+  const isPng = contentType === "image/png" && image.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isWebp = contentType === "image/webp" && image.length >= 12 &&
+    image.toString("ascii", 0, 4) === "RIFF" && image.toString("ascii", 8, 12) === "WEBP";
+  if (!isJpeg && !isPng && !isWebp) {
+    return reply.code(400).send(authError(400, "The uploaded file does not match its image type."));
   }
   const path = `${auth.user.id}/avatar.${extensions[contentType]}`;
   const { error: uploadError } = await auth.client.storage.from("sonora-avatars").upload(path, image, {
