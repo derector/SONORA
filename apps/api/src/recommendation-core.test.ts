@@ -46,6 +46,7 @@ describe("rankRecommendations", () => {
   it("returns an empty result for an empty catalog", () => {
     assert.deepEqual(rankRecommendations([], [], 20), []);
   });
+
   it("ranks matching liked genres and penalizes skipped genres", () => {
     const result = rankRecommendations([
       { id: "liked", title: "Track L", artist: "Artist L", genres: ["electronic"] },
@@ -67,4 +68,29 @@ describe("rankRecommendations", () => {
     assert.deepEqual(result.map((track) => track.id), ["a", "z"]);
   });
 
+  it("does not cap unrelated tracks when artist metadata is missing", () => {
+    const candidates = Array.from({ length: 6 }, (_, i) => ({
+      id: `missing-artist-${i}`, title: `Track ${i}`, artist: ""
+    }));
+    const result = rankRecommendations(candidates, [], 6);
+    assert.equal(result.length, 6);
+  });
+
+  it("removes duplicate provider-qualified track IDs from the result", () => {
+    const result = rankRecommendations([
+      { id: "audius:123", title: "First metadata", artist: "Artist A" },
+      { id: "audius:123", title: "Duplicate metadata", artist: "Artist B" },
+      { id: "jamendo:123", title: "Different provider track", artist: "Artist A" }
+    ], [], 10);
+    assert.equal(result.length, 2);
+    assert.equal(result.filter((track) => track.id === "audius:123").length, 1);
+    assert.ok(result.some((track) => track.id === "jamendo:123"));
+  });
+
+  it("uses the default limit for a non-finite limit", () => {
+    const candidates = Array.from({ length: 30 }, (_, i) => ({
+      id: String(i), title: `Track ${i}`, artist: `Artist ${i}`
+    }));
+    assert.equal(rankRecommendations(candidates, [], Number.NaN).length, 20);
+  });
 });
