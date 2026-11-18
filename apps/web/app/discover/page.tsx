@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, AudioLines, Download, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePlayer } from "../../components/player-provider";
 import { useLanguage } from "../../components/language-provider";
@@ -14,6 +14,7 @@ type Track = {
   durationSeconds: number;
   artworkUrl: string | null;
   audioUrl: string;
+  downloadUrl?: string | null;
   licenseUrl: string;
   sourceUrl: string;
   provider: string;
@@ -48,7 +49,7 @@ export default function DiscoverPage() {
     try {
       const params = new URLSearchParams({ limit: "24" });
       if (selectedSource === "audius") params.set("sort", selectedSort);
-      else if (search.trim()) params.set("q", search.trim());
+      else params.set("q", search.trim() || "music");
       const endpoint = selectedSource === "audius" ? "audius" : "jamendo";
       const response = await fetch(`${API}/api/v1/providers/${endpoint}/tracks?${params.toString()}`);
       const result = await response.json() as Result;
@@ -124,9 +125,10 @@ export default function DiscoverPage() {
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent releases from open music catalogs. Tracks play from their original provider, with creator attribution and access restrictions preserved.")}</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
-          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} aria-label={t("Search tracks, artists or moods")} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
+          <button disabled={loading || query.trim().length < 2} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
+        {query.trim().length === 1 && <p className="mt-2 px-2 text-xs text-slate-400" role="status">{t("Enter at least 2 characters to search.")}</p>}
       </section>
 
       <div className="mt-9 flex flex-wrap items-end justify-between gap-4">
@@ -164,6 +166,7 @@ export default function DiscoverPage() {
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
               </div>
+              {track.downloadUrl && <a href={track.downloadUrl} download aria-label={t("Download track")} title={t("Download track")} className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-300 transition hover:bg-white/5 hover:text-violet-200"><Download size={14}/>{t("Download")}</a>}
               <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20" aria-label={`${currentTrack?.id === track.id && isPlaying ? "Pause" : "Play"} ${track.title}`}>{currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? "Pause" : "Play track"}</button>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
                 <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> {source === "jamendo" ? t("CC license") : t("Audius API access")}</span>
