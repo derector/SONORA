@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { ArrowLeft, AudioLines, Download, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePlayer } from "../../components/player-provider";
@@ -41,9 +41,11 @@ export default function DiscoverPage() {
   const [token, setToken] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [savingFavorite, setSavingFavorite] = useState<string>("");
+  const requestSequence = useRef(0);
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
 
   async function loadTracks(search = "", selectedSource: CatalogSource = source, selectedSort: AudiusSort = audiusSort) {
+    const sequence = ++requestSequence.current;
     setLoading(true);
     setError("");
     try {
@@ -53,13 +55,15 @@ export default function DiscoverPage() {
       const endpoint = selectedSource === "audius" ? "audius" : "jamendo";
       const response = await fetch(`${API}/api/v1/providers/${endpoint}/tracks?${params.toString()}`);
       const result = await response.json() as Result;
+      if (sequence !== requestSequence.current) return;
       if (!response.ok) throw new Error(result.error || "The catalog could not be loaded.");
       setTracks(result.items ?? []);
     } catch (err) {
+      if (sequence !== requestSequence.current) return;
       setError(err instanceof Error ? err.message : "The catalog could not be loaded.");
       setTracks([]);
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }
 
