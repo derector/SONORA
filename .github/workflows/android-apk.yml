@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: sonora-android-${{ github.event.pull_request.head.ref || github.ref }}
+  group: sonora-android-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
