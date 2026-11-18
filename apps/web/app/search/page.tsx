@@ -2,9 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
+import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3, Heart } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
+import { useAuth } from "../../components/auth-provider";
 
 type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
@@ -18,6 +19,10 @@ const duration = (seconds?: number | null) => seconds ? `${Math.floor(seconds / 
 export default function SearchPage() {
   const { t } = useLanguage();
   const { playTrack } = usePlayer();
+  const { accessToken, isAuthenticated } = useAuth();
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [favoriteBusy, setFavoriteBusy] = useState<Set<string>>(new Set());
+  const [favoriteError, setFavoriteError] = useState("");
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | "tracks" | "artists">("all");
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -48,10 +53,41 @@ export default function SearchPage() {
     }
   }, []);
 
+  async function toggleFavorite(track: Track) {
+    if (track.provider !== "Jamendo") return;
+    const numericId = track.id;
+    if (!/^\d{1,24}$/.test(numericId)) return;
+    setFavoriteError("");
+    setFavoriteBusy((prev) => new Set(prev).add(track.id));
+    try {
+      const existing = favoriteIds.has(track.id);
+      const response = await fetch(`${API}/api/v1/provider-favorites${existing ? `/${encodeURIComponent(numericId)}` : ""}`, {
+        method: existing ? "DELETE" : "POST", credentials: "include",
+        headers: { ...(existing ? {} : { "Content-Type": "application/json" }), Authorization: `Bearer ${accessToken}` },
+        ...(existing ? {} : { body: JSON.stringify({ providerTrackId: numericId }) })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || t("Could not update favorites."));
+      setFavoriteIds((prev) => { const next = new Set(prev); existing ? next.delete(track.id) : next.add(track.id); return next; });
+    } catch (err) { setFavoriteError(err instanceof Error ? err.message : t("Could not update favorites.")); }
+    finally { setFavoriteBusy((prev) => { const next = new Set(prev); next.delete(track.id); return next; }); }
+  }
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void runSearch(query, kind);
   }
+
+  useEffect(() => {
+    if (!accessToken) { setFavoriteIds(new Set()); return; }
+    let active = true;
+    fetch(`${API}/api/v1/provider-favorites`, { credentials: "include", headers: { Authorization: `Bearer ${accessToken}` } })
+      .then(async (response) => response.ok ? response.json() as Promise<{ items?: Array<{ provider_track_id?: string }> }> : null)
+      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => String(item.provider_track_id ?? "")).filter((id) => id.length > 0))); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [accessToken]);
+
 
   useEffect(() => {
     const initialQuery = new URLSearchParams(window.location.search).get("q") ?? "";
@@ -91,6 +127,7 @@ export default function SearchPage() {
       </section>}
 
       {error && <p role="alert" className="mt-6 rounded-2xl border border-rose-300/15 bg-rose-300/5 p-4 text-sm text-rose-200">{error}</p>}
+      {favoriteError && <p role="alert" className="mt-3 rounded-2xl border border-rose-300/15 bg-rose-300/5 p-3 text-xs text-rose-200">{favoriteError}</p>}
       {loading && <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Searching connected catalogs…")}</div>}
       {!loading && searched && !error && tracks.length === 0 && artists.length === 0 && metadata.length === 0 && <div className="mt-8 rounded-3xl border border-white/10 p-10 text-center text-sm text-slate-400">{t("No matches found. Try another title or artist.")}</div>}
 
@@ -102,6 +139,7 @@ export default function SearchPage() {
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.provider} · {track.rightsLabel || track.provider} {track.durationSeconds ? "· " + duration(track.durationSeconds) : ""}</p></div>
             <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="shrink-0 rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
             <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="shrink-0 rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
+            {track.provider === "Jamendo" && <button type="button" onClick={() => isAuthenticated ? void toggleFavorite(track) : window.location.assign("/auth")} disabled={favoriteBusy.has(track.id)} aria-label={favoriteIds.has(track.id) ? t("Remove from favorites") : t("Add to favorites")} title={favoriteIds.has(track.id) ? t("Remove from favorites") : t("Add to favorites")} className={`shrink-0 rounded-full border p-3 ${favoriteIds.has(track.id) ? "border-rose-300/30 bg-rose-300/10 text-rose-200" : "border-white/10 text-slate-400 hover:text-rose-200"} disabled:opacity-50`}>{favoriteBusy.has(track.id) ? <LoaderCircle size={16} className="animate-spin"/> : <Heart size={16} fill={favoriteIds.has(track.id) ? "currentColor" : "none"}/>}</button>}
           </article>)}
         </div>
       </section>}
