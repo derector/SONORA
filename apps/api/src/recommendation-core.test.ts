@@ -93,4 +93,12 @@ describe("rankRecommendations", () => {
     }));
     assert.equal(rankRecommendations(candidates, [], Number.NaN).length, 20);
   });
+
+  it("omits candidates with empty IDs", () => {
+    const result = rankRecommendations([
+      { id: "", title: "No ID", artist: "Unknown" },
+      { id: "valid", title: "Valid", artist: "Artist" }
+    ], [], 10);
+    assert.deepEqual(result.map((track) => track.id), ["valid"]);
+  });
 });
