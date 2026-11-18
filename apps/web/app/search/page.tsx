@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
@@ -27,24 +27,28 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const searchSequence = useRef(0);
 
   const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
     if (searchQuery.trim().length < 2) return;
+    const sequence = ++searchSequence.current;
     setLoading(true); setError(""); setSearched(true);
     try {
       const params = new URLSearchParams({ q: searchQuery.trim(), type: searchKind, limit: "15" });
       const response = await fetch(`${API}/api/v1/search/music?${params.toString()}`);
       const data = await response.json() as SearchResponse;
+      if (sequence !== searchSequence.current) return;
       if (!response.ok) throw new Error(data.error || "Music search is temporarily unavailable.");
       setTracks(data.tracks ?? []);
       setArtists(data.artists ?? []);
       setMetadata(data.metadata ?? []);
       setProviders(data.providers ?? {});
     } catch (err) {
+      if (sequence !== searchSequence.current) return;
       setError(err instanceof Error ? err.message : "Music search is temporarily unavailable.");
       setTracks([]); setArtists([]); setMetadata([]); setProviders({});
     } finally {
-      setLoading(false);
+      if (sequence === searchSequence.current) setLoading(false);
     }
   }, []);
 
@@ -82,7 +86,7 @@ export default function SearchPage() {
           <button disabled={loading || query.trim().length < 2} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] disabled:opacity-50">{loading ? <LoaderCircle className="animate-spin" size={17}/> : t("Search")}</button>
         </form>
         <div className="mt-4 flex flex-wrap gap-2">
-          {(["all","tracks","artists"] as const).map((value) => <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`rounded-full px-4 py-2 text-xs transition ${kind === value ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-300 hover:bg-white/5"}`}>{value === "all" ? t("All results") : value === "tracks" ? t("Tracks") : t("Artists")}</button>)}
+          {(["all","tracks","artists"] as const).map((value) => <button key={value} type="button" onClick={() => { setKind(value); if (query.trim().length >= 2) void runSearch(query, value); }} aria-pressed={kind === value} className={`rounded-full px-4 py-2 text-xs transition ${kind === value ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-300 hover:bg-white/5"}`}>{value === "all" ? t("All results") : value === "tracks" ? t("Tracks") : t("Artists")}</button>)}
         </div>
       </section>
 
