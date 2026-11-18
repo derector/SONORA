@@ -65,10 +65,12 @@ class PlaybackService : MediaSessionService() {
             return
         }
         val items = JSONArray()
+        var savedCurrentIndex = -1
         for (index in 0 until player.mediaItemCount) {
             val item = player.getMediaItemAt(index)
             val uri = item.localConfiguration?.uri?.toString().orEmpty()
             if (item.mediaId.isBlank() || uri.isBlank()) continue
+            val savedIndex = items.length()
             val metadata = item.mediaMetadata
             items.put(JSONObject()
                 .put("mediaId", item.mediaId)
@@ -77,12 +79,13 @@ class PlaybackService : MediaSessionService() {
                 .put("artist", metadata.artist?.toString().orEmpty())
                 .put("album", metadata.albumTitle?.toString().orEmpty())
                 .put("artwork", metadata.artworkUri?.toString().orEmpty()))
+            if (index == player.currentMediaItemIndex) savedCurrentIndex = savedIndex
         }
         if (items.length() == 0) {
             preferences.edit().remove("snapshot").apply()
             return
         }
-        val index = player.currentMediaItemIndex.coerceIn(0, items.length() - 1)
+        val index = savedCurrentIndex.coerceIn(0, items.length() - 1)
         val snapshot = JSONObject()
             .put("items", items)
             .put("index", index)
