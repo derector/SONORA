@@ -83,7 +83,7 @@ export default function SearchPage() {
     let active = true;
     fetch(`${API}/api/v1/provider-favorites`, { credentials: "include", headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (response) => response.ok ? response.json() as Promise<{ items?: Array<{ provider_track_id?: string }> }> : null)
-      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => item.provider_track_id).filter(Boolean))); })
+      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => String(item.provider_track_id ?? "")).filter((id) => id.length > 0))); })
       .catch(() => undefined);
     return () => { active = false; };
   }, [accessToken]);
