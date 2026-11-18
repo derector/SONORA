@@ -124,9 +124,10 @@ export default function DiscoverPage() {
         <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent releases from open music catalogs. Tracks play from their original provider, with creator attribution and access restrictions preserved.")}</p>
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
-          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} aria-label={t("Search tracks, artists or moods")} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
+          <button disabled={loading || query.trim().length < 2} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
+        {query.trim().length === 1 && <p className="mt-2 px-2 text-xs text-slate-400" role="status">{t("Enter at least 2 characters to search.")}</p>}
       </section>
 
       <div className="mt-9 flex flex-wrap items-end justify-between gap-4">
