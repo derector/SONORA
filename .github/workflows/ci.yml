@@ -17,5 +17,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: npm run test:recommendations --workspace @sonora/api
       - run: npm run typecheck
       - run: npm run build
