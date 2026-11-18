@@ -10,6 +10,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 object SonoraApi {
     private const val BASE = "https://sonora-web-api-production.up.railway.app"
@@ -198,17 +202,20 @@ object SonoraApi {
         return resolved
     }
 
-    fun getJamendoFavoriteTracks(): List<Track> {
+    suspend fun getJamendoFavoriteTracks(): List<Track> {
         val ids = getJamendoFavoriteIds()
-        val resolved = mutableListOf<Track>()
-        for (id in ids) {
-            try {
-                val fresh = parseTracks(request("/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(id, "UTF-8")}").optJSONArray("items"))
-                    .firstOrNull { it.providerTrackId == id && it.playable }
-                if (fresh != null) resolved += fresh
-            } catch (_: Exception) { }
+        return coroutineScope {
+            ids.map { id ->
+                async(Dispatchers.IO) {
+                    try {
+                        parseTracks(request("/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(id, "UTF-8")}").optJSONArray("items"))
+                            .firstOrNull { it.providerTrackId == id && it.playable }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
         }
-        return resolved
     }
 
     fun getJamendoFavoriteIds(): Set<String> {
