@@ -284,6 +284,8 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val workInfo = workInfos.firstOrNull()
     val workState = workInfo?.state
     val progress = workInfo?.progress?.getInt("progress", -1) ?: -1
+    val offlineTracks by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
+    val isDownloaded = offlineTracks.any { it.id == track.id }
     val isDownloading = workState == WorkInfo.State.ENQUEUED ||
         workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.BLOCKED
 
@@ -315,7 +317,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
                 Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
             } else if (workState == WorkInfo.State.FAILED) {
                 Text("Не удалось скачать. Нажми повторить.", color = Color(0xFFFF9A8D), fontSize = 10.sp)
-            } else if (workState == WorkInfo.State.SUCCEEDED) {
+            } else if (isDownloaded) {
                 Text("Сохранено офлайн", color = Lime, fontSize = 10.sp)
             }
         }
@@ -324,7 +326,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
                 isDownloading -> IconButton(onClick = { workManager.cancelUniqueWork(workName) }) {
                     Icon(Icons.Default.Close, "Отменить загрузку", tint = Color(0xFFFF9A8D))
                 }
-                workState == WorkInfo.State.SUCCEEDED -> Icon(Icons.Default.CheckCircle, "Сохранено офлайн", tint = Lime, modifier = Modifier.padding(12.dp))
+                isDownloaded -> Icon(Icons.Default.CheckCircle, "Сохранено офлайн", tint = Lime, modifier = Modifier.padding(12.dp))
                 else -> IconButton(onClick = {
                     if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
