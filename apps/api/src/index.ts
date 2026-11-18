@@ -713,7 +713,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
         album_name: track.album?.playlist_name ?? null, duration_seconds: track.duration ?? null,
         artwork_url: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         license_url: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        source_url: track.permalink ?? "https://audius.co", position: (last?.position ?? -1) + 1
+        source_url: audiusSourceUrl(track.permalink, track.user?.handle), position: (last?.position ?? -1) + 1
       });
       if (error) return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
       return reply.code(201).send({ ok: true, provider: "audius", providerTrackId: track.id });
@@ -735,12 +735,16 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
-    const payload = await response.json() as { results?: Array<{
+    const payload = await response.json() as { headers?: { status?: string; error_message?: string }; results?: Array<{
       id: string; name: string; duration: number; artist_name: string;
       album_name?: string; image?: string; album_image?: string; audio?: string;
       license_ccurl?: string; shareurl?: string;
     }> };
-    const track = payload.results?.[0];
+    if (payload.headers?.status && payload.headers.status !== "success") {
+      return reply.code(502).send(authError(502, payload.headers.error_message || "Jamendo rejected the request."));
+    }
+    if (!Array.isArray(payload.results)) return reply.code(502).send(authError(502, "Jamendo returned an invalid response."));
+    const track = payload.results[0];
     if (!track || track.id !== providerTrackId || !track.audio) {
       return reply.code(404).send(authError(404, "This track is not available for playback."));
     }
@@ -974,12 +978,16 @@ app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", a
       headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
     });
     if (!response.ok) return reply.code(502).send(authError(502, "Jamendo could not verify this track."));
-    const payload = await response.json() as { results?: Array<{
+    const payload = await response.json() as { headers?: { status?: string; error_message?: string }; results?: Array<{
       id: string; name: string; duration: number; artist_name: string;
       album_name?: string; image?: string; album_image?: string; audio?: string;
       license_ccurl?: string; shareurl?: string;
     }> };
-    const track = payload.results?.[0];
+    if (payload.headers?.status && payload.headers.status !== "success") {
+      return reply.code(502).send(authError(502, payload.headers.error_message || "Jamendo rejected the request."));
+    }
+    if (!Array.isArray(payload.results)) return reply.code(502).send(authError(502, "Jamendo returned an invalid response."));
+    const track = payload.results[0];
     if (!track || track.id !== providerTrackId || !track.audio) {
       return reply.code(404).send(authError(404, "This track is not available from Jamendo."));
     }
@@ -1061,7 +1069,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
       return reply.code(502).send(authError(502, "Music provider is temporarily unavailable."));
     }
     const payload = await response.json() as {
-      headers?: { status?: string; results_count?: number };
+      headers?: { status?: string; error_message?: string; results_count?: number };
       results?: Array<{
         id: string; name: string; duration: number; artist_name: string;
         album_name?: string; image?: string; album_image?: string;
@@ -1069,7 +1077,11 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
         shareurl?: string; releasedate?: string;
       }>;
     };
-    const items = (payload.results ?? []).flatMap((track) => {
+    if (payload.headers?.status && payload.headers.status !== "success") {
+      return reply.code(502).send(authError(502, payload.headers.error_message || "Jamendo rejected the catalog request."));
+    }
+    if (!Array.isArray(payload.results)) return reply.code(502).send(authError(502, "Jamendo returned an invalid catalog response."));
+    const items = payload.results.flatMap((track) => {
       const licenseUrl = track.license_ccurl ?? "";
       const normalizedLicenseUrl = licenseUrl.toLowerCase()
         .replace("http://creativecommons.org/", "")
@@ -1142,7 +1154,7 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
         artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
         licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+        sourceUrl: audiusSourceUrl(track.permalink, track.user?.handle), provider: "Audius", playable: true
       }];
     });
     return { provider: "Audius", sort, items, sourceCount: records.length };
@@ -1179,11 +1191,13 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         });
         const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, { signal: AbortSignal.timeout(9000) });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { results?: Array<{
+        const payload = await response.json() as { headers?: { status?: string; error_message?: string }; results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
           image?: string; album_image?: string; audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string; shareurl?: string;
         }> };
-        for (const track of payload.results ?? []) {
+        if (payload.headers?.status && payload.headers.status !== "success") throw new Error(payload.headers.error_message || "Jamendo rejected the search request.");
+        if (!Array.isArray(payload.results)) throw new Error("Jamendo returned an invalid search response.");
+        for (const track of payload.results) {
           const licenseUrl = track.license_ccurl ?? "";
           const normalized = licenseUrl.toLowerCase().replace(/^https?:\/\/(www\.)?creativecommons\.org\//, "");
           const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
@@ -1218,7 +1232,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         for (const track of payload.data ?? []) {
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
-          const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
+          const sourceUrl = audiusSourceUrl(track.permalink, track.user?.handle);
           const streamable = track.is_streamable === true && track.is_stream_gated !== true;
           tracks.push({
             id: `audius:${track.id}`, providerTrackId: track.id, provider: "Audius",
@@ -1247,7 +1261,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
           releases?: Array<{ title?: string }>;
         }> };
-        for (const item of payload.recordings ?? []) {
+        if (!Array.isArray(payload.recordings)) throw new Error("MusicBrainz returned an invalid recording response.");
+        for (const item of payload.recordings) {
           metadata.push({
             id: item.id, provider: "MusicBrainz", title: item.title,
             artist: (item["artist-credit"] ?? []).map((credit) => credit.name ?? credit.artist?.name ?? "").filter(Boolean).join(" "),
@@ -1299,7 +1314,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           const payload = await response.json() as { artists?: Array<{
             id: string; name: string; country?: string; disambiguation?: string; type?: string;
           }> };
-          for (const artist of payload.artists ?? []) {
+          if (!Array.isArray(payload.artists)) throw new Error("MusicBrainz returned an invalid artist response.");
+          for (const artist of payload.artists) {
             if (!artist.id || !artist.name) continue;
             artists.push({
               id: `musicbrainz-artist:${artist.id}`, provider: "MusicBrainz", name: artist.name,
