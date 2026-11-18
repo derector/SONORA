@@ -10,7 +10,8 @@ type Track = {
   artworkUrl: string | null; audioUrl: string; licenseUrl: string; sourceUrl: string; provider: string;
 };
 type Candidate = Track;
-type ImportRow = { key: string; title: string; artist: string; candidates: Candidate[]; selectedId: string; imported: boolean; error?: string };
+type ParsedTrack = { title: string; artist: string; album?: string };
+type ImportRow = { key: string; title: string; artist: string; album?: string; candidates: Candidate[]; selectedId: string; imported: boolean; error?: string };
 type ApiResult = { items?: Track[]; error?: string; session?: { access_token?: string } };
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -28,8 +29,44 @@ function parseCsvLine(line: string): string[] {
   values.push(current.trim());
   return values;
 }
-function parseRows(raw: string): { title: string; artist: string }[] {
-  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+function parseRows(raw: string): ParsedTrack[] {
+  const input = raw.trim();
+  if (!input) return [];
+  if (input.startsWith("{") || input.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(input);
+      const found: ParsedTrack[] = [];
+      const seen = new Set<string>();
+      const getText = (value: unknown): string => typeof value === "string" ? value.trim() : "";
+      const artistText = (value: unknown): string => {
+        if (typeof value === "string") return value.trim();
+        if (Array.isArray(value)) return value.map((entry) => typeof entry === "string" ? entry : entry && typeof entry === "object" ? getText((entry as Record<string, unknown>).name) : "").filter(Boolean).join(", ");
+        if (value && typeof value === "object") {
+          const obj = value as Record<string, unknown>;
+          if (Array.isArray(obj.items)) return artistText(obj.items);
+          return getText(obj.name) || getText(obj.artistName);
+        }
+        return "";
+      };
+      const visit = (value: unknown, depth = 0) => {
+        if (depth > 7 || value == null) return;
+        if (Array.isArray(value)) { for (const item of value) visit(item, depth + 1); return; }
+        if (typeof value !== "object") return;
+        const obj = value as Record<string, unknown>;
+        const title = getText(obj.trackName) || getText(obj.name) || getText(obj.title) || getText(obj.songName);
+        const artist = artistText(obj.artistName ?? obj.artists ?? obj.artist ?? obj.performer);
+        const album = getText(obj.albumName) || getText(obj.collectionName) || (typeof obj.album === "string" ? getText(obj.album) : artistText(obj.album));
+        if (title && artist) {
+          const key = (title + "|" + artist).toLocaleLowerCase();
+          if (!seen.has(key)) { seen.add(key); found.push({ title, artist, album: album || undefined }); }
+        }
+        for (const [key, child] of Object.entries(obj)) if (["tracks","items","track","playlist","songs","entries","data"].includes(key.toLowerCase())) visit(child, depth + 1);
+      };
+      visit(parsed);
+      if (found.length) return found;
+    } catch { /* Invalid JSON falls back to CSV/text parsing. */ }
+  }
+  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
   const header = parseCsvLine(lines[0]).map((v) => v.toLowerCase().replace(/[^a-z]/g, ""));
   const titleIndex = header.findIndex((v) => ["trackname", "track", "title", "song", "songname"].includes(v));
@@ -38,15 +75,15 @@ function parseRows(raw: string): { title: string; artist: string }[] {
   if (titleIndex >= 0) {
     return lines.slice(1).map((line) => {
       const cells = parseCsvLine(line);
-      const title = cells[titleIndex] || "";
-      const artist = artistIndex >= 0 ? cells[artistIndex] || "" : "";
-      return { title: title.trim(), artist: artist.trim() };
+      return { title: (cells[titleIndex] || "").trim(), artist: (artistIndex >= 0 ? cells[artistIndex] || "" : "").trim(), album: (albumIndex >= 0 ? cells[albumIndex] || "" : "").trim() || undefined };
     }).filter((row) => row.title);
   }
   return lines.map((line) => {
     const cleaned = line.replace(/https?:\/\/\S+/gi, "").replace(/^[-*•\s]+/, "").trim();
     const split = cleaned.split(/\s+[–—-]\s+/, 2);
     if (split.length === 2) return { artist: split[0].trim(), title: split[1].trim() };
+    const cells = parseCsvLine(line);
+    if (cells.length >= 2) return { title: cells[0].trim(), artist: cells[1].trim(), album: cells[2]?.trim() || undefined };
     return { artist: "", title: cleaned };
   }).filter((row) => row.title && !/^https?:/i.test(row.title));
 }
@@ -86,13 +123,13 @@ export default function ImportPage() {
         const batch = parsed.slice(offset, offset + 5);
         const results = await Promise.all(batch.map(async (item, localIndex): Promise<ImportRow> => {
           const index = offset + localIndex;
-          const q = [item.title, item.artist].filter(Boolean).join(" ");
+          const q = [item.title, item.artist, item.album].filter(Boolean).join(" ");
           try {
             const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${new URLSearchParams({ q, limit: "5" })}`);
             const result = await response.json() as ApiResult;
             if (!response.ok) throw new Error(result.error || t("Search failed."));
             const candidates = result.items ?? [];
-            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates, selectedId: candidates[0]?.id ?? "", imported: false, error: candidates.length ? undefined : t("No licensed match found.") };
+            return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, album: item.album, candidates, selectedId: candidates[0]?.id ?? "", imported: false, error: candidates.length ? undefined : t("No licensed match found.") };
           } catch (err) {
             return { key: `${index}-${item.title}`, title: item.title, artist: item.artist, candidates: [], selectedId: "", imported: false, error: err instanceof Error ? err.message : t("Search failed.") };
           }
@@ -174,7 +211,7 @@ export default function ImportPage() {
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Import review")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Choose your matches")}</h2></div><button type="button" onClick={() => void importSelected()} disabled={saving || !rows.some((row) => row.selectedId && !row.imported)} className="inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <Check size={16}/>} {t("Import selected")}</button></div>
             <div className="space-y-3">
               {rows.map((row) => <article key={row.key} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || source}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error && !row.candidates.length ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || source}{row.album ? " · " + row.album : ""}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error && !row.candidates.length ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
                 {row.candidates.length > 0 && <div className="mt-3 grid gap-2">
                   {row.candidates.map((candidate) => <label key={candidate.id} className={"flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 " + (row.selectedId === candidate.id ? "border-violet-300/40 bg-violet-300/10" : "border-white/5 bg-black/10")}>
                     <input type="radio" name={row.key} checked={row.selectedId === candidate.id} disabled={row.imported} onChange={() => setRows((items) => items.map((item) => item.key === row.key ? { ...item, selectedId: candidate.id } : item))} className="accent-violet-300"/>
