@@ -221,7 +221,15 @@ private fun SonoraApp() {
                         onVerify = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.verifyOtp(email, code) }; authStep = "signed"; message = "Вход выполнен" } catch (e: Exception) { message = e.message ?: "Неверный код" }; busy = false }
                         },
-                        onLogout = { SonoraApi.logout(); authStep = "welcome"; message = "Вы вышли из аккаунта" }
+                        onLogout = {
+                            scope.launch {
+                                busy = true
+                                withContext(Dispatchers.IO) { SonoraApi.logout() }
+                                authStep = "welcome"
+                                message = "Вы вышли из аккаунта"
+                                busy = false
+                            }
+                        }
                     )
                     else -> FullPlayer(current, activeQueue, controller, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
                 }
