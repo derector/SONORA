@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -465,9 +466,18 @@ private fun LibraryScreen(
     var playlists by remember { mutableStateOf<List<SonoraApi.Playlist>>(emptyList()) }
     var selected by remember { mutableStateOf<SonoraApi.Playlist?>(null) }
     var playlistTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var favoriteTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var title by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+
+    fun refreshFavorites() {
+        scope.launch {
+            try {
+                favoriteTracks = withContext(Dispatchers.IO) { SonoraApi.getJamendoFavoriteTracks() }
+            } catch (e: Exception) { error = e.message ?: "Не удалось загрузить избранное" }
+        }
+    }
 
     fun refreshPlaylists() {
         scope.launch {
@@ -481,14 +491,14 @@ private fun LibraryScreen(
     }
 
     LaunchedEffect(signedIn) {
-        if (signedIn) refreshPlaylists()
-        else { playlists = emptyList(); selected = null; playlistTracks = emptyList() }
+        if (signedIn) { refreshPlaylists(); refreshFavorites() }
+        else { playlists = emptyList(); selected = null; playlistTracks = emptyList(); favoriteTracks = emptyList() }
     }
 
     Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Медиатека", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (signedIn) IconButton(onClick = { refreshPlaylists() }, enabled = !busy) {
+            if (signedIn) IconButton(onClick = { refreshPlaylists(); refreshFavorites() }, enabled = !busy) {
                 Icon(Icons.Default.Refresh, "Обновить", tint = Lime)
             }
         }
@@ -496,6 +506,34 @@ private fun LibraryScreen(
             Text("Войди, чтобы синхронизировать плейлисты между сайтом и приложением.", color = Muted)
             Button(onClick = openProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Войти в SONORA") }
         } else {
+            Text("Избранное", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+            if (favoriteTracks.isEmpty()) {
+                Text("Добавляй треки сердечком в поиске, они появятся здесь.", color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+            } else {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
+                    items(favoriteTracks, key = { "favorite-" + it.providerTrackId }) { track ->
+                        Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.width(220.dp)) {
+                            Column(Modifier.padding(12.dp)) {
+                                AsyncImage(track.artworkUrl, null, Modifier.fillMaxWidth().height(115.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                                Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { play(track) }) { Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = Lime) }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            try {
+                                                withContext(Dispatchers.IO) { SonoraApi.removeJamendoFavorite(track.providerTrackId) }
+                                                favoriteTracks = favoriteTracks.filterNot { it.providerTrackId == track.providerTrackId }
+                                                error = ""
+                                            } catch (e: Exception) { error = e.message ?: "Не удалось удалить из избранного" }
+                                        }
+                                    }) { Icon(Icons.Default.Favorite, "Убрать из избранного", tint = Color(0xFFFF6B86)) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = title, onValueChange = { title = it.take(80) },
                 modifier = Modifier.fillMaxWidth(),
