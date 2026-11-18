@@ -77,7 +77,7 @@ app.addHook("preHandler", async (request, reply) => {
   if (!validEmail(email)) return;
   const emailHash = createHash("sha256").update(email).digest("hex");
   const isVerify = route === "/api/v1/auth/verify";
-  const result = consumeRateLimit(`${isVerify ? "auth-verify-email" : "auth-otp-email"}:${emailHash`, isVerify ? 8 : 5, 15 * 60_000);
+  const result = consumeRateLimit(`${isVerify ? "auth-verify-email" : "auth-otp-email"}:${emailHash}`, isVerify ? 8 : 5, 15 * 60_000);
   if (!result.allowed) return rateLimitReply(reply, result, isVerify ? 8 : 5);
   rateLimitReply(reply, result, isVerify ? 8 : 5);
 });
