@@ -15,6 +15,7 @@ import app.sonora.android.data.OfflineTrack
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -26,7 +27,8 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val url = inputData.getString("url") ?: return@withContext Result.failure()
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val provider = inputData.getString("provider") ?: return@withContext Result.failure()
-        if (provider != "Jamendo" || !url.startsWith("https://")) return@withContext Result.failure()
+        val providerName = provider.trim().lowercase().replaceFirstChar { it.titlecase() }
+        if (!provider.equals("Jamendo", ignoreCase = true) || !isJamendoHost(url)) return@withContext Result.failure()
 
         val directory = File(applicationContext.filesDir, "offline")
         if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
@@ -47,21 +49,25 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     .header("Accept", "audio/*,application/octet-stream;q=0.9")
                     .build()
             ).execute().use { response ->
+                // Reject redirects to hosts outside the Jamendo domain.
+                if (!isJamendoHost(response.request.url.toString())) return@withContext Result.failure()
                 if (!response.isSuccessful) {
                     return@withContext if (response.code >= 500 || response.code == 429 || response.code == 408) Result.retry() else Result.failure()
                 }
                 val body = response.body ?: return@withContext Result.failure()
                 val contentType = response.header("Content-Type").orEmpty().lowercase()
-                if (contentType.startsWith("text/") || contentType.contains("application/json") || contentType.contains("text/html")) {
+                if (contentType.startsWith("text/") || contentType.contains("application/json") || contentType.contains("text/html") ||
+                    (contentType.isNotBlank() && !contentType.startsWith("audio/") && contentType != "application/octet-stream")) {
                     return@withContext Result.failure()
                 }
                 partialFile.delete()
                 body.byteStream().use { input ->
                     partialFile.outputStream().use { output -> input.copyTo(output) }
                 }
-                if (!partialFile.exists() || partialFile.length() <= 0L) {
+                if (!partialFile.exists() || partialFile.length() <= 0L ||
+                    (contentType == "application/octet-stream" && !looksLikeAudio(partialFile))) {
                     partialFile.delete()
-                    return@withContext Result.retry()
+                    return@withContext Result.failure()
                 }
 
                 backupFile.delete()
@@ -83,7 +89,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                     artworkUrl = inputData.getString("artwork"),
                     localPath = finalFile.absolutePath,
                     durationSeconds = inputData.getInt("duration", 0),
-                    provider = provider
+                    provider = providerName
                 )
                 OfflineDatabase.get(applicationContext).offlineTracks().insert(metadata)
                 backupFile.delete()
@@ -101,6 +107,21 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             if (backupFile.exists() && !finalFile.exists()) backupFile.renameTo(finalFile)
             Result.retry()
         }
+    }
+
+    private fun isJamendoHost(rawUrl: String): Boolean {
+        val host = rawUrl.toHttpUrlOrNull()?.host?.lowercase() ?: return false
+        return host == "jamendo.com" || host.endsWith(".jamendo.com")
+    }
+
+    private fun looksLikeAudio(file: File): Boolean {
+        val header = ByteArray(12)
+        val count = file.inputStream().use { it.read(header) }
+        if (count < 4) return false
+        val text = header.take(4).toByteArray().toString(Charsets.US_ASCII)
+        if (text == "ID3" || text == "OggS" || text == "fLaC" || text == "RIFF" || text == "ftyp") return true
+        // MPEG audio frame sync or AAC ADTS sync.
+        return header[0] == 0xff.toByte() && (header[1].toInt() and 0xe0) == 0xe0
     }
 
     private fun stableFileKey(provider: String, trackId: String): String {
