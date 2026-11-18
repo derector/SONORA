@@ -132,6 +132,20 @@ function authError(statusCode: number, message: string) {
   return { statusCode, error: message };
 }
 
+function isJamendoHttpsUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 2_048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && (url.hostname === "jamendo.com" || url.hostname.endsWith(".jamendo.com"));
+  } catch {
+    return false;
+  }
+}
+
+function jamendoSourceUrl(value: unknown, trackId: string): string {
+  return isJamendoHttpsUrl(value) ? value : `https://www.jamendo.com/track/${encodeURIComponent(trackId)}`;
+}
+
 function audiusSourceUrl(permalink: unknown, handle?: string): string {
   const fallback = handle ? `https://audius.co/${encodeURIComponent(handle)}` : "https://audius.co";
   if (typeof permalink !== "string" || !permalink.trim()) return fallback;
@@ -774,7 +788,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
       playlist_id: playlist.id, provider: "jamendo", provider_track_id: track.id,
       title: track.name, artist_name: track.artist_name, album_name: track.album_name ?? null,
       duration_seconds: track.duration, artwork_url: track.album_image ?? track.image ?? null,
-      license_url: licenseUrl, source_url: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+      license_url: licenseUrl, source_url: jamendoSourceUrl(track.shareurl, track.id),
       position: (last?.position ?? -1) + 1
     });
     if (error) {
@@ -1106,7 +1120,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
       // NC licenses are allowed; unknown licenses are always rejected.
       // Commercial API approval does not override a track's NC license.
       const licenseAllowed = isKnownCcLicense && (nonCommercialMode || !isNonCommercialLicense);
-      if (!licenseAllowed || !track.audio || !track.id) return [];
+      if (!licenseAllowed || !isJamendoHttpsUrl(track.audio) || !track.id) return [];
       return [{
         id: track.id,
         title: track.name,
@@ -1114,10 +1128,10 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
         album: track.album_name ?? null,
         durationSeconds: track.duration,
         artworkUrl: track.album_image ?? track.image ?? null,
-        audioUrl: track.audio,
-        downloadUrl: track.audiodownload_allowed === true ? track.audiodownload ?? null : null,
+        audioUrl: isJamendoHttpsUrl(track.audio) ? track.audio : null,
+        downloadUrl: track.audiodownload_allowed === true && isJamendoHttpsUrl(track.audiodownload) ? track.audiodownload : null,
         licenseUrl,
-        sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+        sourceUrl: jamendoSourceUrl(track.shareurl, track.id),
         provider: "Jamendo"
       }];
     });
@@ -1212,12 +1226,12 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           const normalized = licenseUrl.toLowerCase().replace(/^https?:\/\/(www\.)?creativecommons\.org\//, "");
           const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
           const known = normalized.startsWith("publicdomain/zero/") || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
-          if (!known || !track.audio || !track.id) continue;
+          if (!known || !isJamendoHttpsUrl(track.audio) || !track.id) continue;
           tracks.push({
             id: `jamendo:${track.id}`, providerTrackId: track.id, provider: "Jamendo",
             title: track.name, artist: track.artist_name, album: track.album_name ?? null,
             durationSeconds: track.duration, artworkUrl: track.album_image ?? track.image ?? null,
-            audioUrl: track.audio, downloadUrl: track.audiodownload_allowed === true ? track.audiodownload ?? null : null, licenseUrl, sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
+            audioUrl: isJamendoHttpsUrl(track.audio) ? track.audio : null, downloadUrl: track.audiodownload_allowed === true && isJamendoHttpsUrl(track.audiodownload) ? track.audiodownload : null, licenseUrl, sourceUrl: jamendoSourceUrl(track.shareurl, track.id),
             playable: true, rightsLabel: "Creative Commons"
           });
         }
