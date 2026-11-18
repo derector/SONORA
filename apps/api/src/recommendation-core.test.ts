@@ -35,4 +35,15 @@ describe("rankRecommendations", () => {
     assert.ok(result.length <= 50);
     assert.ok(result.filter((track) => track.artist === "Same").length <= 2);
   });
+
+  it("returns no recommendations when the requested limit is zero", () => {
+    const result = rankRecommendations([
+      { id: "a", title: "Track A", artist: "Artist A" }
+    ], [], 0);
+    assert.deepEqual(result, []);
+  });
+
+  it("returns an empty result for an empty catalog", () => {
+    assert.deepEqual(rankRecommendations([], [], 20), []);
+  });
 });
