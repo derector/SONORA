@@ -1,9 +1,87 @@
 import Fastify from "fastify";
+import { createHash } from "node:crypto";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
+type RateBucket = { count: number; expiresAt: number };
+const rateBuckets = new Map<string, RateBucket>();
+let rateCleanupCounter = 0;
+
+function consumeRateLimit(key: string, limit: number, windowMs: number, now = Date.now()) {
+  let bucket = rateBuckets.get(key);
+  if (!bucket || bucket.expiresAt <= now) {
+    bucket = { count: 0, expiresAt: now + windowMs };
+    rateBuckets.set(key, bucket);
+  }
+  bucket.count += 1;
+  if (++rateCleanupCounter % 500 === 0 || rateBuckets.size > 20_000) {
+    for (const [bucketKey, entry] of rateBuckets) {
+      if (entry.expiresAt <= now) rateBuckets.delete(bucketKey);
+    }
+  }
+  return {
+    allowed: bucket.count <= limit,
+    remaining: Math.max(0, limit - bucket.count),
+    expiresAt: bucket.expiresAt
+  };
+}
+
+function rateLimitReply(reply: any, result: ReturnType<typeof consumeRateLimit>, limit: number) {
+  const retrySeconds = Math.max(1, Math.ceil((result.expiresAt - Date.now()) / 1000));
+  reply.header("RateLimit-Limit", limit)
+    .header("RateLimit-Remaining", result.remaining)
+    .header("RateLimit-Reset", Math.ceil(result.expiresAt / 1000));
+  if (!result.allowed) {
+    reply.header("Retry-After", retrySeconds);
+    return reply.code(429).send(authError(429, "Too many requests. Please wait before trying again."));
+  }
+}
+
+app.addHook("onRequest", async (request, reply) => {
+  const now = Date.now();
+  const ip = request.ip || "unknown";
+  const globalLimit = consumeRateLimit(`global:${ip}`, 240, 60_000, now);
+  if (!globalLimit.allowed) return rateLimitReply(reply, globalLimit, 240);
+
+  const route = request.routeOptions.url ?? request.url.split("?")[0];
+  let limit = 120;
+  let windowMs = 60_000;
+  let bucketName = `route:${route}`;
+
+  if (route === "/api/v1/auth/register" || route === "/api/v1/auth/login") {
+    limit = 5; windowMs = 15 * 60_000; bucketName = "auth-otp";
+  } else if (route === "/api/v1/auth/verify") {
+    limit = 8; windowMs = 15 * 60_000; bucketName = "auth-verify";
+  } else if (route === "/api/v1/auth/refresh") {
+    limit = 30; windowMs = 60_000; bucketName = "auth-refresh";
+  } else if (route === "/api/v1/search/music" || route === "/api/v1/catalog/search") {
+    limit = 30; windowMs = 60_000; bucketName = "search";
+  } else if (route.startsWith("/api/v1/providers/")) {
+    limit = 60; windowMs = 60_000; bucketName = "providers";
+  } else if (route.startsWith("/api/v1/import")) {
+    limit = 15; windowMs = 10 * 60_000; bucketName = "imports";
+  }
+
+  const result = consumeRateLimit(`${bucketName}:${ip}`, limit, windowMs, now);
+  if (!result.allowed) return rateLimitReply(reply, result, limit);
+  rateLimitReply(reply, result, limit);
+});
+
+app.addHook("preHandler", async (request, reply) => {
+  const route = request.routeOptions.url ?? request.url.split("?")[0];
+  if (route !== "/api/v1/auth/register" && route !== "/api/v1/auth/login" && route !== "/api/v1/auth/verify") return;
+  const body = request.body as { email?: unknown } | undefined;
+  const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!validEmail(email)) return;
+  const emailHash = createHash("sha256").update(email).digest("hex");
+  const isVerify = route === "/api/v1/auth/verify";
+  const result = consumeRateLimit(`${isVerify ? "auth-verify-email" : "auth-otp-email"}:${emailHash`, isVerify ? 8 : 5, 15 * 60_000);
+  if (!result.allowed) return rateLimitReply(reply, result, isVerify ? 8 : 5);
+  rateLimitReply(reply, result, isVerify ? 8 : 5);
+});
+
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
 const supabaseUrl = process.env.SUPABASE_URL;
