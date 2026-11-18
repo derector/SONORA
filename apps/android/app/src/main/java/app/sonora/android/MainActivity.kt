@@ -470,6 +470,8 @@ private fun LibraryScreen(
     var title by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var favoriteMenuTrackId by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf("") }
 
     fun refreshFavorites() {
         scope.launch {
@@ -519,11 +521,39 @@ private fun LibraryScreen(
                                 Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     IconButton(onClick = { play(track) }) { Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = Lime) }
+                                    IconButton(onClick = { favoriteMenuTrackId = track.providerTrackId }) {
+                                        Icon(Icons.Default.QueueMusic, "Добавить в плейлист", tint = Muted)
+                                    }
+                                    DropdownMenu(
+                                        expanded = favoriteMenuTrackId == track.providerTrackId,
+                                        onDismissRequest = { favoriteMenuTrackId = null }
+                                    ) {
+                                        if (playlists.isEmpty()) {
+                                            DropdownMenuItem(text = { Text("Сначала создай плейлист") }, onClick = { favoriteMenuTrackId = null })
+                                        } else {
+                                            playlists.forEach { playlist ->
+                                                DropdownMenuItem(
+                                                    text = { Text(playlist.title) },
+                                                    onClick = {
+                                                        favoriteMenuTrackId = null
+                                                        scope.launch {
+                                                            try {
+                                                                withContext(Dispatchers.IO) { SonoraApi.addTrackToPlaylist(playlist.id, track) }
+                                                                notice = "Добавлено в «${playlist.title}»"
+                                                                error = ""
+                                                            } catch (e: Exception) { error = e.message ?: "Не удалось добавить в плейлист" }
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
                                     IconButton(onClick = {
                                         scope.launch {
                                             try {
                                                 withContext(Dispatchers.IO) { SonoraApi.removeJamendoFavorite(track.providerTrackId) }
                                                 favoriteTracks = favoriteTracks.filterNot { it.providerTrackId == track.providerTrackId }
+                                                notice = ""
                                                 error = ""
                                             } catch (e: Exception) { error = e.message ?: "Не удалось удалить из избранного" }
                                         }
@@ -644,6 +674,7 @@ private fun LibraryScreen(
                 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
+            if (notice.isNotBlank()) Text(notice, color = Lime, modifier = Modifier.padding(top = 8.dp))
             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9A8D), modifier = Modifier.padding(top = 8.dp))
         }
     }
