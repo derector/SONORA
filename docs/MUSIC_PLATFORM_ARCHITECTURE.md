@@ -71,7 +71,7 @@ Async calls, bounded pagination, caching, timeout/backoff, 429 handling, content
 No DRM removal, paywall bypass, protected stream extraction, private endpoint scraping, copied/intercepted auth tokens or cookies, client impersonation. Use official APIs, partner access, licensed/public-domain/open-license audio. Track attribution and license per item. Apply non-commercial restrictions where applicable. Verify open-source licenses and comply with copyleft/dependency notices.
 
 ## GitHub audit
-For each repository inspect license, activity, issues/security, APIs, auth, dependencies, secrets, Android compatibility and maintenance. Reuse patterns, not code blindly. Repositories for study: cromaguy/Rhythm, austinried/subtracks, ScnaNner/LightMusic, ozzt ec/kittytune, Ibnuananta/OpenTune, soupashh-ship-it/OmniTune, rsgarrido/sazanami, yuezhix/MiniSpotifyPlayer, dCataliNN/cadence, blazenxt/free-music-search-api.
+For each repository inspect license, activity, issues/security, APIs, auth, dependencies, secrets, Android compatibility and maintenance. Reuse patterns, not code blindly. Repositories for study: cromaguy/Rhythm, austinried/subtracks, ScnaNner/LightMusic, ozztec/kittytune, Ibnuananta/OpenTune, soupashh-ship-it/OmniTune, rsgarrido/sazanami, yuezhix/MiniSpotifyPlayer, dCataliNN/cadence, blazenxt/free-music-search-api.
 
 ## Priorities
 P0: auth/session, API health, Audius/Jamendo real playback/search, unified player, favorites, playlists, history, availability states, web/Android parity.
@@ -80,3 +80,32 @@ P2: official OAuth/catalog connections, provider embeds, MediaLibrary/Android Au
 
 ## Release gates
 Inspect exact branch and files, preserve existing functionality, commit, build web/API, deploy and verify production, build APK via Actions, inspect artifact/signature/package/version. Device QA must cover playback, background, notifications, sessions, downloads and offline. Separate build/signing/device test status. Never describe untested features as working.
+
+
+## Research report links and corrections
+
+Live probe: Internet Archive Advanced Search returned JSON records with identifier/title. Search result is not a playable file; item metadata and rights verification are mandatory. Live ccMixter query returned a JSON item with a ZIP archive of FLAC texture snippets, illustrating why file-type checks must precede playback. Avoid blindly treating archive bundles as tracks.
+
+
+Provider scan (agent research, 2026-11-18; official docs must be reconfirmed before integration):
+- Internet Archive: promising metadata/archive search, item-by-item rights and file verification required.
+- ccMixter: API records and CC attribution data; reject sample-pack archives.
+- FreePD: no confirmed API; scraping is fragile, do not implement scraper without permission/feed.
+- Musopen: token/API and per-recording rights need verification.
+- Freesound: sound effects/field recordings, not main music provider; keep separate SFX feature.
+- Mixkit: no reliable public API found; do not scrape.
+- Pixabay Music: public API does not confirm a usable music catalog endpoint.
+- Free Music Archive: API/hotlink restrictions, not a quick integration.
+- Radio Browser: live radio, distinct provider type from on-demand track catalog.
+
+References:
+- Android Media3 background playback: https://developer.android.com/media/media3/session/background-playback
+- Android Media3 player: https://developer.android.com/media/implement/playback-app
+- Spotify Android App Remote SDK: https://developer.spotify.com/documentation/android
+- Spotify playlist model: https://developer.spotify.com/documentation/web-api/concepts/playlists
+- Spotify recommendations: https://www.spotify.com/uk/safetyandprivacy/understanding-recommendations/plain
+- Apple Music API: https://developer.apple.com/documentation/applemusicapi
+- Spotify policy: https://developer.spotify.com/policy
+- Internet Archive: https://archive.org/advancedsearch.php
+- ccMixter: https://ccmixter.org/query-api
+- Freesound API: https://freesound.org/help/developers/
