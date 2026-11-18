@@ -66,7 +66,7 @@ function parseRows(raw: string): ParsedTrack[] {
       if (found.length) return found;
     } catch { /* Invalid JSON falls back to CSV/text parsing. */ }
   }
-  const lines = input.split(/\\r?\\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (!lines.length) return [];
   const header = parseCsvLine(lines[0]).map((v) => v.toLowerCase().replace(/[^a-z]/g, ""));
   const titleIndex = header.findIndex((v) => ["trackname", "track", "title", "song", "songname"].includes(v));
@@ -79,8 +79,8 @@ function parseRows(raw: string): ParsedTrack[] {
     }).filter((row) => row.title);
   }
   return lines.map((line) => {
-    const cleaned = line.replace(/https?:\\/\\/\\S+/gi, "").replace(/^[-*•\\s]+/, "").trim();
-    const split = cleaned.split(/\\s+[–—-]\\s+/, 2);
+    const cleaned = line.replace(/https?:\/\/\S+/gi, "").replace(/^[-*•\s]+/, "").trim();
+    const split = cleaned.split(/\s+[–—-]\s+/, 2);
     if (split.length === 2) return { artist: split[0].trim(), title: split[1].trim() };
     const cells = parseCsvLine(line);
     if (cells.length >= 2) return { title: cells[0].trim(), artist: cells[1].trim(), album: cells[2]?.trim() || undefined };
