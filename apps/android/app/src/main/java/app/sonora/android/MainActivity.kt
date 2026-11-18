@@ -111,6 +111,16 @@ private fun SonoraApp() {
             controller = withContext(Dispatchers.IO) {
                 MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
             }
+            controller?.let { mediaController ->
+                val restoredQueue = (0 until mediaController.mediaItemCount).mapNotNull { index ->
+                    trackFromMediaItem(mediaController.getMediaItemAt(index))
+                }
+                if (restoredQueue.isNotEmpty()) {
+                    activeQueue = restoredQueue
+                    current = restoredQueue.getOrNull(mediaController.currentMediaItemIndex)
+                    isPlaying = mediaController.isPlaying
+                }
+            }
         } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
         loadTracks("Audius") { tracks = it }
     }
@@ -623,6 +633,24 @@ private fun LibraryScreen(
             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9A8D), modifier = Modifier.padding(top = 8.dp))
         }
     }
+}
+
+private fun trackFromMediaItem(item: MediaItem): Track? {
+    val mediaId = item.mediaId
+    val separator = mediaId.indexOf(':')
+    if (separator <= 0 || separator == mediaId.lastIndex) return null
+    val uri = item.localConfiguration?.uri?.toString().orEmpty()
+    if (uri.isBlank()) return null
+    val metadata = item.mediaMetadata
+    val provider = mediaId.substring(0, separator)
+    val providerTrackId = mediaId.substring(separator + 1)
+    return Track(
+        id = mediaId, providerTrackId = providerTrackId, provider = provider,
+        title = metadata.title?.toString() ?: "Unknown track",
+        artist = metadata.artist?.toString() ?: "Unknown artist",
+        album = metadata.albumTitle?.toString(),
+        artworkUrl = metadata.artworkUri?.toString(), audioUrl = uri, playable = true
+    )
 }
 
 private fun safeOfflineFile(context: Context, path: String): File? = runCatching {
