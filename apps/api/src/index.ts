@@ -1189,7 +1189,22 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   return {
-    query: q, type, tracks: deduplicateCatalog([...tracks].sort((a, b) => (a.provider === "Audius" ? 0 : a.provider === "Jamendo" ? 1 : 2) - (b.provider === "Audius" ? 0 : b.provider === "Jamendo" ? 1 : 2)).map((track) => ({ ...track, title: String(track.title ?? ""), artist: String(track.artist ?? ""), durationMs: typeof track.durationSeconds === "number" ? track.durationSeconds * 1000 : null }))).slice(0, limit * 2).map((group) => ({ ...group.primary, duplicateCount: group.matches.length, catalogMatches: group.matches.map((match) => ({ provider: match.provider, title: match.title, artist: match.artist, sourceUrl: match.sourceUrl })) }), metadata: metadata.slice(0, limit),
+    query: q, type,
+    tracks: deduplicateCatalog(
+      [...tracks].sort((a, b) => {
+        const priority = (item: Record<string, unknown>) => item.provider === "Audius" ? 0 : item.provider === "Jamendo" ? 1 : 2;
+        return priority(a) - priority(b);
+      }).map((track) => ({
+        ...track, title: String(track.title ?? ""), artist: String(track.artist ?? ""),
+        durationMs: typeof track.durationSeconds === "number" ? track.durationSeconds * 1000 : null
+      }))
+    ).slice(0, limit * 2).map((group) => ({
+      ...group.primary, duplicateCount: group.matches.length,
+      catalogMatches: group.matches.map((match) => ({
+        provider: match.provider, title: match.title, artist: match.artist, sourceUrl: match.sourceUrl
+      }))
+    })),
+    metadata: metadata.slice(0, limit),
     artists: artists.slice(0, limit), providers
   };
 });
