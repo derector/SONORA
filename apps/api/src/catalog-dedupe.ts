@@ -1,4 +1,4 @@
-export type CatalogCandidate = { title?: string; artist?: string | string[]; durationMs?: number | null; isrc?: string | null; provider?: string; };
+export type CatalogCandidate = { title?: string; artist?: string | string[]; durationMs?: number | null; isrc?: string | null; provider?: string; [key: string]: unknown; };
 export type CatalogGroup<T extends CatalogCandidate> = { primary: T; matches: T[] };
 
 export function normalizeCatalogText(value: unknown): string {
