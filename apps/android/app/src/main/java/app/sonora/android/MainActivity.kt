@@ -276,32 +276,62 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 @Composable
 private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val context = LocalContext.current
+    val workManager = remember(context) { WorkManager.getInstance(context) }
+    val workName = "offline-" + track.canonicalKey
+    val workInfos by remember(workManager, workName) {
+        workManager.getWorkInfosForUniqueWorkFlow(workName)
+    }.collectAsState(initial = emptyList())
+    val workInfo = workInfos.firstOrNull()
+    val workState = workInfo?.state
+    val progress = workInfo?.progress?.getInt("progress", -1) ?: -1
+    val providerTrackId = track.providerTrackId.ifBlank { track.id }
+    val offlineTracks by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
+    val isDownloaded = offlineTracks.any { it.provider.equals(track.provider, ignoreCase = true) && it.id == providerTrackId }
+    val isDownloading = workState == WorkInfo.State.ENQUEUED || workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.BLOCKED
+
     val enqueueDownload = {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(workDataOf(
-                "url" to track.downloadUrl, "id" to track.providerTrackId.ifBlank { track.id },
+                "url" to track.downloadUrl, "id" to providerTrackId,
                 "provider" to track.provider, "title" to track.title,
                 "artist" to track.artist, "artwork" to track.artworkUrl,
-                "duration" to track.durationSeconds
+                "duration" to track.durationSeconds,
+                "downloadAllowed" to (track.downloadUrl != null),
+                "licenseUrl" to track.licenseUrl
             )).build()
-        WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.canonicalKey, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, request)
     }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) enqueueDownload()
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        enqueueDownload()
     }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (isDownloading) {
+                Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
+            } else if (workState == WorkInfo.State.FAILED) {
+                Text("Не удалось скачать. Нажми повторить.", color = Color(0xFFFF9A8D), fontSize = 10.sp)
+            } else if (isDownloaded) {
+                Text("Сохранено офлайн", color = Lime, fontSize = 10.sp)
+            }
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
-            IconButton(onClick = {
-                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else enqueueDownload()
-            }) { Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime) }
+            when {
+                isDownloading -> IconButton(onClick = { workManager.cancelUniqueWork(workName) }) {
+                    Icon(Icons.Default.Close, "Отменить загрузку", tint = Color(0xFFFF9A8D))
+                }
+                isDownloaded -> Icon(Icons.Default.CheckCircle, "Сохранено офлайн", tint = Lime, modifier = Modifier.padding(12.dp))
+                else -> IconButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else enqueueDownload()
+                }) {
+                    Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime)
+                }
+            }
         }
         IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
     }
