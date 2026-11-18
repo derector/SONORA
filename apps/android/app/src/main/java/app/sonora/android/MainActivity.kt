@@ -221,6 +221,8 @@ private fun SonoraApp() {
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
+                        favoriteIds = jamendoFavoriteIds,
+                        onFavoriteRemoved = { id -> jamendoFavoriteIds = jamendoFavoriteIds - id },
                         openProfile = { tab = "Профиль" },
                         play = ::play
                     )
@@ -459,6 +461,8 @@ private fun formatTime(milliseconds: Long): String {
 private fun LibraryScreen(
     signedIn: Boolean,
     currentTrack: Track?,
+    favoriteIds: Set<String>,
+    onFavoriteRemoved: (String) -> Unit,
     openProfile: () -> Unit,
     play: (Track) -> Unit
 ) {
@@ -553,6 +557,7 @@ private fun LibraryScreen(
                                             try {
                                                 withContext(Dispatchers.IO) { SonoraApi.removeJamendoFavorite(track.providerTrackId) }
                                                 favoriteTracks = favoriteTracks.filterNot { it.providerTrackId == track.providerTrackId }
+                                                onFavoriteRemoved(track.providerTrackId)
                                                 notice = ""
                                                 error = ""
                                             } catch (e: Exception) { error = e.message ?: "Не удалось удалить из избранного" }
