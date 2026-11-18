@@ -79,9 +79,18 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 val rangeHeader = response.header("Content-Range").orEmpty()
                 val rangeMatch = Regex("""bytes (\d+)-(\d+)/(\d+|\*)""").matchEntire(rangeHeader)
                 val rangeStart = rangeMatch?.groupValues?.getOrNull(1)?.toLongOrNull()
-                if (response.code == 206 && rangeStart != (if (existingBytes > 0L) existingBytes else 0L)) {
-                    partialFile.delete()
-                    return@withContext Result.retry()
+                val rangeEnd = rangeMatch?.groupValues?.getOrNull(2)?.toLongOrNull()
+                val rangeTotal = rangeMatch?.groupValues?.getOrNull(3)?.toLongOrNull()
+                if (response.code == 206) {
+                    val bodyLength = response.body?.contentLength() ?: -1L
+                    val validRange = rangeStart == existingBytes &&
+                        rangeEnd != null && rangeEnd >= existingBytes &&
+                        rangeTotal != null && rangeTotal > rangeEnd &&
+                        (bodyLength < 0L || bodyLength == rangeEnd - existingBytes + 1L)
+                    if (!validRange) {
+                        partialFile.delete()
+                        return@withContext Result.failure()
+                    }
                 }
                 val append = existingBytes > 0L && response.code == 206
                 if (existingBytes > 0L && !append) partialFile.delete()
@@ -97,7 +106,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
 
                 val startBytes = if (append) existingBytes else 0L
                 val bodyLength = body.contentLength()
-                val totalBytes = if (bodyLength >= 0L) startBytes + bodyLength else -1L
+                val totalBytes = if (append) rangeTotal ?: -1L else bodyLength
                 var downloadedBytes = startBytes
                 var lastReportedBytes = startBytes
                 body.byteStream().use { input ->
