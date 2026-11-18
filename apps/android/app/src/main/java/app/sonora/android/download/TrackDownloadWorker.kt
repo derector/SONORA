@@ -42,7 +42,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             if (backupFile.exists() && !finalFile.exists()) backupFile.renameTo(finalFile)
             else if (backupFile.exists() && finalFile.exists()) backupFile.delete()
 
-            setForeground(createForegroundInfo("Загружаем трек…"))
+            setForeground(createForegroundInfo("Загружаем трек…", notificationIdFor(provider, id)))
             val client = OkHttpClient.Builder().callTimeout(10, TimeUnit.MINUTES).build()
             client.newCall(
                 Request.Builder().url(url)
@@ -130,7 +130,12 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         return digest.take(16).joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
-    private fun createForegroundInfo(message: String): ForegroundInfo {
+    private fun notificationIdFor(provider: String, trackId: String): Int {
+        val prefix = stableFileKey(provider, trackId).take(7)
+        return 10_000 + (prefix.toLong(16) % 900_000L).toInt()
+    }
+
+    private fun createForegroundInfo(message: String, notificationId: Int): ForegroundInfo {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel("sonora_downloads", "SONORA downloads", NotificationManager.IMPORTANCE_LOW))
@@ -142,6 +147,6 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
-        return ForegroundInfo(4102, notification)
+        return ForegroundInfo(notificationId, notification)
     }
 }
