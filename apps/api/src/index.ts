@@ -7,10 +7,20 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 type RateBucket = { count: number; expiresAt: number };
 const rateBuckets = new Map<string, RateBucket>();
+const RATE_BUCKET_CAP = 20_000;
 let rateCleanupCounter = 0;
 
 function consumeRateLimit(key: string, limit: number, windowMs: number, now = Date.now()) {
   let bucket = rateBuckets.get(key);
+  // Keep the per-process limiter bounded under requests from many unique IPs.
+  if (!bucket && rateBuckets.size >= RATE_BUCKET_CAP) {
+    for (const [bucketKey, entry] of rateBuckets) {
+      if (entry.expiresAt <= now) rateBuckets.delete(bucketKey);
+    }
+    if (rateBuckets.size >= RATE_BUCKET_CAP) {
+      return { allowed: false, remaining: 0, expiresAt: now + 1_000 };
+    }
+  }
   if (!bucket || bucket.expiresAt <= now) {
     bucket = { count: 0, expiresAt: now + windowMs };
     rateBuckets.set(key, bucket);
