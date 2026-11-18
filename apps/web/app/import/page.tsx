@@ -177,7 +177,7 @@ export default function ImportPage() {
       for (const row of selected) {
         try {
           const trackId = row.selectedId.replace(/^jamendo:/, "");
-          if (!/^\\d{1,24}$/.test(trackId)) throw new Error(t("This match is not a valid Jamendo track."));
+          if (!/^\d{1,24}$/.test(trackId)) throw new Error(t("This match is not a valid Jamendo track."));
           const response = await fetch(`${API}/api/v1/playlists/${encodeURIComponent(playlistId)}/provider-tracks`, {
             method: "POST", credentials: "include",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
