@@ -102,7 +102,25 @@ object SonoraApi {
         }
     }
 
-    fun logout() { prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply() }
+    fun logout() {
+        val accessToken = prefs.getString("access_token", null)
+        val refreshCookie = prefs.getString("refresh_cookie", null)
+        try {
+            if (!accessToken.isNullOrBlank() && !refreshCookie.isNullOrBlank()) {
+                val request = Request.Builder()
+                    .url("$BASE/api/v1/auth/logout")
+                    .header("Authorization", "Bearer $accessToken")
+                    .header("Cookie", "sonora_refresh=$refreshCookie")
+                    .post(ByteArray(0).toRequestBody(null))
+                    .build()
+                http.newCall(request).execute().use { /* Best-effort server-side sign-out. */ }
+            }
+        } catch (_: Exception) {
+            // Always clear this device's credentials, even if the API is unreachable.
+        } finally {
+            prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply()
+        }
+    }
     fun email(): String = prefs.getString("email", "").orEmpty()
     fun isSignedIn(): Boolean = prefs.getString("access_token", null) != null
 
