@@ -55,7 +55,7 @@ export default function SearchPage() {
 
   async function toggleFavorite(track: Track) {
     if (track.provider !== "Jamendo") return;
-    const numericId = track.id.replace(/^jamendo:/, "");
+    const numericId = track.id;
     if (!/^\\d{1,24}$/.test(numericId)) return;
     setFavoriteError("");
     setFavoriteBusy((prev) => new Set(prev).add(track.id));
@@ -83,7 +83,7 @@ export default function SearchPage() {
     let active = true;
     fetch(`${API}/api/v1/provider-favorites`, { credentials: "include", headers: { Authorization: `Bearer ${accessToken}` } })
       .then(async (response) => response.ok ? response.json() as Promise<{ items?: Array<{ provider_track_id?: string }> }> : null)
-      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => `jamendo:${item.provider_track_id}`).filter(Boolean))); })
+      .then((data) => { if (active) setFavoriteIds(new Set((data?.items ?? []).map((item) => item.provider_track_id).filter(Boolean))); })
       .catch(() => undefined);
     return () => { active = false; };
   }, [accessToken]);
