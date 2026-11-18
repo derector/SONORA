@@ -319,7 +319,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit, isJamen
         if (showFavorite && isJamendo) {
             IconButton(onClick = toggleFavorite) { Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Удалить из избранного" else "Добавить в избранное", tint = if (isFavorite) Color(0xFFFF6B86) else Muted) }
         }
-        if (track.provider == "Jamendo" && track.downloadUrl != null) {
+        if (track.provider.equals("Jamendo", ignoreCase = true) && track.downloadUrl != null) {
             IconButton(onClick = {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
