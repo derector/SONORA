@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { searchSpotifyTracks } from "./providers/spotify.js";
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
@@ -1101,6 +1102,16 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         providers.audius = { ok: true, count: tracks.length - before };
       } catch (error) {
         providers.audius = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
+    tasks.push((async () => {
+      const before = metadata.length;
+      try {
+        const found = await searchSpotifyTracks(q, limit);
+        metadata.push(...found);
+        providers.spotify = { ok: true, count: metadata.length - before };
+      } catch (error) {
+        providers.spotify = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
     tasks.push((async () => {
