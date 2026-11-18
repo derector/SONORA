@@ -61,8 +61,12 @@ async function fetchProvider(url: string, init: RequestInit = {}): Promise<Respo
     try {
       const response = await fetch(url, { ...init, signal: AbortSignal.timeout(9000) });
       if (attempt === 0 && (response.status === 429 || response.status >= 500)) {
+        const retryAfterSeconds = Number(response.headers.get("retry-after"));
+        const delayMs = response.status === 429
+          ? (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 ? Math.min(retryAfterSeconds * 1000, 5000) : 1000)
+          : 350;
         await response.body?.cancel();
-        await new Promise((resolve) => setTimeout(resolve, 350));
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
       return response;
@@ -1079,11 +1083,15 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         });
         const response = await fetchProvider(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { results?: Array<{
+        const payload = await response.json() as { headers?: { status?: string; error_message?: string }; results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
           image?: string; album_image?: string; audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string; shareurl?: string;
         }> };
-        for (const track of payload.results ?? []) {
+        if (payload.headers?.status && payload.headers.status !== "success") {
+          throw new Error(payload.headers.error_message || "Jamendo rejected the catalog request.");
+        }
+        if (!Array.isArray(payload.results)) throw new Error("Jamendo returned an invalid catalog response.");
+        for (const track of payload.results) {
           const licenseUrl = track.license_ccurl ?? "";
           const normalized = licenseUrl.toLowerCase().replace(/^https?:\/\/(www\.)?creativecommons\.org\//, "");
           const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
@@ -1147,7 +1155,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
           releases?: Array<{ title?: string }>;
         }> };
-        for (const item of payload.recordings ?? []) {
+        if (!Array.isArray(payload.recordings)) throw new Error("MusicBrainz returned an invalid catalog response.");
+        for (const item of payload.recordings) {
           metadata.push({
             id: item.id, provider: "MusicBrainz", title: item.title,
             artist: (item["artist-credit"] ?? []).map((credit) => credit.name ?? credit.artist?.name ?? "").filter(Boolean).join(" "),
