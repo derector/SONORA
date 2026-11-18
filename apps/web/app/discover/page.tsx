@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, AudioLines, Download, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { usePlayer } from "../../components/player-provider";
 import { useLanguage } from "../../components/language-provider";
@@ -14,6 +14,7 @@ type Track = {
   durationSeconds: number;
   artworkUrl: string | null;
   audioUrl: string;
+  downloadUrl?: string | null;
   licenseUrl: string;
   sourceUrl: string;
   provider: string;
@@ -165,6 +166,7 @@ export default function DiscoverPage() {
                   <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
                 </div>
               </div>
+              {track.downloadUrl && <a href={track.downloadUrl} download aria-label={t("Download track")} title={t("Download track")} className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-xs text-slate-300 transition hover:bg-white/5 hover:text-violet-200"><Download size={14}/>{t("Download")}</a>}
               <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20" aria-label={`${currentTrack?.id === track.id && isPlaying ? "Pause" : "Play"} ${track.title}`}>{currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? "Pause" : "Play track"}</button>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
                 <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> {source === "jamendo" ? t("CC license") : t("Audius API access")}</span>
