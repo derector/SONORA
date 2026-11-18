@@ -82,9 +82,10 @@ export default function SearchPage() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">{t("Search tracks, artists and recordings across connected open catalogs. Playable results stay linked to their original provider and rights information.")}</p>
         <form onSubmit={submit} className="mt-7 flex max-w-3xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }} minLength={2} placeholder={t("Track title, artist or album")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
+          <input value={query} onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }} minLength={2} aria-label={t("Search tracks, artists or albums")} placeholder={t("Track, artist or album")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
           <button disabled={loading || query.trim().length < 2} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] disabled:opacity-50">{loading ? <LoaderCircle className="animate-spin" size={17}/> : t("Search")}</button>
         </form>
+        {query.trim().length === 1 && <p className="mt-2 px-2 text-xs text-slate-400" role="status">{t("Enter at least 2 characters to search.")}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           {(["all","tracks","artists"] as const).map((value) => <button key={value} type="button" onClick={() => { setKind(value); if (query.trim().length >= 2) void runSearch(query, value); }} aria-pressed={kind === value} className={`rounded-full px-4 py-2 text-xs transition ${kind === value ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-300 hover:bg-white/5"}`}>{value === "all" ? t("All results") : value === "tracks" ? t("Tracks") : t("Artists")}</button>)}
         </div>
