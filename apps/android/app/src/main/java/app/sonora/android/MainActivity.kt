@@ -124,11 +124,34 @@ private fun SonoraApp() {
     DisposableEffect(controller, tracks, activeQueue) {
         val player = controller
         if (player == null) return@DisposableEffect onDispose { }
+        val knownTracks = (activeQueue + tracks).associateBy { "${it.provider}:${it.id}" }
+        var previousMediaId = player.currentMediaItem?.mediaId
+        val completedMediaIds = mutableSetOf<String>()
+        fun recordTransition(mediaId: String?, event: String) {
+            val track = mediaId?.let { knownTracks[it] } ?: return
+            if (!track.provider.equals("Jamendo", ignoreCase = true) || authStep != "signed") return
+            if (event == "complete" && !completedMediaIds.add(mediaId)) return
+            val listenedMs = if (event == "complete") track.durationSeconds.coerceAtLeast(0) * 1000 else 0
+            scope.launch(Dispatchers.IO) {
+                runCatching { SonoraApi.recordProviderHistory(track, event, listenedMs) }
+            }
+        }
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val mediaId = mediaItem?.mediaId ?: return
-                (activeQueue + tracks).firstOrNull { "${it.provider}:${it.id}" == mediaId }?.let { current = it }
+                val nextMediaId = mediaItem?.mediaId
+                when (reason) {
+                    Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+                    Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> recordTransition(previousMediaId, "complete")
+                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
+                    Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> recordTransition(previousMediaId, "skip")
+                }
+                previousMediaId = nextMediaId
+                val mediaId = nextMediaId ?: return
+                knownTracks[mediaId]?.let { current = it }
+            }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_ENDED) recordTransition(previousMediaId, "complete")
             }
         }
         player.addListener(listener)
