@@ -1119,6 +1119,47 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
+    tasks.push((async () => {
+      try {
+        const params = new URLSearchParams({
+          q, category: "music", license: "by,by-sa,cc0,pdm",
+          page_size: String(limit), page: "1", filter_dead: "true"
+        });
+        const response = await fetch(`https://api.openverse.org/v1/audio/?${params.toString()}`, {
+          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as { results?: Array<{
+          id: string; title: string; creator?: string; duration?: number;
+          foreign_landing_url?: string; url?: string; license?: string;
+          license_version?: string; license_url?: string; attribution?: string;
+          provider?: string; source?: string; thumbnail?: string;
+          audio_set?: { title?: string };
+        }> };
+        const before = tracks.length;
+        for (const item of payload.results ?? []) {
+          if (!item.id || !item.title || !item.foreign_landing_url) continue;
+          tracks.push({
+            id: `openverse:${item.id}`, providerTrackId: item.id, provider: "Openverse",
+            title: item.title, artist: item.creator ?? "Unknown creator",
+            album: item.audio_set?.title ?? null,
+            durationSeconds: typeof item.duration === "number" ? Math.round(item.duration / 1000) : null,
+            artworkUrl: item.thumbnail ?? null,
+            audioUrl: "", downloadUrl: null,
+            licenseUrl: item.license_url ?? null, licenseName: item.license ?? null,
+            licenseVersion: item.license_version ?? null, attribution: item.attribution ?? null,
+            sourceUrl: item.foreign_landing_url, sourceProvider: item.provider ?? item.source ?? "Openverse",
+            playable: false, downloadable: false,
+            availability: "rights_review_required", playbackKind: "none",
+            rightsStatus: "rights_review_required",
+            rightsNote: "Openverse license metadata is a discovery signal, not legal clearance. Verify the original source and its current license before enabling playback."
+          });
+        }
+        providers.openverse = { ok: true, count: tracks.length - before };
+      } catch (error) {
+        providers.openverse = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
 
 
     tasks.push((async () => {
