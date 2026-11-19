@@ -763,13 +763,14 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/provider-history", async (
 });
 
 app.post<{ Body: {
-  providerTrackId?: string; title?: string; artistName?: string; albumName?: string | null;
-  durationSeconds?: number; artworkUrl?: string | null; licenseUrl?: string; sourceUrl?: string;
+  provider?: string; providerTrackId?: string; title?: string; artistName?: string; albumName?: string | null;
+  durationSeconds?: number; artworkUrl?: string | null; licenseUrl?: string; licenseName?: string; sourceUrl?: string;
   eventType?: "play" | "complete" | "skip"; listenedMs?: number;
 } }>("/api/v1/provider-history", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const body = request.body ?? {};
+  const provider = body.provider ?? "jamendo";
   const providerTrackId = body.providerTrackId;
   const title = body.title;
   const artistName = body.artistName;
@@ -780,6 +781,59 @@ app.post<{ Body: {
   const sourceUrl = body.sourceUrl;
   const eventType = body.eventType;
   const listenedMs = body.listenedMs;
+  if (!["play", "complete", "skip"].includes(eventType ?? "") ||
+      (listenedMs !== undefined && (typeof listenedMs !== "number" || !Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86400000))) {
+    return reply.code(400).send(authError(400, "Invalid listening event."));
+  }
+  if (provider === "audius") {
+    if (typeof providerTrackId !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(providerTrackId)) {
+      return reply.code(400).send(authError(400, "A valid Audius track ID is required."));
+    }
+    try {
+      const response = await fetch(`https://api.audius.co/v1/tracks/${encodeURIComponent(providerTrackId)}?app_name=SONORA`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return reply.code(response.status === 404 ? 404 : 502)
+        .send(authError(response.status === 404 ? 404 : 502, "Audius could not verify this track."));
+      const payload = await response.json() as { data?: {
+        id?: string; title?: string; duration?: number; permalink?: string; license?: string;
+        artwork?: Record<string, string> | null; user?: { name?: string } | null;
+        album?: { title?: string } | null;
+      } };
+      const track = payload.data;
+      if (!track || track.id !== providerTrackId || !track.title || !track.user?.name) {
+        return reply.code(404).send(authError(404, "This track is not available from Audius."));
+      }
+      let sourceUrl = "https://audius.co";
+      try {
+        const candidate = new URL(track.permalink ?? "", "https://audius.co");
+        if (candidate.protocol === "https:" && ["audius.co", "www.audius.co"].includes(candidate.hostname)) {
+          sourceUrl = candidate.toString();
+        }
+      } catch {}
+      const artworkUrl = track.artwork && Object.values(track.artwork).find((value) =>
+        typeof value === "string" && value.startsWith("https://")) || null;
+      const licenseUrl = typeof track.license === "string" && /^https:\/\//i.test(track.license)
+        ? track.license : null;
+      const { data, error } = await auth.client.from("provider_listening_events").insert({
+        user_id: auth.user.id, provider: "audius", provider_track_id: track.id,
+        title: track.title, artist_name: track.user.name, album_name: track.album?.title ?? null,
+        duration_seconds: typeof track.duration === "number" && track.duration > 0 ? Math.round(track.duration) : null,
+        artwork_url: artworkUrl, license_url: licenseUrl,
+        license_name: typeof track.license === "string" ? track.license : null,
+        source_url: sourceUrl, event_type: eventType, listened_ms: listenedMs ?? 0
+      }).select("id,event_type,listened_ms,occurred_at").single();
+      if (error) {
+        request.log.warn({ code: error.code }, "Audius listening event could not be stored");
+        return reply.code(400).send(authError(400, "Listening event could not be saved."));
+      }
+      return reply.code(201).send({ event: data });
+    } catch (error) {
+      request.log.error({ err: error }, "Audius listening event verification failed");
+      return reply.code(502).send(authError(502, "Audius could not verify this track right now."));
+    }
+  }
+  if (provider !== "jamendo") return reply.code(400).send(authError(400, "Unsupported music provider."));
   if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId) ||
       typeof title !== "string" || title.trim().length < 1 || title.length > 300 ||
       typeof artistName !== "string" || artistName.trim().length < 1 || artistName.length > 200 ||
@@ -797,7 +851,8 @@ app.post<{ Body: {
     user_id: auth.user.id, provider: "jamendo", provider_track_id: providerTrackId,
     title: title.trim(), artist_name: artistName.trim(), album_name: albumName?.trim() || null,
     duration_seconds: durationSeconds, artwork_url: artworkUrl ?? null,
-    license_url: licenseUrl.replace(/^http:/, "https:"), source_url: sourceUrl, event_type: eventType,
+    license_url: licenseUrl.replace(/^http:/, "https:"), license_name: body.licenseName ?? null,
+    source_url: sourceUrl, event_type: eventType,
     listened_ms: listenedMs ?? 0
   }).select("id,event_type,listened_ms,occurred_at").single();
   if (error) {
