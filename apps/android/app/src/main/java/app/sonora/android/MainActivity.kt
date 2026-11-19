@@ -78,6 +78,8 @@ private fun SonoraApp() {
     var tab by remember { mutableStateOf("Главная") }
     var provider by remember { mutableStateOf("Audius") }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var searchTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var searchMessage by remember { mutableStateOf("") }
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
@@ -191,12 +193,19 @@ private fun SonoraApp() {
             AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
                 when (screen) {
                     "Главная" -> DiscoverScreen(tracks, provider, busy, message, { source -> provider = source; loadTracks(source) { tracks = it } }, ::play, { tab = "Плеер" })
-                    "Поиск" -> SearchScreen(query, { query = it }, tracks, busy, message, {
+                    "Поиск" -> SearchScreen(query, { next -> query = next; searchTracks = emptyList(); searchMessage = "" }, searchTracks, busy, searchMessage, {
                         scope.launch {
-                            busy = true
-                            try { tracks = withContext(Dispatchers.IO) { SonoraApi.search(query) }; message = "" }
-                            catch (e: Exception) { message = e.message ?: "Ошибка поиска" }
-                            finally { busy = false }
+                            if (query.trim().length < 2) {
+                                searchTracks = emptyList()
+                                searchMessage = "Введи минимум 2 символа для поиска"
+                            } else {
+                                busy = true
+                                searchTracks = emptyList()
+                                searchMessage = ""
+                                try { searchTracks = withContext(Dispatchers.IO) { SonoraApi.search(query.trim()) } }
+                                catch (e: Exception) { searchMessage = e.message ?: "Ошибка поиска" }
+                                finally { busy = false }
+                            }
                         }
                     }, ::play)
                     "Медиатека" -> LibraryScreen(
@@ -263,13 +272,37 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, searchTracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+        if (query.isBlank() && searchTracks.isEmpty()) {
+            Text("Найди треки, исполнителей и альбомы по названию.", color = Muted, modifier = Modifier.padding(top = 24.dp))
+        } else if (query.trim().length < 2 && searchTracks.isEmpty()) {
+            Text("Введи минимум 2 символа для поиска.", color = Muted, modifier = Modifier.padding(top = 24.dp))
+        } else if (!busy && searchTracks.isEmpty() && message.isBlank()) {
+            Text("Ничего не найдено. Попробуй другой запрос.", color = Muted, modifier = Modifier.padding(top = 24.dp))
+        }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(searchTracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+    }
+}
+
+@Composable
+private fun TrackArtwork(url: String?, modifier: Modifier = Modifier) {
+    var failed by remember(url) { mutableStateOf(false) }
+    Box(modifier.background(Panel), contentAlignment = Alignment.Center) {
+        Icon(Icons.Default.MusicNote, contentDescription = null, tint = Muted, modifier = Modifier.size(24.dp))
+        if (!url.isNullOrBlank() && !failed) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                modifier = Modifier.matchParentSize(),
+                contentScale = ContentScale.Crop,
+                onError = { failed = true }
+            )
+        }
     }
 }
 
@@ -291,7 +324,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
         if (granted) enqueueDownload()
     }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
+        TrackArtwork(track.artworkUrl, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -310,7 +343,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
 @Composable
 private fun MiniPlayer(track: Track, onClick: () -> Unit, onPlay: () -> Unit, playing: Boolean) {
     Row(Modifier.fillMaxWidth().background(Color(0xFF20252D)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        AsyncImage(track.artworkUrl, null, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+        TrackArtwork(track.artworkUrl, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text(track.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
             Text(track.artist, color = Muted, maxLines = 1, fontSize = 11.sp)
@@ -363,7 +396,7 @@ private fun FullPlayer(
                         player.play()
                         showQueue = false
                     }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AsyncImage(item.artworkUrl, null, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        TrackArtwork(item.artworkUrl, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
                         Column(Modifier.weight(1f).padding(start = 10.dp)) {
                             Text(item.title, color = Color.White, maxLines = 1)
                             Text(item.artist, color = Muted, fontSize = 12.sp)
@@ -382,7 +415,7 @@ private fun FullPlayer(
             IconButton(onClick = { showQueue = true }) { Icon(Icons.Default.QueueMusic, "Очередь", tint = Lime) }
         }
         Spacer(Modifier.height(12.dp))
-        AsyncImage(track?.artworkUrl, null, Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(28.dp)), contentScale = ContentScale.Crop)
+        TrackArtwork(track?.artworkUrl, Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(28.dp)))
         Spacer(Modifier.height(18.dp))
         Text(track?.title ?: "Выбери свой трек", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold, maxLines = 1)
         Text(track?.artist ?: "SONORA", color = Muted, modifier = Modifier.padding(top = 6.dp))
@@ -562,7 +595,7 @@ private fun LibraryScreen(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
+                            TrackArtwork(track.artworkUrl, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)))
                             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                                 Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
