@@ -627,3 +627,30 @@ Draft PR #42: https://github.com/derector/SONORA/pull/42
 - PR #42 GitHub Actions run #44461347960: **success**.
 - Dependency install, TypeScript typecheck and production build all passed.
 - This validates the web source build only. The SoundCloud iframe widgets have not yet been exercised inside a deployed SONORA preview or production browser, so actual in-app playback remains pending.
+
+
+## Android client integration correction — 2026-11-19
+
+The native Android client does exist; it lives on the separate `android-native` / `fix/android-offline-identity-v2` branches under `apps/android`. It is Kotlin + Jetpack Compose + Media3, Android 8 minimum. The default `main` branch currently contains only `apps/api` and `apps/web`, so the native code must be reviewed and integrated against its Android branch rather than assumed absent from the project.
+
+Draft PR #43: https://github.com/derector/SONORA/pull/43
+- Base: `android-native`.
+- Adds target artist search cards and opens their tracks in the official SoundCloud hosted iframe player inside an Android WebView.
+- No direct stream extraction, downloading or rehosting. Provider retains playback and rights controls.
+- GitHub Actions Android APK workflow is configured for PRs targeting `android-native`; CI run #44461916996 is queued/pending at the time of this update.
+- Device playback and APK artifact remain unverified. Do not merge or distribute until CI and physical Android QA pass.
+
+## Production target-artist search browser report
+
+Read-only browser inspection of the live production API and public site (19 Nov 2026) found:
+- Exact query `молодой рубль`: no exact target artist in current native audio results. Ten Jamendo tracks were returned and audio playback progress was tested, but all ten were unrelated keyword matches by other artists. MusicBrainz had 15 metadata-only rows, including two collaborative credits containing the name. Public UI separately found a YouTube Topic channel with 20 external track links.
+- Exact query `Кишлак`: one Audius playable item was a remix by TheSadFox, not an original track from the artist. Playback progress was tested. MusicBrainz returned 15 metadata-only rows credited to Кишлак. Public UI separately found the artist's YouTube Topic channel with 20 external links.
+- Exact query `БРЕДИШЬ`: MusicBrainz returned 15 metadata-only recordings, no Audius/Jamendo audio, and one MusicBrainz request returned HTTP 503. Public UI showed no results.
+- Playback progress was verified for the 10 unrelated Jamendo matches and one TheSadFox remix. None of these tests proves native playback of the three requested artists' original recordings.
+
+The search report is available from the browser session output and the public endpoints:
+- https://sonora-web-api-production.up.railway.app/api/v1/search/music?q=%D0%BC%D0%BE%D0%BB%D0%BE%D0%B9%20%D1%80%D1%83%D0%B1%D0%BB%D1%8C&type=all&limit=15
+- https://sonora-web-api-production.up.railway.app/api/v1/search/music?q=%D0%9A%D0%B8%D1%88%D0%BB%D0%B0%D0%BA&type=all&limit=15
+- https://sonora-web-api-production.up.railway.app/api/v1/search/music?q=%D0%91%D0%A0%D0%95%D0%94%D0%98%D0%A8%D0%AC&type=all&limit=15
+
+This proves the existing production search needs exact artist-aware discovery and must not pass off unrelated Jamendo keyword matches as the requested artist.
