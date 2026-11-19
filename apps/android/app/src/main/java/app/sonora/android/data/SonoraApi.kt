@@ -198,6 +198,33 @@ object SonoraApi {
         request("/api/v1/provider-favorites/$id", "DELETE", authenticated = true)
     }
 
+    fun getProviderHistory(): List<Track> {
+        val items = request("/api/v1/provider-history?limit=50", authenticated = true).optJSONArray("items")
+            ?: return emptyList()
+        val result = mutableListOf<Track>()
+        val seen = mutableSetOf<String>()
+        for (i in 0 until items.length()) {
+            val saved = items.optJSONObject(i) ?: continue
+            val providerId = saved.optString("provider_track_id")
+            if (providerId.isBlank() || !seen.add(providerId)) continue
+            val fresh = runCatching { resolveTrack("jamendo", providerId) }.getOrNull()
+            result += fresh ?: Track(
+                id = providerId,
+                providerTrackId = providerId,
+                provider = "Jamendo",
+                title = saved.optString("title", "Unknown track"),
+                artist = saved.optString("artist_name", "Unknown artist"),
+                album = saved.optString("album_name").takeIf { it.isNotBlank() && it != "null" },
+                durationSeconds = saved.optInt("duration_seconds"),
+                artworkUrl = saved.optString("artwork_url").takeIf { it.startsWith("https://") },
+                licenseUrl = saved.optString("license_url").takeIf { it.startsWith("https://") },
+                sourceUrl = saved.optString("source_url").takeIf { it.startsWith("https://") },
+                playable = false
+            )
+        }
+        return result
+    }
+
     fun recordProviderHistory(track: Track, eventType: String = "play", listenedMs: Int = 0) {
         if (!track.provider.equals("Jamendo", ignoreCase = true)) return
         val license = track.licenseUrl?.takeIf {
