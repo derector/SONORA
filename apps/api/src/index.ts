@@ -1020,6 +1020,27 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
+function isArchivePermissiveLicense(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "creativecommons.org") return false;
+    return /^\/(?:licenses\/(?:by|by-sa)\/[0-9.]+|licenses\/publicdomain\/(?:zero|mark)\/[0-9.]+|publicdomain\/(?:zero|mark)\/[0-9.]+)\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function archiveDurationSeconds(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
+}
+
+function safeArchiveItemIdentifier(value: unknown): string | null {
+  return typeof value === "string" && /^[a-zA-Z0-9._-]{1,120}$/.test(value) ? value : null;
+}
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
@@ -1034,6 +1055,84 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
+
+    tasks.push((async () => {
+      try {
+        const escapedQuery = q.replace(/[\\\\"]/g, "\\$&");
+        const params = new URLSearchParams({
+          q: `mediatype:audio AND ("${escapedQuery}")`,
+          fl: "identifier,title,creator,licenseurl,mediatype",
+          rows: String(Math.min(100, limit * 5)), page: "1", output: "json"
+        });
+        const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`, {
+          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json() as {
+          response?: { docs?: Array<{ identifier?: string; title?: string; creator?: string; licenseurl?: string; mediatype?: string }> };
+          error?: string;
+        };
+        if (payload.error) throw new Error(payload.error);
+        const candidates = (payload.response?.docs ?? []).filter((item) =>
+          item.mediatype === "audio" && safeArchiveItemIdentifier(item.identifier) &&
+          isArchivePermissiveLicense(item.licenseurl)
+        ).slice(0, limit);
+        const metadataResults = await Promise.allSettled(candidates.map(async (item) => {
+          const identifier = safeArchiveItemIdentifier(item.identifier);
+          if (!identifier) return null;
+          const metadataResponse = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`, {
+            headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+          });
+          if (!metadataResponse.ok) throw new Error(`Metadata HTTP ${metadataResponse.status}`);
+          const metadataPayload = await metadataResponse.json() as {
+            metadata?: Record<string, unknown>;
+            files?: Array<{
+              name?: string; format?: string; source?: string; length?: string | number;
+              title?: string; artist?: string; creator?: string; album?: string; private?: string;
+            }>;
+          };
+          return { search: item, metadata: metadataPayload.metadata ?? {}, files: metadataPayload.files ?? [] };
+        }));
+        const before = tracks.length;
+        for (const result of metadataResults) {
+          if (result.status !== "fulfilled" || !result.value) continue;
+          const { search, metadata, files } = result.value;
+          const identifier = safeArchiveItemIdentifier(search.identifier);
+          if (!identifier || metadata.mediatype !== "audio" ||
+              !isArchivePermissiveLicense(metadata.licenseurl) ||
+              metadata.licenseurl !== search.licenseurl) continue;
+          const originals = files.filter((file) =>
+            file.source === "original" && file.private !== "true" &&
+            typeof file.name === "string" && file.name.toLowerCase().endsWith(".mp3") &&
+            /mp3/i.test(file.format ?? "")
+          ).slice(0, 3);
+          for (const file of originals) {
+            const artist = String(file.artist ?? file.creator ?? metadata.creator ?? search.creator ?? "Unknown artist");
+            const title = String(file.title ?? file.name?.replace(/\\.mp3$/i, "") ?? search.title ?? "Untitled");
+            const album = String(file.album ?? metadata.title ?? search.title ?? "");
+            const licenseUrl = String(metadata.licenseurl);
+            tracks.push({
+              id: `archive:${identifier}:${file.name}`, providerTrackId: identifier, provider: "Internet Archive",
+              title, artist, album: album || null, durationSeconds: archiveDurationSeconds(file.length),
+              artworkUrl: null, audioUrl: null, downloadUrl: null,
+              sourceUrl: `https://archive.org/details/${identifier}`,
+              licenseUrl, licenseName: "Uploader-declared Creative Commons / Public Domain",
+              playable: false, downloadable: false,
+              rightsStatus: "rights_review_required", playbackKind: "none",
+              rightsNote: "Internet Archive licenseurl is uploader-supplied metadata, not legal clearance. Original file and rights-holder authorization must be verified before playback or download."
+            });
+            if (tracks.length - before >= limit) break;
+          }
+          if (tracks.length - before >= limit) break;
+        }
+        providers.internetArchive = {
+          ok: true, count: tracks.length - before,
+          ...(metadataResults.some((result) => result.status === "rejected") ? { error: "Some item metadata requests failed; available results are partial." } : {})
+        };
+      } catch (error) {
+        providers.internetArchive = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
     tasks.push((async () => {
       const clientId = process.env.JAMENDO_CLIENT_ID;
       if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
