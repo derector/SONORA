@@ -32,9 +32,12 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val downloadAllowed = inputData.getBoolean("downloadAllowed", false)
         val licenseUrl = inputData.getString("licenseUrl").orEmpty()
         val uri = runCatching { URI(url) }.getOrNull()
+        val licenseUri = runCatching { URI(licenseUrl) }.getOrNull()
         val host = uri?.host?.lowercase().orEmpty()
+        val licenseHost = licenseUri?.host?.lowercase().orEmpty()
         val trustedHost = host == "jamendo.com" || host.endsWith(".jamendo.com")
-        val recognizedLicense = licenseUrl.startsWith("https://creativecommons.org/")
+        val recognizedLicense = licenseUri?.scheme in setOf("http", "https") &&
+            (licenseHost == "creativecommons.org" || licenseHost == "www.creativecommons.org")
 
         if (provider != "Jamendo" || !downloadAllowed || !recognizedLicense ||
             uri?.scheme != "https" || !trustedHost) return@withContext Result.failure()
