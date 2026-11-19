@@ -1,6 +1,9 @@
 package app.sonora.android
 
 import android.Manifest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.ui.viewinterop.AndroidView
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
@@ -62,6 +65,26 @@ private val Panel = Color(0xFF151820)
 private val Lime = Color(0xFFB8F36B)
 private val Muted = Color(0xFF9298A5)
 
+private data class SoundCloudSeedTrack(val title: String, val url: String)
+private data class SoundCloudSeedArtist(val name: String, val aliases: List<String>, val profileUrl: String, val verified: Boolean, val tracks: List<SoundCloudSeedTrack>)
+private val PrioritySoundCloudArtists = listOf(
+    SoundCloudSeedArtist("молодой рубль", listOf("молодой рубль", "molodoy rubl", "molodoyrubl"), "https://soundcloud.com/dblvnt-586464205", false, listOf(
+        SoundCloudSeedTrack("чисто гипотетически", "https://soundcloud.com/dblvnt-586464205/chisto-gipoteticheski-prod-by"),
+        SoundCloudSeedTrack("красный ход", "https://soundcloud.com/dblvnt-586464205/krasnyj-xod-prod-by-sw3rvv"),
+        SoundCloudSeedTrack("базар", "https://soundcloud.com/dblvnt-586464205/bazar-prod-by-uraniumseller")
+    )),
+    SoundCloudSeedArtist("Кишлак", listOf("кишлак", "kishlak"), "https://soundcloud.com/kishlak", true, listOf(
+        SoundCloudSeedTrack("я диско шар", "https://soundcloud.com/kishlak/ya-disko-shar-prod-kishlak"),
+        SoundCloudSeedTrack("самый лучший день", "https://soundcloud.com/kishlak/samyj-luchshij-den-prod-bvbvbvbudvbv"),
+        SoundCloudSeedTrack("я уёбываю в джаз", "https://soundcloud.com/kishlak/ya-uyobyvayu-v-dzhaz-prod-kishlak")
+    )),
+    SoundCloudSeedArtist("БРЕДИШЬ", listOf("бредишь", "bredish", "briedish"), "https://soundcloud.com/briedish", false, listOf(
+        SoundCloudSeedTrack("ИЯЙ", "https://soundcloud.com/briedish/iyaj"),
+        SoundCloudSeedTrack("Сон", "https://soundcloud.com/briedish/son"),
+        SoundCloudSeedTrack("Кода", "https://soundcloud.com/briedish/koda")
+    ))
+)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -90,6 +113,14 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var soundCloudUrl by remember { mutableStateOf<String?>(null) }
+    var soundCloudTitle by remember { mutableStateOf("") }
+
+    fun openSoundCloud(track: SoundCloudSeedTrack, artist: SoundCloudSeedArtist) {
+        soundCloudUrl = track.url
+        soundCloudTitle = "${artist.name} · ${track.title}"
+        tab = "SoundCloud"
+    }
 
     fun loadTracks(source: String, done: (List<Track>) -> Unit) {
         scope.launch {
@@ -198,7 +229,8 @@ private fun SonoraApp() {
                             catch (e: Exception) { message = e.message ?: "Ошибка поиска" }
                             finally { busy = false }
                         }
-                    }, ::play)
+                    }, ::play, ::openSoundCloud)
+                    "SoundCloud" -> SoundCloudEmbedScreen(soundCloudTitle, soundCloudUrl, { tab = "Поиск" })
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
@@ -263,13 +295,79 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit, openSoundCloud: (SoundCloudSeedTrack, SoundCloudSeedArtist) -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
+
+        val context = LocalContext.current
+        val normalizedQuery = query.trim().lowercase()
+        val matchingArtists = PrioritySoundCloudArtists.filter { artist ->
+            normalizedQuery.length >= 2 && artist.aliases.any { alias -> normalizedQuery.contains(alias) || alias.contains(normalizedQuery) }
+        }
+        matchingArtists.forEach { artist ->
+            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Panel)) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(artist.name, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(if (artist.verified) "Проверенный профиль SoundCloud" else "Профиль SoundCloud не верифицирован", color = Muted, fontSize = 11.sp)
+                        }
+                        TextButton(onClick = { soundCloudOpenProfile(context, artist.profileUrl) }) { Text("Профиль", color = Lime) }
+                    }
+                    artist.tracks.forEach { seed ->
+                        Row(Modifier.fillMaxWidth().clickable { openSoundCloud(seed, artist) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.PlayCircle, null, tint = Lime)
+                            Text(seed.title, Modifier.weight(1f).padding(start = 10.dp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            TextButton(onClick = { openSoundCloud(seed, artist) }) { Text("Слушать", color = Lime) }
+                        }
+                    }
+                    Text("Воспроизведение через официальный плеер SoundCloud", color = Muted, fontSize = 10.sp)
+                }
+            }
+        }
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+    }
+}
+
+
+private fun soundCloudOpenProfile(context: Context, url: String) {
+    try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+    catch (_: Exception) { }
+}
+
+@Composable
+private fun SoundCloudEmbedScreen(title: String, trackUrl: String?, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().background(Ink)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null, tint = Lime) }
+            Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (trackUrl.isNullOrBlank()) {
+            Text("Трек недоступен", color = Muted, modifier = Modifier.padding(20.dp))
+        } else {
+            AndroidView(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = true
+                        webViewClient = WebViewClient()
+                        val widget = "https://w.soundcloud.com/player/?url=" + java.net.URLEncoder.encode(trackUrl, "UTF-8") + "&auto_play=false&hide_related=true&show_comments=false&show_user=true&visual=false"
+                        tag = widget
+                        loadUrl(widget)
+                    }
+                },
+                update = { view ->
+                    val widget = "https://w.soundcloud.com/player/?url=" + java.net.URLEncoder.encode(trackUrl, "UTF-8") + "&auto_play=false&hide_related=true&show_comments=false&show_user=true&visual=false"
+                    if (view.tag != widget) { view.tag = widget; view.loadUrl(widget) }
+                }
+            )
+            Text("Звук воспроизводится SoundCloud. SONORA не скачивает и не хранит эту запись.", color = Muted, fontSize = 11.sp, modifier = Modifier.padding(14.dp))
+        }
     }
 }
 
