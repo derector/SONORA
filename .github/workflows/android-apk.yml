@@ -6,6 +6,11 @@ on:
     paths:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [android-native]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 concurrency:
@@ -32,13 +37,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
-      - name: Build debug APK
+      - name: Build stable-signed release APK
         working-directory: apps/android
-        run: gradle --no-daemon :app:assembleDebug
-      - name: Upload APK
+        env:
+          SONORA_ANDROID_KEYSTORE_BASE64: ${{ secrets.SONORA_ANDROID_KEYSTORE_BASE64 }}
+          SONORA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SONORA_ANDROID_KEYSTORE_PASSWORD }}
+          SONORA_ANDROID_KEY_ALIAS: ${{ secrets.SONORA_ANDROID_KEY_ALIAS }}
+          SONORA_ANDROID_KEY_PASSWORD: ${{ secrets.SONORA_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in SONORA_ANDROID_KEYSTORE_BASE64 SONORA_ANDROID_KEYSTORE_PASSWORD SONORA_ANDROID_KEY_ALIAS SONORA_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name"
+              exit 1
+            fi
+          done
+          export SONORA_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/sonora-release.jks"
+          printf "%s" "$SONORA_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$SONORA_ANDROID_KEYSTORE_PATH"
+          chmod 600 "$SONORA_ANDROID_KEYSTORE_PATH"
+          gradle --no-daemon :app:assembleRelease -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
+      - name: Upload stable-signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: SONORA-Android-debug
-          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          name: SONORA-Android-release
+          path: apps/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
