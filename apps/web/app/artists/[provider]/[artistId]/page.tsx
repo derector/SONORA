@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, LoaderCircle, Music2, Play } from "lucide-react";
@@ -41,6 +41,7 @@ export default function ArtistCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const requestController = useRef<AbortController | null>(null);
 
   const loadPage = useCallback(async (nextOffset: number, append: boolean) => {
     if (provider !== "audius" || !/^[a-zA-Z0-9_-]{1,64}$/.test(artistId)) {
@@ -49,12 +50,15 @@ export default function ArtistCatalogPage() {
       setLoadingMore(false);
       return;
     }
+    requestController.current?.abort();
+    const controller = new AbortController();
+    requestController.current = controller;
     if (append) setLoadingMore(true);
     else setLoading(true);
     setError("");
     try {
       const query = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(nextOffset) });
-      const response = await fetch(`${API}/api/v1/providers/audius/artists/${encodeURIComponent(artistId)}/tracks?${query.toString()}`);
+      const response = await fetch(`${API}/api/v1/providers/audius/artists/${encodeURIComponent(artistId)}/tracks?${query.toString()}`, { signal: controller.signal });
       const result = await response.json() as CatalogPage;
       if (!response.ok) throw new Error(result.error || "Artist catalog could not be loaded.");
       const pageItems = result.items ?? [];
@@ -64,10 +68,14 @@ export default function ArtistCatalogPage() {
       setOffset(result.nextOffset ?? nextOffset + pageItems.length);
       setHasMore(result.hasMore === true);
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Artist catalog could not be loaded.");
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestController.current === controller) {
+        requestController.current = null;
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [provider, artistId]);
 
@@ -76,6 +84,7 @@ export default function ArtistCatalogPage() {
     setOffset(0);
     setHasMore(false);
     void loadPage(0, false);
+    return () => requestController.current?.abort();
   }, [loadPage]);
 
   const playable = tracks.filter((track): track is ArtistTrack & { audioUrl: string } =>
