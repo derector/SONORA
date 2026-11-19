@@ -60,11 +60,13 @@ class PlaybackService : MediaSessionService() {
                         }.filter { it.playable && !it.audioUrl.isNullOrBlank() }
                         if (tracks.isEmpty()) throw IllegalStateException("No saved tracks are currently playable.")
                         val savedCurrent = saved.tracks.getOrNull(saved.currentIndex)
-                        val startIndex = savedCurrent?.let { target ->
+                        val restoredIndex = savedCurrent?.let { target ->
                             tracks.indexOfFirst {
                                 it.provider == target.provider && it.providerTrackId == target.providerTrackId
                             }
-                        }?.takeIf { it >= 0 } ?: 0
+                        } ?: -1
+                        val startIndex = restoredIndex.takeIf { it >= 0 } ?: 0
+                        val requestedPosition = if (restoredIndex >= 0) saved.positionMs else 0L
                         val items = tracks.map { track ->
                             val metadata = MediaMetadata.Builder()
                                 .setTitle(track.title)
@@ -78,9 +80,9 @@ class PlaybackService : MediaSessionService() {
                                 .setMediaMetadata(metadata)
                                 .build()
                         }
-                        val startPosition = saved.positionMs.coerceAtMost(
+                        val startPosition = requestedPosition.coerceAtMost(
                             (tracks[startIndex].durationSeconds.coerceAtLeast(0) * 1000L)
-                                .takeIf { it > 0L } ?: saved.positionMs
+                                .takeIf { it > 0L } ?: requestedPosition
                         )
                         mainHandler.post {
                             mediaSession.player.shuffleModeEnabled = saved.shuffleEnabled
