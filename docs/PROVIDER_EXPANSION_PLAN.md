@@ -555,3 +555,30 @@ Draft PR #41: https://github.com/derector/SONORA/pull/41
 - GitHub Actions run #44460293974 completed successfully: dependency install, TypeScript typecheck and production build all passed.
 - This confirms the combined web/API source compiles and builds. It does not confirm live combined provider requests or ccMixter end-to-end player playback.
 - PR #41 remains draft/open, unmerged and undeployed. Production remains unchanged.
+
+
+## Priority artist catalogue coverage — 2026-11-19
+
+User explicitly requested that SONORA search for and surface the music of **молодой рубль**, **Кишлак**, **БРЕДИШЬ**, and additional artists, with real playable tracks wherever an authorized playback path exists. This is a product acceptance goal, not a promise that every track can be hosted or played natively.
+
+### Confirmed artist identity/catalogue references from public search
+- молодой рубль: VK Music artist page https://m.vk.ru/artist/molodoyrubl ; a Genius collaboration listing for SKANY & молодой рубль https://genius.com/Skany-and-molodoyruble-opbsl-lyrics . Search results suggest the artist has current 2026 releases on VK Music.
+- Кишлак: Spotify artist https://open.spotify.com/artist/44L2bdEufrpXM5S7yn30JJ ; Apple Music https://music.apple.com/us/artist/%D0%BA%D0%B8%D1%88%D0%BB%D0%B0%D0%BA/1518967860?l=ru ; VK Music https://m.vk.ru/artist/kishlak ; official YouTube channel https://www.youtube.com/channel/UC68cEwEUxn4W5DzsjKWP9Xg . Search excerpts surfaced tracks including «Самый лучший день», «Я диско шар», «Я уёбываю в джаз», «Эй», «11:11».
+- БРЕДИШЬ: Yandex Music https://music.yandex.com/artist/12374677 ; Spotify https://open.spotify.com/artist/0P9E2MHee0cXNpIeAvFAt1 ; VK Music https://m.vk.ru/artist/bredish ; artist Instagram https://www.instagram.com/bred_ish/ . Search excerpts surfaced «На руках», «Шиза», «Социум», «В твоих глазах», «На баре».
+
+These are discovery/identity references, not proof that SONORA has streaming rights or direct audio playback. The Молодой Рубль result set currently has less independent corroboration than the other two; confirm artist identity and avoid merging similarly named acts.
+
+### Required implementation and QA
+1. Run exact-name searches for each target artist against every currently integrated provider (Audius, Jamendo, MusicBrainz, Openverse, ccMixter, Internet Archive) and record whether artist/track matches exist. Search transliterations, spelling variants and featured-artist credits while preserving the canonical artist identity.
+2. Add a provider-neutral artist resolver and normalized artist/track identity model: canonical artist ID, provider artist IDs/URLs, aliases, ISRC/MusicBrainz IDs, title, featured artists, version/live/remix markers, duration and source provenance. Avoid fuzzy merges when evidence is weak.
+3. Add artist-centric results and discography browsing: artist profile, top tracks, releases/albums, related tracks, provider badges, territory/availability and clear playback status.
+4. Integrate official artist/catalogue sources where the target catalogue is present: prioritize official VK Music/Yandex Music access or partnership, Spotify and Apple Music catalog discovery with their approved playback handoff/SDK paths, official YouTube channel/video embeds, and SoundCloud creator/API access if artist uploads are present. Verify developer approval, user entitlement, region, terms and playback rights before exposing native Play.
+5. For each track show one of: native authorized stream, official SDK/embed, preview-only, external handoff, metadata-only, or unavailable. If native playback is not authorized, offer a direct official provider link rather than a dead Play button. Never scrape protected media, bypass DRM, borrow private APIs/cookies, or proxy a third-party stream without a license.
+6. Search quality acceptance: each requested artist should resolve to the correct artist page; tracks should be surfaced with exact title and artist credits; duplicates and alternate versions stay distinct; links open the correct official provider item; Play appears only for a verified playable stream; no empty or misleading results.
+7. Create automated fixtures for these exact artists and run live provider checks in staging. Re-run after each provider adapter update. Do not call the acceptance goal complete until live search results are visible on the app/site and each claimed playable track passes an actual playback test.
+
+### Status
+- Public artist/catalogue references found for all three requested names.
+- Their actual results in the current SONORA production search and playback are not yet verified; browser checks are in progress.
+- None of these catalogues is currently authorized for direct native streaming solely because a public artist page exists.
+- Implementation work should proceed on a dedicated branch and remain unmerged/undeployed until CI and live QA pass.
