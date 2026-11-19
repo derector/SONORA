@@ -490,3 +490,36 @@ The first provider expansion slices are now in separate draft PRs, intentionally
 - **Search UI — PR #40**: separate playable results from rights-review/discovery results; keep Play disabled unless both playable=true and an audio URL exist. CI is running.
 
 Live API inspection confirmed ccMixter's CSV data views expose item license and stream fields, and Internet Archive's Metadata API exposes original MP3 file metadata. These inspections are not end-to-end playback QA. The search UI and provider adapters remain separate draft PRs until CI and integration QA are complete.
+
+
+## Account, email authentication and profile QA — 2026-11-19
+
+User requested a real production-site registration/login test using their own mailbox, followed by session-persistence, profile and avatar checks. Treat this as a dedicated QA workstream, not merely a code review. Do not claim success until the actual email arrives, the one-time code is entered, the account is created, and the browser checks pass.
+
+### Existing implementation inspected on main (source review only)
+- Web auth page: `apps/web/app/auth/page.tsx`; registration requests an eight-digit email code via `POST /api/v1/auth/register`, then verifies through `POST /api/v1/auth/verify`.
+- API: `apps/api/src/index.ts`; Supabase OTP registration/login, verification, profile upsert, refresh cookie and refresh endpoint are present.
+- Web auth provider: `apps/web/components/auth-provider.tsx`; refresh-token restoration, transient network failure handling, profile update and avatar upload are implemented.
+- Profile page: `apps/web/app/profile/page.tsx`; settings page: `apps/web/app/settings/page.tsx`.
+- Avatar storage migration: `database/migrations/006_profile_avatars.sql`; public reads and owner-only writes, 2 MB limit, JPEG/PNG/WebP.
+- Settings page currently exposes profile link and language selection plus provider info. Review whether account/security controls are sufficient and whether settings/profile navigation is consistent.
+
+### Required live QA sequence (not yet completed)
+1. Register on the production site with the user-authorized test email; inspect Gmail Inbox, Spam and All Mail for the new SONORA OTP. Record sender, subject, delivery time and expiry behavior, but do not expose the one-time code in chat or logs.
+2. Enter the OTP in the live browser, confirm account creation and profile row creation, then check the authenticated landing page.
+3. Reload, navigate between Discover/Search/Library/Profile/Settings, open a new tab and restart the browser session. Confirm refresh cookie restores the same account without redirecting to auth.
+4. Wait/trigger access-token refresh and verify the profile remains loaded. Simulate transient API/network failure and ensure it does not incorrectly clear a valid session; confirm definitive 401/403 clears it safely.
+5. Edit display name and username; verify validation, duplicate username handling, persistence after reload and updated profile display.
+6. Upload JPG, PNG and WebP avatars; verify preview, persisted URL after reload and replacement. Negative tests: >2 MB, unsupported MIME, malformed image, unauthenticated upload, cross-user write denial.
+7. Check logout, login OTP, expired/invalid OTP, resend behavior, rate limits, mobile layout on Android and cookie Secure/HttpOnly/SameSite/path/CORS behavior across the web/API domains.
+8. Inspect Supabase email template/SMTP delivery and production configuration only through approved project access; never copy secrets, refresh tokens or OTPs into source control or logs.
+9. Fix confirmed defects on a dedicated QA branch, add automated tests where possible, run CI and verify production behavior only after the user approves any deployment. Do not apply migrations or change production data without permission.
+
+### Current QA status
+- Source-code inspection: completed.
+- Live browser registration: pending.
+- Actual OTP email delivery and verification: pending.
+- Session persistence across reload/new tab/browser restart: pending.
+- Profile editing and avatar upload/replacement: pending.
+- Security/negative/mobile tests: pending.
+- No production account has been created or changed by this planning update.
