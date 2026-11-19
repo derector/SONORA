@@ -1058,7 +1058,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
     tasks.push((async () => {
       try {
-        const escapedQuery = q.replace(/[\\\\"]/g, "\\$&");
+        const escapedQuery = q.replace(/[\\"]/g, "\\q.replace(/[\\\\"]/g, "\\$&")");
         const params = new URLSearchParams({
           q: `mediatype:audio AND ("${escapedQuery}")`,
           fl: "identifier,title,creator,licenseurl,mediatype",
@@ -1077,7 +1077,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           item.mediatype === "audio" && safeArchiveItemIdentifier(item.identifier) &&
           isArchivePermissiveLicense(item.licenseurl)
         ).slice(0, limit);
-        const metadataResults = await Promise.allSettled(candidates.map(async (item) => {
+        const loadArchiveItem = async (item: typeof candidates[number]) => {
           const identifier = safeArchiveItemIdentifier(item.identifier);
           if (!identifier) return null;
           const metadataResponse = await fetch(`https://archive.org/metadata/${encodeURIComponent(identifier)}`, {
@@ -1092,8 +1092,13 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
             }>;
           };
           return { search: item, metadata: metadataPayload.metadata ?? {}, files: metadataPayload.files ?? [] };
-        }));
-        const before = tracks.length;
+        };
+        const metadataResults: Array<PromiseSettledResult<Awaited<ReturnType<typeof loadArchiveItem>>>> = [];
+        for (let offset = 0; offset < candidates.length; offset += 4) {
+          const batch = await Promise.allSettled(candidates.slice(offset, offset + 4).map(loadArchiveItem));
+          metadataResults.push(...batch);
+        }
+
         for (const result of metadataResults) {
           if (result.status !== "fulfilled" || !result.value) continue;
           const { search, metadata, files } = result.value;
@@ -1108,7 +1113,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           ).slice(0, 3);
           for (const file of originals) {
             const artist = String(file.artist ?? file.creator ?? metadata.creator ?? search.creator ?? "Unknown artist");
-            const title = String(file.title ?? file.name?.replace(/\\.mp3$/i, "") ?? search.title ?? "Untitled");
+            const title = String(file.title ?? file.name?.replace(/\.mp3$/i, "") ?? search.title ?? "Untitled");
             const album = String(file.album ?? metadata.title ?? search.title ?? "");
             const licenseUrl = String(metadata.licenseurl);
             tracks.push({
