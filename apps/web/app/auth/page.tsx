@@ -29,6 +29,11 @@ export default function AuthPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    const requestedMode = new URLSearchParams(window.location.search).get("mode");
+    if (requestedMode === "register") setMode("register");
+  }, []);
+
+  useEffect(() => {
     if (!sessionLoading && isAuthenticated) router.replace("/");
   }, [sessionLoading, isAuthenticated, router]);
 
