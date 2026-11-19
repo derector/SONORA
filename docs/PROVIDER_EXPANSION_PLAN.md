@@ -582,3 +582,41 @@ These are discovery/identity references, not proof that SONORA has streaming rig
 - Their actual results in the current SONORA production search and playback are not yet verified; browser checks are in progress.
 - None of these catalogues is currently authorized for direct native streaming solely because a public artist page exists.
 - Implementation work should proceed on a dedicated branch and remain unmerged/undeployed until CI and live QA pass.
+
+
+## Live target-artist search audit — 2026-11-19
+
+Queried the production API directly for the three exact artist names. These results are the current production baseline:
+
+- `q=молодой рубль`: API HTTP 200, but no correct artist/track result in Audius or Jamendo. Jamendo returned unrelated tracks matching the words “молодой”/“рубль”. MusicBrainz returned two collaborative recordings with the artist credit, including «ПАУПАУПАУ» (diklor молодой рубль) and «ПРИЦЕЛ» (dmtboy diklor молодой рубль), metadata-only. This is not enough to surface a real discography.
+- `q=Кишлак`: API HTTP 200; one Audius result was a remix uploaded by TheSadFox, not the artist's own original. MusicBrainz returned 15 metadata-only recordings, including «Настя», «Голоса», «Ржавый», «Зависима», «Грязный Кайф», «Слёзы» and others. No direct original-track native playback result was returned.
+- `q=БРЕДИШЬ`: API HTTP 200 but zero tracks/artists; MusicBrainz provider reported HTTP 503. No match was returned from current Audius or Jamendo integrations.
+
+## SoundCloud public artist source verification
+
+Public SoundCloud catalog discovery (read-only) found artist-account uploads for all three requested names:
+- молодой рубль profile `https://soundcloud.com/dblvnt-586464205`: display name matches, 8,202 followers and 83 public uploads at observation time; profile is not verified and links to `https://t.me/molodoyruble`. Treat as likely artist account, but retain the unverified warning. Sample account uploads: «чисто гипотетически», «красный ход», «базар», «вооружен».
+- Кишлак profile `https://soundcloud.com/kishlak`: verified profile, 114,923 followers at observation time. Own uploads include «я диско шар», «самый лучший день», «эй», «я уёбываю в джаз» and 2026 album «ВДПС».
+- БРЕДИШЬ profile `https://soundcloud.com/briedish`: not verified, but profile uploads include distributor metadata with label «Союз Мьюзик», artist credit БРЕДИШЬ and ISRCs. Sample releases include «ИЯЙ», «Кода», «Сон», «Забрать», «Заново».
+
+SoundCloud results show `streamable=true` and regional policy `MONETIZE`, but the license field is `all-rights-reserved`. This means no direct download, mirroring, proxying or rehosting. Official SoundCloud embed is the appropriate first playback route. SoundCloud official docs:
+- Widget API: https://developers.soundcloud.com/docs/api/html5-widget
+- API Guide / playing tracks and embedding: https://developers.soundcloud.com/docs/api/guide
+- oEmbed response checks returned HTTP 200 for the selected tracks «я диско шар», «ИЯЙ» and «красный ход». This verifies that SoundCloud's oEmbed endpoint accepts those URLs; it does not yet prove playback inside the deployed SONORA UI.
+
+## Priority artist embed implementation
+
+Draft PR #42: https://github.com/derector/SONORA/pull/42
+- Branch `feature/soundcloud-priority-artist-embeds`.
+- Adds a curated seed list of three priority artists and three track embeds per artist on the web search page.
+- Uses the official SoundCloud widget iframe and canonical track pages; no third-party audio files are fetched, copied, proxied or hosted by SONORA.
+- Explicitly marks the two unverified artist profiles; Кишлак is marked verified.
+- The embeds are a bridge while a full approved SoundCloud catalog integration is pursued. General SoundCloud search and native Android UI are not implemented by this PR.
+- CI and live widget playback QA are pending at the time of this update. PR remains draft/open, unmerged and undeployed.
+
+### Next QA gate for target artists
+1. CI must pass on PR #42.
+2. Test all nine embeds in the staging/deployed preview on desktop and Android mobile; confirm actual play/pause, progress, no autoplay, and correct artist/track attribution.
+3. Confirm that profile and track URLs still resolve and that unavailable/restricted tracks show a provider handoff rather than a broken player.
+4. Integrate the same provider-hosted embed capability into the native Android client only after inspecting its actual codebase; this repository currently contains only `apps/api` and `apps/web`, no native Android module.
+5. Pursue approved SoundCloud API access for live artist/track search and pagination; use official embed for all-rights-reserved recordings until licensing/streaming terms permit a custom player.
