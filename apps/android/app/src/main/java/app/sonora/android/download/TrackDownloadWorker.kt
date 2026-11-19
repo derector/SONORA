@@ -40,7 +40,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         if (provider != "Jamendo" || !downloadAllowed || !recognizedLicense ||
             uri?.scheme != "https" || !trustedHost) return@withContext Result.failure()
 
-        val safeId = id.replace(Regex("[^A-Za-z0-9_-]"), "_")
+        val safeId = "${provider}_${id}".replace(Regex("[^A-Za-z0-9_-]"), "_")
         val directory = File(applicationContext.filesDir, "offline")
         if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
         val finalFile = File(directory, "$safeId.audio")
@@ -149,9 +149,9 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         }
     }
 
-    private fun updateNotification(message: String) {
+    private fun notificationId(): Int = 10000 + (inputData.getString("provider").orEmpty() + ":" + inputData.getString("id").orEmpty()).hashCode().and(0x3fffffff)\n\n    private fun updateNotification(message: String) {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(4102, buildNotification(message))
+        manager.notify(notificationId(), buildNotification(message))
     }
 
     private fun createForegroundInfo(message: String): ForegroundInfo {
@@ -159,7 +159,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel("sonora_downloads", "SONORA downloads", NotificationManager.IMPORTANCE_LOW))
         }
-        return ForegroundInfo(4102, buildNotification(message))
+        return ForegroundInfo(notificationId(), buildNotification(message))
     }
 
     private fun buildNotification(message: String): Notification {
