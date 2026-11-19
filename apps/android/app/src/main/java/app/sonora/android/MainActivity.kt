@@ -125,8 +125,8 @@ private fun SonoraApp() {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val id = mediaItem?.mediaId ?: return
-                (activeQueue + tracks).firstOrNull { it.id == id }?.let { current = it }
+                val mediaId = mediaItem?.mediaId ?: return
+                (activeQueue + tracks).firstOrNull { "${it.provider}:${it.id}" == mediaId }?.let { current = it }
             }
         }
         player.addListener(listener)
@@ -137,7 +137,7 @@ private fun SonoraApp() {
     fun mediaItem(track: Track, url: String): MediaItem {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) }).build()
-        return MediaItem.Builder().setMediaId(track.id).setUri(url).setMediaMetadata(metadata).build()
+        return MediaItem.Builder().setMediaId("${track.provider}:${track.id}").setUri(url).setMediaMetadata(metadata).build()
     }
 
     fun startTrack(track: Track, local: Boolean = false) {
