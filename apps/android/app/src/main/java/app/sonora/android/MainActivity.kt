@@ -671,6 +671,7 @@ private fun LibraryScreen(
     var title by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    val currentJamendoTrack = currentTrack?.takeIf { it.provider.equals("Jamendo", ignoreCase = true) }
 
     fun refreshLibrary() {
         scope.launch {
@@ -726,10 +727,10 @@ private fun LibraryScreen(
             )
             Spacer(Modifier.height(12.dp))
             if (selected == null) {
-                if (currentTrack?.provider.equals("Jamendo", ignoreCase = true)) {
+                if (currentJamendoTrack != null) {
                     OutlinedButton(
                         onClick = {
-                            val target = currentTrack ?: return@OutlinedButton
+                            val target = currentJamendoTrack ?: return@OutlinedButton
                             scope.launch {
                                 busy = true
                                 try {
@@ -740,11 +741,11 @@ private fun LibraryScreen(
                                 finally { busy = false }
                             }
                         },
-                        enabled = !busy && favorites.none { it.providerTrackId == currentTrack.providerTrackId }
+                        enabled = !busy && favorites.none { it.providerTrackId == currentJamendoTrack.providerTrackId }
                     ) {
                         Icon(Icons.Default.Favorite, null, tint = Lime)
                         Spacer(Modifier.width(6.dp))
-                        Text(if (favorites.any { it.providerTrackId == currentTrack.providerTrackId }) "Уже в избранном" else "Добавить текущий трек в избранное")
+                        Text(if (favorites.any { it.providerTrackId == currentJamendoTrack.providerTrackId }) "Уже в избранном" else "Добавить текущий трек в избранное")
                     }
                 }
                 Text("Избранное Jamendo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
