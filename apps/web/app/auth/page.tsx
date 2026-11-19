@@ -14,13 +14,11 @@ type AuthResult = {
 };
 type AuthMode = "login" | "register";
 
-const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-
 export default function AuthPage() {
   const router = useRouter();
   const { t } = useLanguage();
   const { loading: sessionLoading, isAuthenticated, acceptSession } = useAuth();
-  const [mode, setMode] = useState<AuthMode>("register");
+  const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -40,7 +38,7 @@ export default function AuthPage() {
     try {
       const endpoint = mode === "register" ? "register" : "login";
       const body = mode === "register" ? { email, username, displayName } : { email };
-      const response = await fetch(`${API}/api/v1/auth/${endpoint}`, {
+      const response = await fetch(`/api/auth/${endpoint}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         credentials: "include", body: JSON.stringify(body)
       });
@@ -57,7 +55,7 @@ export default function AuthPage() {
     event.preventDefault();
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await fetch(`${API}/api/v1/auth/verify`, {
+      const response = await fetch(`/api/auth/verify`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         credentials: "include", body: JSON.stringify({ email, token: code })
       });
