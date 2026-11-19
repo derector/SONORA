@@ -96,10 +96,6 @@ export default function FavoritesPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("FAVORITES")}</span>
-      </header>
       <section className="mt-10 rounded-[2rem] border border-rose-300/15 bg-gradient-to-br from-[#352033] via-[#1c1725] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-rose-200"><Heart size={13}/> {t("Your saved music")}</p>
         <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Keep the good ones close.")}</h1>
