@@ -349,3 +349,22 @@ Reviewed the current main-branch API search route and web player implementation:
 - Important: this audit is of repository main snapshot; it does not prove that the running Railway deployment uses this exact commit. Verify deployed commit/config before attributing a live defect to one code line.
 
 P0 Jamendo regression investigation should therefore test the exact Jamendo ID 1448577 through the deployed dedicated route and the official API, inspect license_ccurl and audio fields, compare free-text search versus ID lookup, and then add a regression test for the actual failure cause. Never copy the HTML secure stream URL as a workaround or persist it as a permanent source URL.
+
+
+### LANE technical investigation — final public-browser findings (19 Nov 2026)
+- No public FAQ, API specification, or documented playback/auth flow was found. The public API docs/OpenAPI routes returned a missing-signature-token response; no attempt was made to obtain or bypass that token.
+- LANE's Privacy Policy describes its own account login via Telegram or Google and records listening history, likes, playlists and queue interactions. It does not explain Spotify/SoundCloud OAuth, user playback tokens or whether provider accounts are required: https://sklane.com/en/privacy-policy
+- The public product page says LANE organizes a personal media library, manages playlists/playback and only connects external services through supported integrations and their terms. Premium says offline access to authorized content; the Premium terms mention offline caching. This supports a personal-library/authorized-content model but does not reveal where cached bytes are stored: https://sklane.com/en and https://sklane.com/ru/premium-terms
+- Public developer posts advertise Spotify streaming fixes, SoundCloud fixes, song downloads and streaming optimization, but no public technical mechanism was exposed: https://t.me/s/lane_devs/112 and https://t.me/s/lane_devs/117. The discrepancy with the Terms remains unresolved. Do not claim to know LANE's private implementation.
+- The official site links to a direct Android APK; its iPhone button is an anchor rather than a working App Store destination, and the checked Google Play package URL was not found. This does not affect our design, but means we cannot use an official store listing as technical evidence.
+- LANE's public docs do not establish that Spotify/SoundCloud audio is extracted, hosted or proxied. The safe conclusion is: metadata import/search is documented; exact audio resolution/playback mechanism is not publicly verifiable.
+
+### Final LANE-inspired import flow for SONORA
+1. User pastes a Spotify/SoundCloud/Apple/YouTube/Yandex playlist or album URL, or selects an official provider connection.
+2. Import only the source playlist structure and permitted metadata/IDs via official API, SDK or public share page within provider rules.
+3. Normalize each source item and keep the original provider ID and source URL.
+4. Search SONORA's authorized playback catalogs independently (Audius, Jamendo, approved SoundCloud, licensed SONORA catalog and the user's own library).
+5. Resolve exact recording using ISRC, MusicBrainz ID, duration and title/artist confidence; reject wrong versions, live/covers/remixes unless explicitly selected.
+6. If a valid permitted playable source is found, attach it as a separate provider-source mapping and play that source. If no source is found, keep the imported playlist row with a clear unavailable status and allow the user to choose another match.
+7. Do not tell the user the Spotify track itself is playing when SONORA is actually playing a SoundCloud/Jamendo/other source match. Show actual source provider, quality/format where available, and rights/availability state.
+8. Per-user: imported playlist, source mappings, likes, history, queue and connected provider tokens are scoped to that SONORA user. OAuth tokens are encrypted and never shared; disconnect revokes/deletes user connection state as required. For playback from a provider, the source's own entitlement and session rules apply independently.
