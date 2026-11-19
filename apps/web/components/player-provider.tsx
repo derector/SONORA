@@ -82,7 +82,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const token = tokenRef.current;
     // Provider history currently accepts Jamendo IDs only. Other providers still play normally.
     if (!token) return;
-    const providerTrackId = track.id.startsWith("jamendo:") ? track.id.slice("jamendo:".length) : track.id;
+    // The current history endpoint is Jamendo-specific. Never send Audius IDs
+    // to it, even when an Audius identifier happens to contain only digits.
+    if (!track.id.startsWith("jamendo:")) return;
+    const providerTrackId = track.id.slice("jamendo:".length);
     if (!/^[0-9]{1,24}$/.test(providerTrackId)) return;
     try {
       await fetch(`${API}/api/v1/provider-history`, {
@@ -247,17 +250,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           return await response.json() as { tracks?: Array<PlayerTrack & { provider?: string; playable?: boolean }> };
         })
         .then((result) => {
-          const normalize = (value: string) => value.normalize("NFKD").toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
+          // Use Unicode property escapes so Cyrillic and other scripts are
+          // normalized correctly when looking for an equivalent playable source.
+          const normalize = (value: string) => value.normalize("NFKD").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
           const wantedTitle = normalize(failedTrack.title);
           const wantedArtist = normalize(failedTrack.artist);
-          const candidate = (result.tracks ?? []).find((item) => {
+          const candidate = wantedTitle && wantedArtist ? (result.tracks ?? []).find((item) => {
             if (!item.playable || !item.audioUrl || item.id === failedTrack.id) return false;
-            const titleMatch = normalize(item.title) === wantedTitle;
+            const title = normalize(item.title);
             const artist = normalize(item.artist);
+            if (!title || !artist) return false;
+            const titleMatch = title === wantedTitle;
             const artistMatch = artist === wantedArtist || artist.includes(wantedArtist) || wantedArtist.includes(artist);
             const durationMatch = !failedTrack.durationSeconds || !item.durationSeconds || Math.abs(item.durationSeconds - failedTrack.durationSeconds) <= 8;
             return titleMatch && artistMatch && durationMatch;
-          });
+          }) : undefined;
           if (!candidate) {
             setPlaybackError(mediaErrorMessage(audio.error?.code, t));
             return;
