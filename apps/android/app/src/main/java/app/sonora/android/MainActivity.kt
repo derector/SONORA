@@ -301,8 +301,14 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 
         val context = LocalContext.current
         val normalizedQuery = query.trim().lowercase()
+        val compactQuery = normalizedQuery.filterNot(Char::isWhitespace)
         val matchingArtists = PrioritySoundCloudArtists.filter { artist ->
-            normalizedQuery.length >= 2 && artist.aliases.any { alias -> normalizedQuery.contains(alias) || alias.contains(normalizedQuery) }
+            normalizedQuery.length >= 2 && artist.aliases.any { alias ->
+                val normalizedAlias = alias.lowercase()
+                val compactAlias = normalizedAlias.filterNot(Char::isWhitespace)
+                normalizedQuery.contains(normalizedAlias) || normalizedAlias.contains(normalizedQuery) ||
+                    compactQuery.contains(compactAlias) || compactAlias.contains(compactQuery)
+            }
         }
         matchingArtists.forEach { artist ->
             Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = Panel)) {
