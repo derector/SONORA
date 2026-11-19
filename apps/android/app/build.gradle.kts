@@ -5,6 +5,12 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val ciKeystorePath = System.getenv("SONORA_ANDROID_KEYSTORE_PATH")
+val ciKeystorePassword = System.getenv("SONORA_ANDROID_KEYSTORE_PASSWORD")
+val ciKeyAlias = System.getenv("SONORA_ANDROID_KEY_ALIAS")
+val ciKeyPassword = System.getenv("SONORA_ANDROID_KEY_PASSWORD")
+val hasCiSigning = listOf(ciKeystorePath, ciKeystorePassword, ciKeyAlias, ciKeyPassword).all { !it.isNullOrBlank() }
+
 android {
     namespace = "app.sonora.android"
     compileSdk = 35
@@ -13,9 +19,29 @@ android {
         applicationId = "app.sonora.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("sonoraVersionCode").orElse("1").get().toInt()
+        versionName = providers.gradleProperty("sonoraVersionName").orElse("0.1.0").get()
         buildConfigField("String", "SONORA_API_URL", "\"https://sonora-web-api-production.up.railway.app\"")
+    }
+
+    signingConfigs {
+        if (hasCiSigning) {
+            create("ciRelease") {
+                storeFile = file(ciKeystorePath!!)
+                storePassword = ciKeystorePassword
+                keyAlias = ciKeyAlias
+                keyPassword = ciKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            if (hasCiSigning) {
+                signingConfig = signingConfigs.getByName("ciRelease")
+            }
+        }
     }
 
     buildFeatures { compose = true; buildConfig = true }
@@ -25,6 +51,15 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+// Fail before task execution if somebody requests a release without the persistent key.
+// Debug/QA builds remain buildable while repository secrets are being configured.
+gradle.taskGraph.whenReady {
+    val releaseRequested = allTasks.any { it.name == "assembleRelease" || it.name == "bundleRelease" }
+    if (releaseRequested && !hasCiSigning) {
+        throw GradleException("Stable SONORA signing secrets are required for release APKs.")
+    }
 }
 
 dependencies {
