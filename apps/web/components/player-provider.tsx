@@ -426,7 +426,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                 <button type="button" onClick={() => { setQueueOpen((v) => !v); setExpanded(false); }} aria-label={t("Open queue")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ListMusic size={21}/></button>
               </div>
               <div className="flex flex-1 flex-col justify-center py-8">
-                <div className="mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
+                <div className="relative mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
                   <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>
                   {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
