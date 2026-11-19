@@ -14,10 +14,8 @@ import app.sonora.android.data.SonoraApi
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import java.io.File
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 @UnstableApi
 class PlaybackService : MediaSessionService() {
@@ -42,23 +40,24 @@ class PlaybackService : MediaSessionService() {
                     try {
                         val saved = PlaybackStateStore.load(this@PlaybackService)
                             ?: throw IllegalStateException("No saved SONORA playback queue.")
-                        val pending = saved.tracks.map { savedTrack ->
-                            CompletableFuture.supplyAsync({
-                                val localUri = savedTrack.audioUrl?.takeIf { it.startsWith("file:") }
-                                if (localUri != null) {
-                                    val localFile = File(Uri.parse(localUri).path.orEmpty())
-                                    savedTrack.takeIf { localFile.isFile }
-                                } else {
-                                    runCatching {
-                                        SonoraApi.resolveTrack(savedTrack.provider, savedTrack.providerTrackId)
-                                    }.getOrNull()
-                                }
-                            }, resolverExecutor)
+
+                        // Resolve on the callback's worker thread. Do not submit nested tasks to
+                        // the same bounded executor and wait for them, which can deadlock when
+                        // several controllers request resumption at once.
+                        val tracks = saved.tracks.mapNotNull { savedTrack ->
+                            val localUri = savedTrack.audioUrl?.takeIf { it.startsWith("file:") }
+                            val resolved = if (localUri != null) {
+                                val localFile = File(Uri.parse(localUri).path.orEmpty())
+                                savedTrack.takeIf { localFile.isFile }
+                            } else {
+                                runCatching {
+                                    SonoraApi.resolveTrack(savedTrack.provider, savedTrack.providerTrackId)
+                                }.getOrNull()
+                            }
+                            resolved?.takeIf { it.playable && !it.audioUrl.isNullOrBlank() }
                         }
-                        val tracks = pending.mapNotNull { future ->
-                            runCatching { future.get(15, TimeUnit.SECONDS) }.getOrNull()
-                        }.filter { it.playable && !it.audioUrl.isNullOrBlank() }
                         if (tracks.isEmpty()) throw IllegalStateException("No saved tracks are currently playable.")
+
                         val savedCurrent = saved.tracks.getOrNull(saved.currentIndex)
                         val restoredIndex = savedCurrent?.let { target ->
                             tracks.indexOfFirst {
