@@ -256,8 +256,33 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
         Text("Подборка для тебя", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
+        if (!busy && tracks.isEmpty() && message.isBlank()) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    if (provider == "Jamendo") "Jamendo пока не вернул доступных треков" else "Пока нет доступных треков",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    "Проверьте подключение и попробуйте обновить каталог.",
+                    color = Muted,
+                    modifier = Modifier.padding(top = 6.dp, bottom = 14.dp)
+                )
+                Button(
+                    onClick = { choose(provider) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Повторить")
+                }
+            }
+        }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, openPlayer) }
+            items(tracks, key = { it.provider + ":" + it.id }) { track -> TrackRow(track, { play(track) }, openPlayer) }
         }
     }
 }
