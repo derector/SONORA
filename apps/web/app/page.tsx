@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight, AudioLines, Clock3, Compass, Heart, Headphones, Library, ListMusic, Music2, Pause, Play, Search, Settings, Sparkles, LoaderCircle } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
-import { useAuth } from "../components/auth-provider";
 import { usePlayer, type PlayerTrack } from "../components/player-provider";
 
 type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean };
@@ -17,7 +16,6 @@ function duration(seconds: number) {
 
 export default function Home() {
   const { t } = useLanguage();
-  const { user, loading } = useAuth();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
   const [tracks, setTracks] = useState<CatalogTrack[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
