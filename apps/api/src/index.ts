@@ -752,8 +752,8 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/provider-history", async (
   if (!auth) return;
   const limit = Math.min(100, Math.max(1, Number(request.query.limit) || 30));
   const { data, error } = await auth.client.from("provider_listening_events")
-    .select("id,provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,source_url,event_type,listened_ms,occurred_at")
-    .eq("user_id", auth.user.id).eq("provider", "jamendo")
+    .select("id,provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,license_name,source_url,event_type,listened_ms,occurred_at")
+    .eq("user_id", auth.user.id)
     .order("occurred_at", { ascending: false }).limit(limit);
   if (error) {
     request.log.error({ code: error.code }, "Provider listening history query failed");
@@ -813,8 +813,8 @@ app.get("/api/v1/provider-favorites", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const { data, error } = await auth.client.from("user_provider_favorites")
-    .select("provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,source_url,created_at")
-    .eq("user_id", auth.user.id).eq("provider", "jamendo")
+    .select("provider,provider_track_id,title,artist_name,album_name,duration_seconds,artwork_url,license_url,license_name,source_url,created_at")
+    .eq("user_id", auth.user.id)
     .order("created_at", { ascending: false });
   if (error) {
     request.log.error({ code: error.code }, "Provider favorites listing failed");
@@ -823,10 +823,61 @@ app.get("/api/v1/provider-favorites", async (request, reply) => {
   return { items: data ?? [] };
 });
 
-app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", async (request, reply) => {
+app.post<{ Body: { provider?: string; providerTrackId?: string } }>("/api/v1/provider-favorites", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
-  const { providerTrackId } = request.body ?? {};
+  const { provider = "jamendo", providerTrackId } = request.body ?? {};
+  if (provider === "audius") {
+    if (typeof providerTrackId !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(providerTrackId)) {
+      return reply.code(400).send(authError(400, "A valid Audius track ID is required."));
+    }
+    try {
+      const response = await fetch(`https://api.audius.co/v1/tracks/${encodeURIComponent(providerTrackId)}?app_name=SONORA`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) return reply.code(response.status === 404 ? 404 : 502)
+        .send(authError(response.status === 404 ? 404 : 502, "Audius could not verify this track."));
+      const payload = await response.json() as { data?: {
+        id?: string; title?: string; duration?: number; permalink?: string;
+        is_streamable?: boolean; is_stream_gated?: boolean; license?: string;
+        artwork?: Record<string, string> | null; user?: { name?: string } | null;
+        album?: { title?: string } | null;
+      } };
+      const track = payload.data;
+      if (!track || track.id !== providerTrackId || !track.title || !track.user?.name) {
+        return reply.code(404).send(authError(404, "This track is not available from Audius."));
+      }
+      let sourceUrl = "https://audius.co";
+      try {
+        const candidate = new URL(track.permalink ?? "", "https://audius.co");
+        if (candidate.protocol === "https:" && ["audius.co", "www.audius.co"].includes(candidate.hostname)) {
+          sourceUrl = candidate.toString();
+        }
+      } catch {}
+      const artworkUrl = track.artwork && Object.values(track.artwork).find((value) =>
+        typeof value === "string" && value.startsWith("https://")) || null;
+      const licenseUrl = typeof track.license === "string" && /^https:\/\//i.test(track.license)
+        ? track.license : null;
+      const { error } = await auth.client.from("user_provider_favorites").upsert({
+        user_id: auth.user.id, provider: "audius", provider_track_id: track.id,
+        title: track.title, artist_name: track.user.name,
+        album_name: track.album?.title ?? null,
+        duration_seconds: typeof track.duration === "number" && track.duration > 0 ? Math.round(track.duration) : null,
+        artwork_url: artworkUrl, license_url: licenseUrl,
+        license_name: typeof track.license === "string" ? track.license : null,
+        source_url: sourceUrl
+      }, { onConflict: "user_id,provider,provider_track_id", ignoreDuplicates: true });
+      if (error) {
+        request.log.warn({ code: error.code }, "Audius provider favorite could not be saved");
+        return reply.code(400).send(authError(400, "Could not save this track."));
+      }
+      return reply.code(201).send({ ok: true, provider: "audius", providerTrackId: track.id });
+    } catch (error) {
+      request.log.error({ err: error }, "Audius favorite verification failed");
+      return reply.code(502).send(authError(502, "Audius could not verify this track right now."));
+    }
+  }
+  if (provider !== "jamendo") return reply.code(400).send(authError(400, "Unsupported music provider."));
   if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
     return reply.code(400).send(authError(400, "A valid Jamendo track ID is required."));
   }
@@ -866,6 +917,7 @@ app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", a
       title: track.name, artist_name: track.artist_name,
       album_name: track.album_name ?? null, duration_seconds: track.duration,
       artwork_url: track.album_image ?? track.image ?? null, license_url: licenseUrl,
+      license_name: slug || "Creative Commons",
       source_url: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`
     }, { onConflict: "user_id,provider,provider_track_id", ignoreDuplicates: true });
     if (error) {
@@ -889,6 +941,24 @@ app.delete<{ Params: { providerTrackId: string } }>("/api/v1/provider-favorites/
   if (!data) return reply.code(404).send(authError(404, "Favorite not found."));
   return { ok: true };
 });
+
+app.delete<{ Params: { provider: string; providerTrackId: string } }>(
+  "/api/v1/provider-favorites/:provider/:providerTrackId", async (request, reply) => {
+    const auth = await requireUser(request, reply);
+    if (!auth) return;
+    const { provider, providerTrackId } = request.params;
+    if (!["jamendo", "audius"].includes(provider) ||
+        !/^[a-zA-Z0-9_-]{1,64}$/.test(providerTrackId)) {
+      return reply.code(400).send(authError(400, "Invalid provider track identity."));
+    }
+    const { data, error } = await auth.client.from("user_provider_favorites").delete()
+      .eq("user_id", auth.user.id).eq("provider", provider)
+      .eq("provider_track_id", providerTrackId).select("provider_track_id").maybeSingle();
+    if (error) return reply.code(400).send(authError(400, "Favorite could not be removed."));
+    if (!data) return reply.code(404).send(authError(404, "Favorite not found."));
+    return { ok: true };
+  }
+);
 
 // Jamendo API access is configured for non-commercial use. Known Creative Commons
 // licenses are accepted; unknown licenses are rejected. Attribution and license links
