@@ -127,7 +127,7 @@ object SonoraApi {
     fun discover(provider: String): List<Track> {
         val path = when (provider) {
             "Audius" -> "/api/v1/providers/audius/tracks?sort=trending&limit=24"
-            else -> "/api/v1/providers/jamendo/tracks?q=music&limit=24"
+            else -> "/api/v1/providers/jamendo/tracks?limit=24"
         }
         return parseTracks(request(path).optJSONArray("items"))
     }
