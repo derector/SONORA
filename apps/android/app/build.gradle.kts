@@ -40,8 +40,6 @@ android {
             isMinifyEnabled = false
             if (hasCiSigning) {
                 signingConfig = signingConfigs.getByName("ciRelease")
-            } else {
-                throw GradleException("Stable SONORA signing secrets are required for release APKs.")
             }
         }
     }
@@ -53,6 +51,15 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+// Fail before task execution if somebody requests a release without the persistent key.
+// Debug/QA builds remain buildable while repository secrets are being configured.
+gradle.taskGraph.whenReady {
+    val releaseRequested = allTasks.any { it.name == "assembleRelease" || it.name == "bundleRelease" }
+    if (releaseRequested && !hasCiSigning) {
+        throw GradleException("Stable SONORA signing secrets are required for release APKs.")
+    }
 }
 
 dependencies {
@@ -81,6 +88,7 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.room:room-compiler:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
