@@ -66,7 +66,6 @@ app.get("/api/v1", async () => ({
     "/api/v1/catalog/search",
     "/api/v1/search/music",
     "/api/v1/providers/jamendo/tracks",
-    "/api/v1/providers/openverse/tracks",
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
