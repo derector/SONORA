@@ -66,7 +66,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <header className="sonora-topbar sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#080910]/85 px-4 py-3 backdrop-blur-xl md:px-7">
           <Link href="/" className="flex items-center gap-2.5 md:hidden">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-violet-300/25 to-cyan-300/10 text-violet-100"><AudioLines size={19}/></span>
-            <span className="text-sm font-bold tracking-[.22em]">SONORA</span>
+            <span className="hidden text-sm font-bold tracking-[.22em] sm:inline">SONORA</span>
           </Link>
           <div className="hidden md:block">
             <p className="text-[9px] font-semibold uppercase tracking-[.25em] text-violet-200/70">{t("Music universe")}</p>
@@ -81,7 +81,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <Link href={profileHref} aria-label={t("Your profile")} className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full border border-white/10 bg-violet-300/10 text-violet-100 transition hover:border-violet-200/40">
               {user?.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-full w-full object-cover"/> : <UserRound size={16}/>}
             </Link>
-            <Link href="/settings" aria-label={t("Settings")} className="hidden h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white sm:grid"><Settings size={16}/></Link>
+            <Link href="/settings" aria-label={t("Settings")} className="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"><Settings size={16}/></Link>
           </div>
         </header>
         {children}
