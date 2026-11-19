@@ -80,12 +80,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   async function recordEvent(track: PlayerTrack, eventType: "play" | "complete" | "skip", listenedMs: number) {
     const token = tokenRef.current;
-    // Provider history currently accepts Jamendo IDs only. Other providers still play normally.
-    if (!token) return;
-    // The current history endpoint is Jamendo-specific. Never send Audius IDs
-    // to it, even when an Audius identifier happens to contain only digits.
-    if (!track.id.startsWith("jamendo:")) return;
-    const providerTrackId = track.id.slice("jamendo:".length);
+    // Provider history currently accepts Jamendo IDs only. Identify Jamendo
+    // by its canonical source URL because catalog and search responses use
+    // different ID shapes (raw numeric ID vs. "jamendo:<id>").
+    if (!token || !/^https:\/\/www\.jamendo\.com\//i.test(track.sourceUrl)) return;
+    const providerTrackId = track.id.startsWith("jamendo:")
+      ? track.id.slice("jamendo:".length)
+      : track.id;
     if (!/^[0-9]{1,24}$/.test(providerTrackId)) return;
     try {
       await fetch(`${API}/api/v1/provider-history`, {
