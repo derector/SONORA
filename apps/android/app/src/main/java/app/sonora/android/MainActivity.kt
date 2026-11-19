@@ -154,9 +154,9 @@ private fun SonoraApp() {
             return
         }
         val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
-            .distinctBy { it.id }
+            .distinctBy { "${it.provider}:${it.id}" }
         activeQueue = queue
-        val selectedIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        val selectedIndex = queue.indexOfFirst { "${it.provider}:${it.id}" == "${track.provider}:${track.id}" }.coerceAtLeast(0)
         player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
         player.prepare()
         player.play()
@@ -412,7 +412,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
-    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.id } }
+    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { "${it.provider}:${it.id}" } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
     var speed by remember(controller) { mutableFloatStateOf(controller?.playbackParameters?.speed ?: 1f) }
@@ -434,10 +434,10 @@ private fun FullPlayer(
             }
             Text("Следующие треки", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(playableQueue, key = { it.id }) { item ->
+                items(playableQueue, key = { "${it.provider}:${it.id}" }) { item ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable {
                         val player = controller ?: return@clickable
-                        val index = playableQueue.indexOfFirst { it.id == item.id }
+                        val index = playableQueue.indexOfFirst { "${it.provider}:${it.id}" == "${item.provider}:${item.id}" }
                         if (index >= 0) player.seekTo(index, 0L)
                         player.play()
                         showQueue = false
@@ -447,7 +447,7 @@ private fun FullPlayer(
                             Text(item.title, color = Color.White, maxLines = 1)
                             Text(item.artist, color = Muted, fontSize = 12.sp)
                         }
-                        if (item.id == track?.id) Icon(Icons.Default.GraphicEq, null, tint = Lime)
+                        if (item.provider == track?.provider && item.id == track.id) Icon(Icons.Default.GraphicEq, null, tint = Lime)
                     }
                 }
             }
