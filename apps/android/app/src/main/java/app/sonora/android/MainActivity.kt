@@ -698,7 +698,7 @@ private fun LibraryScreen(
                 }
                 if (playlistTracks.isEmpty() && !busy) Text("В этом плейлисте пока нет доступных треков.", color = Muted, modifier = Modifier.padding(top = 10.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
-                    items(playlistTracks, key = { it.id }) { track ->
+                    items(playlistTracks, key = { "${it.provider}:${it.id}" }) { track ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -715,7 +715,7 @@ private fun LibraryScreen(
                                     busy = true
                                     try {
                                         withContext(Dispatchers.IO) { SonoraApi.removeTrackFromPlaylist(target.id, track) }
-                                        playlistTracks = playlistTracks.filterNot { it.id == track.id }
+                                        playlistTracks = playlistTracks.filterNot { it.provider == track.provider && it.id == track.id }
                                         error = ""
                                     } catch (e: Exception) { error = e.message ?: "Не удалось удалить трек" }
                                     finally { busy = false }
