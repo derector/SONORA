@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,6 +84,7 @@ private fun SonoraApp() {
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
+    var searchResults by remember { mutableStateOf<List<Track>>(emptyList()) }
     var email by remember { mutableStateOf(SonoraApi.email()) }
     var username by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
@@ -191,12 +195,19 @@ private fun SonoraApp() {
             AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
                 when (screen) {
                     "Главная" -> DiscoverScreen(tracks, provider, busy, message, { source -> provider = source; loadTracks(source) { tracks = it } }, ::play, { tab = "Плеер" })
-                    "Поиск" -> SearchScreen(query, { query = it }, tracks, busy, message, {
-                        scope.launch {
-                            busy = true
-                            try { tracks = withContext(Dispatchers.IO) { SonoraApi.search(query) }; message = "" }
-                            catch (e: Exception) { message = e.message ?: "Ошибка поиска" }
-                            finally { busy = false }
+                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
+                        val term = query.trim()
+                        if (term.isBlank()) {
+                            searchResults = emptyList()
+                            message = "Введите название трека или исполнителя"
+                        } else {
+                            scope.launch {
+                                busy = true
+                                message = ""
+                                try { searchResults = withContext(Dispatchers.IO) { SonoraApi.search(term) } }
+                                catch (e: Exception) { searchResults = emptyList(); message = e.message ?: "Ошибка поиска" }
+                                finally { busy = false }
+                            }
                         }
                     }, ::play)
                     "Медиатека" -> LibraryScreen(
@@ -291,10 +302,20 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
 private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
-        OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQuery,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Трек, исполнитель, альбом") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { search() }),
+            trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+        )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.provider + ":" + it.id }) { TrackRow(it, { play(it) }, {}) } }
     }
 }
 
