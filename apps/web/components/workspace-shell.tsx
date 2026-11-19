@@ -74,7 +74,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link href="/search" className="flex min-w-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 text-xs text-slate-400 transition hover:border-violet-200/25 hover:bg-white/[0.07] hover:text-white sm:min-w-[190px]">
-              <Search size={15}/><span className="truncate">{t("Search music")}</span><span className="ml-auto hidden rounded-md border border-white/10 px-1.5 py-0.5 text-[9px] text-slate-600 sm:inline">⌘ K</span>
+              <Search size={15}/><span className="truncate">{t("Search music")}</span>
             </Link>
             <Link href="/history" aria-label={t("Listening history")} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"><Clock3 size={16}/></Link>
             <Link href="/import" aria-label={t("Import tracks")} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:bg-white/5 hover:text-white"><FileUp size={16}/></Link>
