@@ -1145,8 +1145,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         }> };
         const stopWords = new Set(["the", "and", "for", "with", "from"]);
         const normalizeSearchText = (value: string) => value.toLocaleLowerCase()
-          .normalize("NFKD").replace(/[^\\p{L}\\p{N}]+/gu, " ").trim();
-        const queryWords = normalizeSearchText(q).split(/\\s+/).filter(Boolean);
+          .normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        const queryWords = normalizeSearchText(q).split(/\s+/).filter(Boolean);
         const meaningfulWords = queryWords.filter((word) => !stopWords.has(word));
         const requiredWords = meaningfulWords.length ? meaningfulWords : queryWords;
         const audiusArtists: Array<Record<string, unknown>> = [];
