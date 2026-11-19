@@ -620,3 +620,10 @@ Draft PR #42: https://github.com/derector/SONORA/pull/42
 3. Confirm that profile and track URLs still resolve and that unavailable/restricted tracks show a provider handoff rather than a broken player.
 4. Integrate the same provider-hosted embed capability into the native Android client only after inspecting its actual codebase; this repository currently contains only `apps/api` and `apps/web`, no native Android module.
 5. Pursue approved SoundCloud API access for live artist/track search and pagination; use official embed for all-rights-reserved recordings until licensing/streaming terms permit a custom player.
+
+
+### SoundCloud embed PR CI result
+
+- PR #42 GitHub Actions run #44461347960: **success**.
+- Dependency install, TypeScript typecheck and production build all passed.
+- This validates the web source build only. The SoundCloud iframe widgets have not yet been exercised inside a deployed SONORA preview or production browser, so actual in-app playback remains pending.
