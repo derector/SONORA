@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (refreshPromiseRef.current) return refreshPromiseRef.current;
     const task = (async () => {
       try {
-        const response = await fetch(`${API}/api/v1/auth/refresh`, {
+        const response = await fetch(`/api/auth/refresh`, {
           method: "POST",
           credentials: "include",
           cache: "no-store"
@@ -159,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = tokenRef.current;
     try {
       if (token) {
-        await fetch(`${API}/api/v1/auth/logout`, {
+        await fetch(`/api/auth/logout`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           credentials: "include"
