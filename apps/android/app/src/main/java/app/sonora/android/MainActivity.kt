@@ -91,6 +91,7 @@ private fun SonoraApp() {
     var displayName by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var authStep by remember { mutableStateOf(if (SonoraApi.isSignedIn()) "signed" else "welcome") }
+    var authMode by remember { mutableStateOf("login") }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
@@ -284,7 +285,7 @@ private fun SonoraApp() {
                             OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
-                    "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
+                    "Профиль" -> ProfileScreen(authStep, authMode, { authMode = it }, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
                         onRegister = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.requestOtp(email, username, displayName, true) }; authStep = "verify"; message = "Код отправлен на почту" } catch (e: Exception) { message = e.message ?: "Ошибка регистрации" }; busy = false }
                         },
@@ -783,7 +784,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
 }
 
 @Composable
-private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit) {
+private fun ProfileScreen(step: String, authMode: String, setAuthMode: (String) -> Unit, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Профиль", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         when (step) {
@@ -798,11 +799,33 @@ private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Uni
                 Button(onClick = onVerify, enabled = !busy && code.length == 8, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Подтвердить") }
             }
             else -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = authMode == "login",
+                        onClick = { setAuthMode("login") },
+                        label = { Text("У меня уже есть аккаунт", maxLines = 1) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFF33294E), selectedLabelColor = Color.White)
+                    )
+                    FilterChip(
+                        selected = authMode == "register",
+                        onClick = { setAuthMode("register") },
+                        label = { Text("Создать аккаунт", maxLines = 1) },
+                        modifier = Modifier.weight(1f),
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFF33294E), selectedLabelColor = Color.White)
+                    )
+                }
                 OutlinedTextField(email, setEmail, Modifier.fillMaxWidth(), label = { Text("Электронная почта") }, singleLine = true)
-                OutlinedTextField(username, setUsername, Modifier.fillMaxWidth(), label = { Text("Имя пользователя для регистрации") }, singleLine = true)
-                OutlinedTextField(displayName, setDisplayName, Modifier.fillMaxWidth(), label = { Text("Отображаемое имя") }, singleLine = true)
-                Button(onClick = onRegister, enabled = !busy && email.contains("@") && username.length >= 3 && displayName.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.fillMaxWidth()) { Text("Создать аккаунт") }
-                OutlinedButton(onClick = onLogin, enabled = !busy && email.contains("@"), modifier = Modifier.fillMaxWidth()) { Text("У меня уже есть аккаунт") }
+                if (authMode == "register") {
+                    OutlinedTextField(username, setUsername, Modifier.fillMaxWidth(), label = { Text("Имя пользователя") }, singleLine = true)
+                    OutlinedTextField(displayName, setDisplayName, Modifier.fillMaxWidth(), label = { Text("Отображаемое имя") }, singleLine = true)
+                }
+                Button(
+                    onClick = { if (authMode == "login") onLogin() else onRegister() },
+                    enabled = !busy && email.contains("@") && (authMode == "login" || (username.length >= 3 && displayName.isNotBlank())),
+                    colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text(if (authMode == "login") "Получить код и войти" else "Создать аккаунт") }
             }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
