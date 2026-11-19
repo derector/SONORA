@@ -71,10 +71,6 @@ export default function HistoryPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("HISTORY")}</span>
-      </header>
       <section className="mt-10 rounded-[2rem] border border-sky-300/15 bg-gradient-to-br from-[#1d2d43] via-[#171b2a] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-sky-200"><Headphones size={14}/> {t("Your listening trail")}</p>
         <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Recently heard.")}</h1>
