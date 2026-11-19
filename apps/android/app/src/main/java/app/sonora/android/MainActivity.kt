@@ -157,8 +157,7 @@ private fun SonoraApp() {
                 when (reason) {
                     Player.MEDIA_ITEM_TRANSITION_REASON_AUTO,
                     Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT -> recordTransition(previousMediaId, "complete")
-                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK,
-                    Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> recordTransition(previousMediaId, "skip")
+                    Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> recordTransition(previousMediaId, "skip")
                 }
                 previousMediaId = nextMediaId
                 trackedMediaId = nextMediaId
