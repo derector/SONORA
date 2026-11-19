@@ -10,11 +10,13 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "offline_tracks")
+@Entity(tableName = "offline_tracks", primaryKeys = ["provider", "id"])
 data class OfflineTrack(
-    @PrimaryKey val id: String,
+    val id: String,
     val title: String,
     val artist: String,
     val artworkUrl: String?,
@@ -30,17 +32,43 @@ interface OfflineTrackDao {
     fun observeAll(): Flow<List<OfflineTrack>>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(track: OfflineTrack)
-    @Query("DELETE FROM offline_tracks WHERE id = :id")
-    suspend fun delete(id: String)
+    @Query("DELETE FROM offline_tracks WHERE provider = :provider AND id = :id")
+    suspend fun delete(provider: String, id: String)
 }
 
-@Database(entities = [OfflineTrack::class], version = 1, exportSchema = false)
+@Database(entities = [OfflineTrack::class], version = 2, exportSchema = false)
 abstract class OfflineDatabase : RoomDatabase() {
     abstract fun offlineTracks(): OfflineTrackDao
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS offline_tracks_new (
+                        id TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        artist TEXT NOT NULL,
+                        artworkUrl TEXT,
+                        localPath TEXT NOT NULL,
+                        durationSeconds INTEGER NOT NULL,
+                        provider TEXT NOT NULL,
+                        savedAt INTEGER NOT NULL,
+                        PRIMARY KEY(provider, id)
+                    )
+                """.trimIndent())
+                database.execSQL("""
+                    INSERT INTO offline_tracks_new
+                    (id, title, artist, artworkUrl, localPath, durationSeconds, provider, savedAt)
+                    SELECT id, title, artist, artworkUrl, localPath, durationSeconds, provider, savedAt
+                    FROM offline_tracks
+                """.trimIndent())
+                database.execSQL("DROP TABLE offline_tracks")
+                database.execSQL("ALTER TABLE offline_tracks_new RENAME TO offline_tracks")
+            }
+        }
         @Volatile private var instance: OfflineDatabase? = null
         fun get(context: Context): OfflineDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(context.applicationContext, OfflineDatabase::class.java, "sonora-offline.db").build().also { instance = it }
+            instance ?: Room.databaseBuilder(context.applicationContext, OfflineDatabase::class.java, "sonora-offline.db")
+                .addMigrations(MIGRATION_1_2).build().also { instance = it }
         }
     }
 }
