@@ -149,7 +149,9 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         }
     }
 
-    private fun notificationId(): Int = 10000 + (inputData.getString("provider").orEmpty() + ":" + inputData.getString("id").orEmpty()).hashCode().and(0x3fffffff)\n\n    private fun updateNotification(message: String) {
+    private fun notificationId(): Int = 10000 + (inputData.getString("provider").orEmpty() + ":" + inputData.getString("id").orEmpty()).hashCode().and(0x3fffffff)
+
+    private fun updateNotification(message: String) {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.notify(notificationId(), buildNotification(message))
     }
