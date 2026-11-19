@@ -376,3 +376,106 @@ P0 Jamendo regression investigation should therefore test the exact Jamendo ID 1
 - Album metadata is parsed but currently unused for disambiguation. There is no documented Spotify OAuth/playlist API connection in this import flow.
 - Therefore do not describe current SONORA as having live Spotify/SoundCloud/Yandex playlist import. The UI currently supports matching exported metadata lists against Jamendo, with the source dropdown acting as a label.
 - Required implementation: provider-specific official playlist readers behind connection adapters; retain source playlist name/order/IDs; cross-catalog match each row against actual authorized streams; preview matched/unmatched/ambiguous rows; require user confirmation; create a SONORA playlist preserving order and provider source mapping. Do not silently write to favorites or substitute weak title matches.
+
+
+## Expanded multi-source music acquisition roadmap — 2026-11-19
+
+The user explicitly requires SONORA to search beyond the currently integrated Audius and Jamendo catalogs. Treat this as a core platform capability: a growing provider network with a common search interface, source-specific rights/playback capabilities, and a real-audio resolution pipeline. Do not limit discovery to the two existing providers, but do not imply that every discovered result is automatically playable.
+
+### Additional source families
+
+#### A. Openly licensed / public-domain audio catalogs
+1. **Openverse Audio — high-priority discovery aggregator.**
+   - Official API supports audio search and detail lookup. Search results can include direct media URL, creator, creator URL, source/landing page, license and version, license URL, attribution text, provider, file type, bitrate, sample rate, duration, waveform and tags.
+   - API documentation: https://api.openverse.org/v1/ . Openverse aggregates many upstream providers, so it is a discovery layer, not a blanket license grant or a single guaranteed playback origin.
+   - It explicitly warns that it cannot guarantee the accuracy of individual license information; verify every recording at its original source before enabling playback, downloads or redistribution. Respect rate limits, pagination caps and anti-scraping terms.
+   - Implementation: OpenverseAudioProvider for search/detail; preserve provider, source, foreign_landing_url, url, license and attribution; resolve original provider and verify the license/current source before marking playable. Treat dead/removed/redirected media as unavailable.
+2. **Internet Archive Audio — high-priority discovery and rights-reviewed ingestion candidate.**
+   - Official Advanced Search API supports metadata search; Metadata API returns item metadata and files. Docs: https://doc-tools.readthedocs.io/en/latest/item-search-apis.html ; https://doc-tools.readthedocs.io/en/latest/md-read.html ; metadata field guide: https://internetarchive.readthedocs.io/en/stable/metadata.html
+   - Search only mediatype:audio and fetch item metadata/files. Inspect licenseurl, rights, creator, collection, file format, access restrictions and item/file metadata individually. The presence of an MP3/FLAC file does not prove public-domain status or permission to stream/rehost. Internet Archive is an archive of many kinds of user/institution supplied material, not an all-cleared commercial music catalog.
+   - Initial capability: metadata discovery; playback/download only when the specific item's rights, source terms and file access authorize the intended use. Keep a conservative manual-review queue for ambiguous/unknown rights and live-concert recordings.
+3. **ccMixter — high-priority.**
+   - Public Query API supports programmatic upload search, JSON/XML/CSV/HTML output, license filters, attribution-oriented templates and stream-link templates. Docs: https://ccmixter.org/query-api ; permission statement: https://ccmixter.org/about
+   - Preserve exact license code and attribution. License values include BY, NC, SA, ND, Sampling, Sampling+ and PD. Do not equate all CC licenses: NC is not permitted for commercial SONORA use without additional permission; ND restricts derivative use; SA imposes share-alike conditions; sampling licenses have their own conditions. Verify each upload page and file before streaming/downloading.
+   - Build CcMixterProvider with API pagination, creator/source links, license-aware capability resolution and attribution display.
+4. **Free Music Archive (FMA) — blocked pending written approval / direct licensing.**
+   - FMA states its API was shut down; hotlinking/playing files directly from its servers is not allowed; forwarding user search queries and scraping HTML is not allowed without explicit approval. It says developers may use content only if hosted on their own server and license conditions are met. Official notice: https://freemusicarchive.org/app-developers
+   - Therefore do not build a scraper or hotlink player. Contact FMA first. If written permission is granted, implement an approved import/hosting flow and verify each track's CC license and rights.
+5. **Other open collections (candidate registry, not assumed approved):** public-domain/CC audio collections and specialist libraries can be added through the same provider contract after checking official API availability, direct file access, license provenance, attribution, rate limits and commercial terms. Musopen is not pre-approved: its published terms restrict copying/redistribution/mirroring and limit the stated permission to personal non-commercial use; negotiate separate rights before integration: https://musopen.org/tos/
+
+#### B. Artist, label and distributor direct sources
+6. **Bandcamp — artist/label partnership and user-owned collection path, not generic public streaming API.**
+   - Bandcamp's developer API is aimed at labels and merchandise fulfillment partners; access requires contacting Bandcamp, OAuth 2.0 and per-account credentials. Docs: https://bandcamp.com/developer
+   - Do not assume the existence of a public unrestricted search/stream API. Build a direct artist/label onboarding path: rights holder uploads master files and artwork, confirms ownership/territories/streaming/download rights, sets takedown contact and signs a license. SONORA can then host/play those authorized assets through its own storage/CDN.
+   - Separately, allow a user to connect/import their own Bandcamp purchases only if a documented supported route and terms permit it; no account scraping or extracting protected downloads.
+7. **Direct label/distributor catalog ingestion — strategic long-term source.**
+   - Partner API/feed/SFTP or controlled portal for approved labels/distributors; ingest ISRC, UPC, master recording, artwork, credits, release dates, territory, start/end dates, rights windows, stream/download flags and takedown contacts.
+   - This is the strongest route to make commercial tracks truly first-class in SONORA's own catalog and player, but requires written rights and royalty/reporting arrangements. Never ingest commercial masters based only on a public URL.
+8. **Artist self-service upload — strategic.**
+   - Artists can upload masters directly, verify email/identity/contact and affirm ownership/authority; capture split/label/producer rights, samples, territories, release windows, explicit content, license type, monetization permission, download permission and takedown process. Quarantine pending review, malware scan, media validation and rights approval before public playback.
+
+#### C. Major streaming platforms / metadata discovery + official playback
+9. **Apple Music / MusicKit — high-priority official playback candidate.**
+   - Apple Music API provides catalog search, songs, albums, artists, playlists and user library with developer token and Music User Token where user data is requested. MusicKit has web and Android support and can play catalog content through Apple's player under user authorization and subscription eligibility. Docs: https://developer.apple.com/documentation/applemusicapi ; https://developer.apple.com/musickit/ ; Android user token: https://developer.apple.com/documentation/applemusicapi/user-authentication-for-musickit
+   - This is provider-controlled playback, not audio extraction or SONORA-hosted audio. Keep playback within MusicKit, check subscription capability and comply with Apple restrictions (no downloading/copying MusicKit content, no misrepresentation of player controls, and no unauthorized monetization of Apple Music access): https://developer.apple.com/support/terms/apple-developer-program-license-agreement/
+10. **SoundCloud — official custom-player candidate subject to app approval and current terms.**
+   - Official API documents OAuth 2.1/PKCE, public resource search, track lookup and stream_url resolution; public playable tracks can be streamed through a custom player if access permits and required creator/SoundCloud attribution and source link are shown. Private tracks require user authorization; blocked/geo/paywalled tracks have no playable stream. Docs: https://developers.soundcloud.com/docs/api/guide
+   - Do not cache or download streams unless specifically authorized; apply for official app access and verify commercial use terms before rollout. Treat playable, preview, blocked as distinct capability states.
+11. **Spotify — catalog/playlist metadata plus official provider player only.**
+   - Web API supports metadata, playlists and playback control; Web Playback SDK / official embed retains Spotify as the audio player. Premium and policy constraints apply; Spotify's compliance guidance states full-track streaming through Spotify Platform is limited to Premium users. Docs: https://developer.spotify.com/documentation/web-api ; https://developer.spotify.com/documentation/web-playback-sdk ; https://developer.spotify.com/compliance-tips
+   - No general MP3 stream URL is supplied for SONORA. Do not extract streams or combine Spotify audio with SONORA's other audio.
+12. **TIDAL, Deezer, Yandex Music, VK Music, YouTube Music and Qobuz — maintain adapters as gated candidates.**
+   - For each service, verify current official developer access, catalog/search endpoints, playlist read scopes, playback SDK availability for Web and Android, user entitlement/subscription, regional availability, commercial permissions and terms. Do not implement private APIs or infer playback permission from a metadata endpoint.
+   - YouTube remains official video/player only; do not extract audio or provide background/offline audio outside permitted YouTube capabilities.
+   - Deezer/Yandex/VK/Qobuz should remain metadata/handoff-only until an official integration grants actual playback rights.
+
+### Provider capability matrix and source registry
+Add a provider registry instead of hard-coding provider assumptions into the player. Each adapter must declare:
+- Search: artist/album/track/playlist support, pagination, language/transliteration, region.
+- Metadata: identifiers, ISRC, MusicBrainz IDs, duration, release, artwork, attribution.
+- Playlist import: official API or export-only; read scopes; preserve order and playlist ID.
+- Playback: native_stream, official_sdk, official_embed, preview, external_handoff, user_file, licensed_sonora_asset, metadata_only.
+- Rights: license identifier/URL/version, commercial permission, attribution, ND/SA/NC flags, streaming/download/offline/redistribution rights, territory and validity window.
+- Auth: none/public, client credentials, OAuth PKCE, user subscription/entitlement, token refresh/revoke.
+- Storage: no persistence, ephemeral URL only, user-owned storage, SONORA-licensed master.
+- Operational: rate limits, terms URL, API version, last verification date, provider approval status and kill switch.
+
+### Search orchestration across all sources
+- Query active providers concurrently with bounded timeout, circuit breaker, per-provider rate limit and cancellation.
+- Use provider-specific adapters and a normalized UnifiedTrackCandidate; never collapse the provider's source ID or rights fields.
+- Deduplicate only after identity resolution using ISRC, MusicBrainz recording ID, normalized title/artist, album and duration. Keep alternate recordings, remasters, live versions, remixes and clean/explicit versions separate unless confidently identical.
+- Rank exact artist+title+duration and provider confidence above fuzzy title matches. Apply transliteration and script normalization for Cyrillic/Latin, but never use transliteration alone as proof.
+- Return all source variants grouped under one recording only when confidence is high; show provider and capability for each source. If one provider has metadata and another has playable audio, clearly display the actual audio source.
+- A single source may be unavailable in one country, blocked for a user, or removed later. Re-resolve capability at playback time and provide graceful fallback only to a verified identical recording.
+- Do not let a metadata-only provider result suppress a playable result from another source.
+
+### Playback and rights rules across the expanded catalog
+- Never proxy/host third-party audio unless the provider contract explicitly permits it.
+- Never store short-lived stream URLs as permanent track audio URLs. Resolve at play time, refresh on expiry and bind playback session to the current user.
+- Do not infer download permission from stream permission, or stream permission from a Creative Commons label alone. Evaluate the exact license/version, commercial status, attribution, NC/ND/SA terms, territory and provider API terms.
+- For Internet Archive and Openverse, independently verify the original source and rights record; aggregator metadata is not legal clearance.
+- For direct-licensed SONORA masters and approved uploads, store the recording and rights metadata separately; enforce territories/windows and signed short-lived CDN delivery.
+- User-owned local files and personal server sources remain private to that user and are not promoted into the shared public catalog.
+
+### Implementation sequence (expanded)
+P0: Jamendo/Audius end-to-end playback QA and exact search fixes; add provider capability registry and source provenance.
+P1: Openverse audio discovery adapter; ccMixter adapter; Internet Archive metadata/audio adapter with conservative rights review. These widen the search network without depending on major DSP playback access.
+P1: SoundCloud official access application and documented streaming adapter after approval; Apple Music MusicKit web/Android prototype behind feature flags and subscription checks.
+P1: Cross-provider playlist import and rematching, including official Spotify/Apple/SoundCloud playlist metadata where authorized; preserve source playlist order and make a native SONORA playlist of resolved sources.
+P2: FMA only after explicit written permission; Bandcamp label/artist API/partner discussions; artist self-service and direct label/distributor licensed catalog ingestion.
+P2: TIDAL/Deezer/Yandex/VK/Qobuz official access verification and gated adapters.
+P3: scale provider onboarding, rights ledger, royalty/reporting, takedown workflows and catalog quality monitoring.
+
+### Explicit source-status vocabulary
+- approved_native_stream: verified provider permission and successful native-player stream.
+- official_sdk_playback: playback occurs inside provider SDK/player under its entitlement.
+- official_embed: official embedded player; audio remains provider-controlled.
+- preview_only: preview segment only.
+- metadata_only: searchable catalog data but no permitted audio playback.
+- handoff_only: open provider app/site.
+- user_owned: private user file or connected personal library.
+- sonora_licensed: master audio with SONORA's documented rights.
+- rights_review_required: license or source permission not yet verified.
+- unavailable: removed, dead, blocked, region-denied or no stream.
+
+A result may move to a stronger capability only after a real provider response, license/terms review and end-to-end playback test. No provider gets approved_native_stream merely because its public page contains an audio URL.
