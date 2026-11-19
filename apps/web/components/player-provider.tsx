@@ -218,7 +218,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const onWaiting = () => { if (!audio.paused) setIsLoading(true); };
     const onCanPlay = () => setIsLoading(false);
     const onTime = () => setCurrentTime(audio.currentTime || 0);
-    const onDuration = () => setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    const onDuration = () => {
+      const mediaDuration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
+      const metadataDuration = currentRef.current?.durationSeconds || 0;
+      setDuration(mediaDuration || metadataDuration);
+    };
     const onProgress = () => {
       try {
         if (audio.buffered.length && Number.isFinite(audio.duration) && audio.duration > 0) {
@@ -390,7 +394,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <button type="button" onClick={() => setExpanded(true)} aria-label={t("Open full player")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:bg-white/[0.04] sm:flex-none sm:w-[28%]">
                   <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-violet-300/10">
-                    {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="h-full w-full object-cover"/> : <div className="grid h-full w-full place-items-center text-violet-200"><ListMusic size={19}/></div>}
+                    <div className="grid h-full w-full place-items-center text-violet-200"><ListMusic size={19}/></div>
+                    {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                   </div>
                   <div className="min-w-0"><p className="truncate text-xs font-semibold sm:text-sm">{currentTrack.title}</p><p className="truncate text-[11px] text-slate-400">{currentTrack.artist}</p></div>
                 </button>
@@ -413,7 +418,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               {queueOpen && <div className="mt-3 max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-black/40 p-2">
                 <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")}><X size={14}/></button></div>
                 {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}>
-                  {item.artworkUrl ? <img src={item.artworkUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover"/> : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/5"><ListMusic size={13}/></span>}
+                  <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md bg-white/5"><span className="grid h-full w-full place-items-center"><ListMusic size={13}/></span>{item.artworkUrl && <img src={item.artworkUrl} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</span>
                   <span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-24 truncate text-slate-500">{item.artist}</span>
                   {index === queueIndex && isPlaying && <span className="text-violet-200">♫</span>}
                 </button>)}
@@ -428,8 +433,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                 <button type="button" onClick={() => { setQueueOpen((v) => !v); setExpanded(false); }} aria-label={t("Open queue")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ListMusic size={21}/></button>
               </div>
               <div className="flex flex-1 flex-col justify-center py-8">
-                <div className="mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
-                  {currentTrack.artworkUrl ? <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="h-full w-full object-cover"/> : <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>}
+                <div className="relative mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
+                  <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>
+                  {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
                 <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("Source")}</a></div>
                 <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
