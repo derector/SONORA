@@ -8,7 +8,7 @@ export default function SettingsPage() {
   const { language, setLanguage, t } = useLanguage();
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 md:px-8">
-      <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16}/> {t("Back to SONORA")}</Link>
+      
       <section className="mt-8 rounded-[2rem] border border-white/10 bg-[#11111b]/90 p-6 shadow-2xl shadow-violet-950/20 sm:p-9">
         <div className="flex items-center gap-3">
           <span className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><AudioLines size={24}/></span>
