@@ -24,6 +24,38 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val resolverExecutor: ExecutorService = Executors.newFixedThreadPool(4)
+    private val persistRunnable = object : Runnable {
+        override fun run() {
+            persistPlaybackSnapshot()
+            mainHandler.postDelayed(this, 2_000L)
+        }
+    }
+
+    /**
+     * Keep the last known queue and playhead fresh while playback continues
+     * after the Activity has left the foreground. The Activity remains the
+     * source of full Track metadata; this service only snapshots player state
+     * when its media IDs still match that persisted queue.
+     */
+    private fun persistPlaybackSnapshot() {
+        val player = mediaSession?.player ?: return
+        if (player.mediaItemCount == 0 || player.currentMediaItemIndex < 0) return
+        val saved = PlaybackStateStore.load(this) ?: return
+        val savedByMediaId = saved.tracks.associateBy { "${it.provider}:${it.id}" }
+        val queue = (0 until player.mediaItemCount).mapNotNull { index ->
+            savedByMediaId[player.getMediaItemAt(index).mediaId]
+        }
+        if (queue.size != player.mediaItemCount) return
+        PlaybackStateStore.save(
+            context = this,
+            queue = queue,
+            currentIndex = player.currentMediaItemIndex,
+            positionMs = player.currentPosition,
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode,
+            playWhenReady = player.playWhenReady
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -97,11 +129,14 @@ class PlaybackService : MediaSessionService() {
             }
         }
         mediaSession = MediaSession.Builder(this, player).setCallback(callback).build()
+        mainHandler.postDelayed(persistRunnable, 2_000L)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(persistRunnable)
+        persistPlaybackSnapshot()
         mediaSession?.run {
             player.release()
             release()
