@@ -55,7 +55,11 @@ export default function SearchPage() {
   const searchSequence = useRef(0);
   const matchingSoundCloudArtists = prioritySoundCloudArtists.filter((artist) => {
     const normalized = query.trim().toLocaleLowerCase("ru");
-    return normalized.length >= 2 && artist.aliases.some((alias) => normalized.includes(alias) || alias.includes(normalized));
+    const compactQuery = normalized.replace(/\\s+/g, "");
+    return normalized.length >= 2 && artist.aliases.some((alias) => {
+      const compactAlias = alias.toLocaleLowerCase("ru").replace(/\\s+/g, "");
+      return normalized.includes(alias.toLocaleLowerCase("ru")) || alias.toLocaleLowerCase("ru").includes(normalized) || compactQuery.includes(compactAlias) || compactAlias.includes(compactQuery);
+    });
   });
 
   const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
