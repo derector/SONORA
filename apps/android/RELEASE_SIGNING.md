@@ -24,7 +24,7 @@ Keep two encrypted backups of `sonora-release.jks` in separate safe locations. L
 
 ```sh
 keytool -list -v -keystore sonora-release.jks -alias sonora-release
-base64 < sonora-release.jks | tr -d '\\n'
+base64 < sonora-release.jks | tr -d '\n'
 ```
 
 The first command prompts for the keystore password and displays the certificate SHA-256 fingerprint. Save that fingerprint in your release records. The second command prints the Base64 keystore payload. Copy it directly into the GitHub secret field; do not put it in a repository file or chat.
