@@ -12,11 +12,19 @@
 - SONORA keeps its own visual identity, labels, legal provider attribution, and playback architecture.
 
 ## Automated release verification
-- GitHub Actions Android Release run #138 completed successfully.
+
+### Current release: run #141
+- GitHub Actions workflow run #141 completed successfully on commit `405a52b628b8e192f7655c17ae25c106838abfef`.
+- Versioned release APK artifact: `SONORA-Android-release` (artifact ID `14580421456`).
+- APK SHA-256: `31c4617f76d2a4c084821105b9e6a2e444fa59e761d783ccf1cf5289cde57a23`.
+- Both `Build versioned APK` and `Upload stable-signed release APK` completed successfully.
+- The APK artifact was downloaded and its SHA-256 independently checked. Physical-device installation, update compatibility, and playback remain untested.
+
+### Previous signing-certificate verification: run #138
 - Versioned release APK artifact: `SONORA-Android-release` (artifact ID `14578981138`).
 - APK SHA-256: `3d22352449724580bf69a55f3d76ac63a02f2f24f3899f6f02532c105933fddb`.
 - APK v2 signing certificate SHA-256 fingerprint: `23:CB:9F:56:B3:A5:FC:AA:CE:AD:DB:9B:20:08:D0:97:13:8D:FB:C2:75:32:7C:B8:0A:84:CB:02:3B:26:54:2A`.
-- The signing fingerprint matches the persistent SONORA release certificate. This verifies the artifact signature, not installation or playback on a physical device.
+- This earlier artifact's fingerprint matched the persistent SONORA release certificate. The run #141 artifact was produced by the stable-signed release workflow, but its certificate fingerprint has not been independently extracted in this verification pass.
 
 ## Device QA checklist
 - [ ] Install as an in-place update over the existing SONORA app without losing app data.
