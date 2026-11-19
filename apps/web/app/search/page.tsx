@@ -72,10 +72,6 @@ export default function SearchPage() {
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1440px] overflow-x-clip px-4 py-6 pb-40 md:px-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> {t("Back to SONORA")}</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</span>
-      </header>
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Search size={14}/> {t("Federated music search")}</p>
         <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Search across music catalogs.")}</h1>
