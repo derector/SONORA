@@ -196,3 +196,42 @@ User requested a broad investigation of public APIs, SDKs, open-source implement
 7. Add provider contract tests, auth/entitlement tests, source attribution tests, rate-limit/backoff, and a user-visible capability label for each result.
 8. Run web and Android device QA separately. Do not merge, deploy or apply database migrations without the established release gate.
 
+
+
+## Acceptance test: молодой рубль — шкёрт (activated 2026-11-19)
+
+The user explicitly requested that this artist test now be run. This supersedes the earlier deferred status.
+
+Reference catalog evidence:
+- Spotify album: https://open.spotify.com/album/2jek5OrDxJJ37FvLZZumGI — public result lists 23 songs, 48m 27s, release 2026-02-06.
+- Zvuk album: https://zvuk.com/release/48662028 — public track listing.
+- Qobuz album: https://www.qobuz.com/gb-en/album/-/pqhp8kakd95jd
+- Amazon Music album: https://music.amazon.in/albums/B0GLWJ7991
+- YouTube album mix: https://www.youtube.com/watch?v=8TSgrYNinss
+- YouTube Topic track: https://www.youtube.com/watch?v=AhcyhUscX2M (практически ветер).
+- Public artist discovery pages: https://volt.fm/artist/186407389/molodoj-rubl and https://soundcloud.com/discover/sets/track-stations%3A2261159534
+
+Minimum named-track assertions:
+1. ботаника флоу
+2. роллин
+3. сделал это
+4. фантастическая материя
+5. рублькэш
+6. амахасла
+7. курс
+8. практически ветер
+9. прямо на пол
+10. стиснув зубы
+
+The release has 23 songs. Use the Spotify/Zvuk/Qobuz/Amazon listings and YouTube release description to reconcile the complete 23-track tracklist, aliases/transliterations and featured artists; do not treat the ten named assertions as the complete album.
+
+Test procedure:
+- Search the artist separately on each provider adapter (Audius, Jamendo, Spotify metadata, SoundCloud approved API, Apple/TIDAL if enabled, YouTube Data API).
+- Search every track title both with and without artist name; include Cyrillic and transliteration variants.
+- Fetch artist page and album page where provider permits; paginate until the provider reports completion. Compare found count and titles to the reference tracklist.
+- Store a per-provider result matrix: artist match, album match, each track match, provider ID, canonical URL, availability state, stream/playback type, rights/license, API response status and checked timestamp.
+- Distinguish metadata_only, external_link, official_embed, preview, playable, needs_auth, region_restricted, not_found, and rights_unverified. Do not mark a catalog search hit playable without testing its permitted playback path.
+- Audius and Jamendo are current active adapters. A track missing from them is not a failure of Spotify/YouTube availability; report coverage by provider.
+- Never scrape protected Spotify/SoundCloud audio or extract streams. Use official APIs, official embeds, provider links and user-authorized handoff only.
+- This test is now active and must not be deferred again unless the user asks.
+
