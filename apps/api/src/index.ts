@@ -66,6 +66,7 @@ app.get("/api/v1", async () => ({
     "/api/v1/catalog/search",
     "/api/v1/search/music",
     "/api/v1/providers/jamendo/tracks",
+    "/api/v1/providers/audius/artists/:artistId/tracks",
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
@@ -1019,6 +1020,113 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
     return reply.code(502).send(authError(502, "Audius catalog is temporarily unavailable."));
   }
 });
+
+// Full public track catalog for one Audius artist. Offset pagination lets clients
+// walk the complete catalog instead of mistaking a search page for an artist discography.
+app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: string } }>(
+  "/api/v1/providers/audius/artists/:artistId/tracks",
+  async (request, reply) => {
+    const artistId = request.params.artistId.trim();
+    const limitValue = Number(request.query.limit ?? 50);
+    const offsetValue = Number(request.query.offset ?? 0);
+    if (!/^[a-zA-Z0-9_-]{1,64}$/.test(artistId)) {
+      return reply.code(400).send(authError(400, "A valid Audius artist ID is required."));
+    }
+    if (!Number.isInteger(limitValue) || limitValue < 1 || limitValue > 100 ||
+        !Number.isInteger(offsetValue) || offsetValue < 0 || offsetValue > 100000) {
+      return reply.code(400).send(authError(400, "Limit must be 1-100 and offset must be 0-100000."));
+    }
+    try {
+      const params = new URLSearchParams({
+        app_name: "SONORA",
+        limit: String(limitValue),
+        offset: String(offsetValue)
+      });
+      const countParams = new URLSearchParams({
+        app_name: "SONORA",
+        filter_tracks: "public"
+      });
+      const countRequest = fetch(
+        `https://api.audius.co/v1/users/${encodeURIComponent(artistId)}/tracks/count?${countParams.toString()}`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+      ).then(async (countResponse) => {
+        if (!countResponse.ok) return null;
+        const countPayload = await countResponse.json() as { data?: number };
+        return typeof countPayload.data === "number" &&
+          Number.isInteger(countPayload.data) && countPayload.data >= 0
+          ? countPayload.data : null;
+      }).catch(() => null);
+      const response = await fetch(
+        `https://api.audius.co/v1/users/${encodeURIComponent(artistId)}/tracks?${params.toString()}`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12000) }
+      );
+      if (response.status === 404) {
+        return reply.code(404).send(authError(404, "Audius artist was not found."));
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json() as { data?: Array<{
+        id: string; title: string; duration?: number; permalink?: string;
+        is_streamable?: boolean; is_stream_gated?: boolean; license?: string;
+        artwork?: Record<string, string> | null;
+        user?: { id?: string; name?: string; handle?: string };
+        album?: { playlist_name?: string };
+      }> };
+      const records = payload.data ?? [];
+      const totalCount = await countRequest;
+      const items = records.flatMap((track) => {
+        if (!track.id || !track.title) return [];
+        const streamable = track.is_streamable === true && track.is_stream_gated !== true;
+        return [{
+          id: `audius:${track.id}`,
+          providerTrackId: track.id,
+          provider: "Audius",
+          artistId: track.user?.id ?? artistId,
+          title: track.title,
+          artist: track.user?.name ?? track.user?.handle ?? "Audius creator",
+          album: track.album?.playlist_name ?? null,
+          durationSeconds: track.duration ?? 0,
+          artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
+          audioUrl: streamable
+            ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`
+            : null,
+          license: typeof track.license === "string" ? track.license : null,
+          licenseUrl: typeof track.license === "string" && /^https:\/\//i.test(track.license)
+            ? track.license : null,
+          sourceUrl: (() => {
+            try {
+              const source = new URL(track.permalink ?? "", "https://audius.co");
+              return source.protocol === "https:" &&
+                (source.hostname === "audius.co" || source.hostname === "www.audius.co")
+                ? source.toString() : "https://audius.co";
+            } catch {
+              return "https://audius.co";
+            }
+          })(),
+          playable: streamable
+        }];
+      });
+      return {
+        provider: "Audius",
+        artistId,
+        items,
+        limit: limitValue,
+        offset: offsetValue,
+        sourceCount: records.length,
+        totalCount,
+        hasMore: totalCount !== null
+          ? offsetValue + records.length < totalCount
+          : records.length === limitValue,
+        nextOffset: (totalCount !== null
+          ? offsetValue + records.length < totalCount
+          : records.length === limitValue)
+          ? offsetValue + records.length : null
+      };
+    } catch (error) {
+      request.log.warn({ err: error, artistId }, "Audius artist catalog unavailable");
+      return reply.code(502).send(authError(502, "This artist's Audius catalog is temporarily unavailable."));
+    }
+  }
+);
 
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
