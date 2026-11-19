@@ -52,6 +52,7 @@ import app.sonora.android.data.OfflineTrack
 import coil.compose.AsyncImage
 import app.sonora.android.data.SonoraApi
 import app.sonora.android.data.Track
+import app.sonora.android.playback.PlaybackStateStore
 import app.sonora.android.download.TrackDownloadWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -138,6 +139,67 @@ private fun SonoraApp() {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) }).build()
         return MediaItem.Builder().setMediaId("${track.provider}:${track.id}").setUri(url).setMediaMetadata(metadata).build()
+    }
+
+    LaunchedEffect(controller) {
+        val player = controller ?: return@LaunchedEffect
+        val saved = withContext(Dispatchers.IO) { PlaybackStateStore.load(context) }
+            ?: return@LaunchedEffect
+        val resolved = withContext(Dispatchers.IO) {
+            saved.tracks.mapNotNull { savedTrack ->
+                if (savedTrack.audioUrl?.startsWith("file:") == true) {
+                    savedTrack.takeIf { savedTrack.audioUrl.let { uri ->
+                        runCatching { File(android.net.Uri.parse(uri).path.orEmpty()).isFile }.getOrDefault(false)
+                    } }
+                } else {
+                    runCatching {
+                        SonoraApi.resolveTrack(savedTrack.provider, savedTrack.providerTrackId)
+                    }.getOrNull()
+                }
+            }.filter { it.playable && !it.audioUrl.isNullOrBlank() }
+        }
+        if (resolved.isEmpty()) {
+            PlaybackStateStore.clear(context)
+            return@LaunchedEffect
+        }
+        val savedCurrent = saved.tracks.getOrNull(saved.currentIndex)
+        val restoredIndex = savedCurrent?.let { target ->
+            resolved.indexOfFirst {
+                it.provider == target.provider && it.providerTrackId == target.providerTrackId
+            }
+        }?.takeIf { it >= 0 } ?: 0
+        activeQueue = resolved
+        current = resolved[restoredIndex]
+        player.setMediaItems(
+            resolved.map { mediaItem(it, it.audioUrl!!) },
+            restoredIndex,
+            saved.positionMs
+        )
+        player.shuffleModeEnabled = saved.shuffleEnabled
+        player.repeatMode = saved.repeatMode
+        player.prepare()
+        if (saved.playWhenReady) player.play()
+    }
+
+    LaunchedEffect(controller, activeQueue) {
+        val player = controller ?: return@LaunchedEffect
+        if (activeQueue.isEmpty()) return@LaunchedEffect
+        while (true) {
+            if (player.mediaItemCount > 0) {
+                withContext(Dispatchers.IO) {
+                    PlaybackStateStore.save(
+                        context = context,
+                        queue = activeQueue,
+                        currentIndex = player.currentMediaItemIndex,
+                        positionMs = player.currentPosition,
+                        shuffleEnabled = player.shuffleModeEnabled,
+                        repeatMode = player.repeatMode,
+                        playWhenReady = player.playWhenReady
+                    )
+                }
+            }
+            delay(2_000)
+        }
     }
 
     fun startTrack(track: Track, local: Boolean = false) {

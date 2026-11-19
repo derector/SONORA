@@ -194,6 +194,17 @@ object SonoraApi {
         return resolved
     }
 
+    fun resolveTrack(provider: String, providerTrackId: String): Track? {
+        val encodedId = java.net.URLEncoder.encode(providerTrackId, "UTF-8")
+        val path = when (provider.lowercase()) {
+            "audius" -> "/api/v1/providers/audius/tracks?id=$encodedId"
+            "jamendo" -> "/api/v1/providers/jamendo/tracks?id=$encodedId"
+            else -> return null
+        }
+        return parseTracks(request(path).optJSONArray("items"))
+            .firstOrNull { it.providerTrackId == providerTrackId || it.id == providerTrackId }
+    }
+
     fun search(query: String): List<Track> {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
         return parseTracks(result.optJSONArray("tracks")).filter { it.playable }
