@@ -339,11 +339,38 @@ private fun FullPlayer(
     var speed by remember(controller) { mutableFloatStateOf(controller?.playbackParameters?.speed ?: 1f) }
     var volume by remember(controller) { mutableFloatStateOf(controller?.volume ?: 1f) }
 
-    LaunchedEffect(controller, playing) {
-        while (playing && controller != null) {
-            position = controller.currentPosition.coerceAtLeast(0L).toFloat()
-            duration = controller.duration.takeIf { it > 0L && it != androidx.media3.common.C.TIME_UNSET }?.toFloat() ?: 0f
-            delay(500)
+    LaunchedEffect(controller, track) {
+        val player = controller ?: return@LaunchedEffect
+
+        fun syncTimeline() {
+            val reportedDuration = player.duration
+            val metadataDuration = (track?.durationSeconds ?: 0).coerceAtLeast(0) * 1000L
+            val resolvedDuration = if (
+                reportedDuration > 0L &&
+                reportedDuration != androidx.media3.common.C.TIME_UNSET
+            ) reportedDuration else metadataDuration
+
+            duration = resolvedDuration.toFloat()
+            position = player.currentPosition.coerceAtLeast(0L)
+                .coerceAtMost(resolvedDuration.takeIf { it > 0L } ?: Long.MAX_VALUE)
+                .toFloat()
+        }
+
+        val listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                syncTimeline()
+            }
+        }
+
+        player.addListener(listener)
+        syncTimeline()
+        try {
+            while (true) {
+                syncTimeline()
+                delay(500)
+            }
+        } finally {
+            player.removeListener(listener)
         }
     }
 
