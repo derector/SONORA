@@ -102,10 +102,6 @@ export default function PlaylistsPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 md:px-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("PLAYLISTS")}</span>
-      </header>
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
         <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your personal collection")}</p>
         <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{t("Sound, in your order.")}</h1>
