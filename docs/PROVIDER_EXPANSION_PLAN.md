@@ -139,3 +139,60 @@ Public query returned JSON with track/item ID, title, creator, source page, lice
 - Provider/catalog report: https://agent.tinyfish.ai/runs/999491f2-11ab-48ab-854f-0dd1e57a1a33
 - Commercial-provider feasibility: https://agent.tinyfish.ai/runs/34af7b48-21b1-4f5b-95eb-ad9d0e0b511b
 - Architecture audit: timed out and did not return a reliable report: https://agent.tinyfish.ai/runs/776039f1-2455-45c3-b351-3e3643fb6c12
+
+
+## Provider integration expansion — 2026-11-19
+
+User requested a broad investigation of public APIs, SDKs, open-source implementations and the LANE app's integration approach. Treat "API" as the intended meaning of "айпи"; raw IP addresses do not grant catalog access, credentials, or playback rights. Keep the integration compliant and reproducible: no DRM circumvention, reverse-engineered private endpoints, subscription bypass, token/cookie extraction, client impersonation, or scraping protected streams.
+
+### LANE reference — metadata-first model
+- Public LANE terms: https://sklane.com/ru/terms-of-service
+- Public description says LANE uses Spotify and SoundCloud APIs for track search and metadata (title, artist, artwork); it does not provide or store third-party audio files. External playback/content access remains controlled by the provider.
+- Public product page: https://sklane.com/en
+- SONORA can adopt this separation: unified metadata discovery and track matching, followed by a clearly labeled provider handoff or an officially authorized provider player. Do not assume LANE has undocumented playback access or copy its implementation without evidence.
+
+### Provider matrix and implementation gates
+
+| Provider | Public/official integration | SONORA plan |
+|---|---|---|
+| Spotify | Web API for catalog metadata/search and user-authorized library/playlist functions; Web Playback SDK / playback control has Premium and strict platform/policy limits. | Start with metadata + provider deep links / official embeds where allowed. Do not mix Spotify streams/content into SONORA's multi-source player without written Spotify approval: Developer Policy prohibits products integrated with streams/content from another service. |
+| SoundCloud | Public API access is application-reviewed; credentials are issued after an application. API terms prohibit downloading/storing content and restrict commercial use and mixing with other services. | Apply for official API access; metadata/search and official player/handoff only within approved scopes. No scraped client IDs or substitute credentials. |
+| Apple Music | Apple Music API and MusicKit support catalog, user library, playlists, authorization and playback under Apple developer and subscriber requirements. | Separate adapter; evaluate developer token, Music User Token, storefronts, Android/Web MusicKit support and subscription entitlements. Never extract DRM or reuse browser session data. |
+| TIDAL | Official Developer Platform provides REST API, Web/Android/iOS SDKs and embeds; OAuth and endpoint-specific access tiers/scopes apply. | High-priority research adapter. Verify current developer access, audio playback entitlements, commercial limits and approved Android SDK path before coding. |
+| YouTube / YouTube Music | YouTube Data API for metadata/search plus official embedded player. | Search/list videos with attribution and open official player. No audio separation/extraction, background audio, offline copies, or replacement player. |
+| Deezer | Public developer material and historical APIs exist, but current app registration/access and playback permissions must be confirmed with Deezer. | Research-only until current official access is verified. No unofficial endpoints or copied app tokens. |
+| VK Music | VK API/OAuth does not itself grant music playback/catalog rights. | Research official partner/documented scopes only; otherwise provider link/handoff. |
+| Yandex Music | No assumption that public/undocumented endpoints permit third-party playback. | Research official/partner access and contractual permissions; no private endpoint scraping or token reuse. |
+| Audius | Official open API supports public read/search/track/user/playlist endpoints; writes require API credentials. | Active provider. Expand artist/album/playlist discovery and retain gated/streamable/license states. |
+| Jamendo | Official API offers search/discovery and per-track license metadata. | Active provider. Keep license/attribution checks per track and preserve restrictions. |
+| Internet Archive | Public search and metadata APIs; rights and playable file must be checked per item. | Candidate with narrow queries, file-format validation and item-level rights checks. |
+| ccMixter | Public query API includes file, artist and license metadata; results may include sample packs/archives. | Candidate; inspect file type and license, reject archives from normal music playback. |
+
+### Open-source reference investigation
+- https://github.com/sonorahq/sonora — active multi-provider desktop client with Spotify, Apple Music, YouTube Music, Deezer, TIDAL, Subsonic and local files. Its public project statement explicitly rejects DRM circumvention, decrypted stream export, and subscription bypass. Study provider boundaries, OAuth, player handoff and source-specific adapters; do not copy code blindly. Repository is GPL-3.0-or-later, so any code reuse requires a deliberate license-compatibility review. Architecture reference only; not the same project as SONORA.
+- https://sonorahq.org/docs/providers — provider setup and per-provider account/entitlement notes.
+- https://github.com/Abhi9-Pr/Sonora — separate project with a multi-source abstraction and provider-qualified IDs; inspect license, upstream rights and implementation quality before borrowing architecture.
+- https://github.com/dCataliNN/cadence — Audius-focused player; reference only, inspect license and current API compatibility.
+- https://github.com/blazenxt/free-music-search-api — architecture reference only; verify every upstream provider and rights claim independently.
+
+### Research evidence (official sources)
+- Spotify Developer Policy: https://developer.spotify.com/policy
+- Spotify Web API: https://developer.spotify.com/documentation/web-api
+- Spotify compliance guidance: https://developer.spotify.com/compliance-tips
+- SoundCloud public API access: https://help.soundcloud.com/hc/en-us/articles/115003446727-SoundCloud-Public-APIs
+- Apple Music API: https://developer.apple.com/documentation/AppleMusicAPI
+- TIDAL Developer docs: https://developer.tidal.com/documentation
+- YouTube API Developer Policies: https://developers.google.com/youtube/terms/developer-policies
+- Audius API: https://docs.audius.co/api/
+- Jamendo API: https://developer.jamendo.com/v3.0/docs
+
+### Delivery order
+1. Implement a provider capability registry: search, metadata, user library, playlist read/write, official playback, embed, external handoff, download permission, auth method, territory and entitlement.
+2. Implement Spotify + SoundCloud metadata adapters only after official app access is obtained; show source badges and provider links.
+3. Prototype TIDAL and Apple Music adapters behind feature flags, beginning with metadata/auth and only enabling playback after verified access.
+4. Add YouTube search + official embedded player as a video result type, not an extracted audio source.
+5. Re-check Deezer, VK and Yandex official developer access; keep unavailable adapters disabled rather than using unofficial endpoints.
+6. Extend artist/album/track identity resolution with ISRC where available, MusicBrainz recording IDs and confidence-scored metadata matches. Preserve provider-specific IDs and canonical URLs.
+7. Add provider contract tests, auth/entitlement tests, source attribution tests, rate-limit/backoff, and a user-visible capability label for each result.
+8. Run web and Android device QA separately. Do not merge, deploy or apply database migrations without the established release gate.
+
