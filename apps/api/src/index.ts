@@ -1059,24 +1059,31 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     tasks.push((async () => {
       try {
         const escapedQuery = q.replace(/[\\"]/g, "\\$&");
-        const params = new URLSearchParams({
-          q: `mediatype:audio AND ("${escapedQuery}")`,
-          fl: "identifier,title,creator,licenseurl,mediatype",
-          rows: String(Math.min(100, limit * 5)), page: "1", output: "json"
-        });
-        const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as {
-          response?: { docs?: Array<{ identifier?: string; title?: string; creator?: string; licenseurl?: string; mediatype?: string }> };
-          error?: string;
-        };
-        if (payload.error) throw new Error(payload.error);
-        const candidates = (payload.response?.docs ?? []).filter((item) =>
+        const licenseSearches = await Promise.allSettled(["by", "publicdomain"].map(async (licenseFamily) => {
+          const params = new URLSearchParams({
+            q: `mediatype:audio AND ("${escapedQuery}") AND licenseurl:http*${licenseFamily}*`,
+            fl: "identifier,title,creator,licenseurl,mediatype",
+            rows: String(Math.min(100, limit * 5)), page: "1", output: "json"
+          });
+          const response = await fetch(`https://archive.org/advancedsearch.php?${params.toString()}`, {
+            headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json() as {
+            response?: { docs?: Array<{ identifier?: string; title?: string; creator?: string; licenseurl?: string; mediatype?: string }> };
+            error?: string;
+          };
+          if (payload.error) throw new Error(payload.error);
+          return payload.response?.docs ?? [];
+        }));
+        const searchDocs = licenseSearches.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+        if (searchDocs.length === 0 && licenseSearches.every((result) => result.status === "rejected")) {
+          throw new Error("Internet Archive search endpoints are unavailable.");
+        }
+        const candidates = [...new Map(searchDocs.filter((item) =>
           item.mediatype === "audio" && safeArchiveItemIdentifier(item.identifier) &&
           isArchivePermissiveLicense(item.licenseurl)
-        ).slice(0, limit);
+        ).map((item) => [item.identifier, item])).values()].slice(0, limit);
         const loadArchiveItem = async (item: typeof candidates[number]) => {
           const identifier = safeArchiveItemIdentifier(item.identifier);
           if (!identifier) return null;
