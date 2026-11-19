@@ -12,6 +12,31 @@ type Metadata = { id: string; provider: string; title: string; artist: string; a
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; providers?: Record<string, ProviderStatus>; error?: string };
 
+
+type SoundCloudTrack = { title: string; url: string };
+type SoundCloudArtist = { name: string; aliases: string[]; profileUrl: string; profileNote: string; tracks: SoundCloudTrack[] };
+const prioritySoundCloudArtists: SoundCloudArtist[] = [
+  { name: "Молодой рубль", aliases: ["молодой рубль", "molodoy rubl", "molodoyrubl"], profileUrl: "https://soundcloud.com/dblvnt-586464205", profileNote: "SoundCloud profile is not verified", tracks: [
+    { title: "чисто гипотетически", url: "https://soundcloud.com/dblvnt-586464205/chisto-gipoteticheski-prod-by" },
+    { title: "красный ход", url: "https://soundcloud.com/dblvnt-586464205/krasnyj-xod-prod-by-sw3rvv" },
+    { title: "базар", url: "https://soundcloud.com/dblvnt-586464205/bazar-prod-by-uraniumseller" }
+  ]},
+  { name: "Кишлак", aliases: ["кишлак", "kishlak"], profileUrl: "https://soundcloud.com/kishlak", profileNote: "Verified SoundCloud artist profile", tracks: [
+    { title: "я диско шар", url: "https://soundcloud.com/kishlak/ya-disko-shar-prod-kishlak" },
+    { title: "самый лучший день", url: "https://soundcloud.com/kishlak/samyj-luchshij-den-prod-bvbvbvbudvbv" },
+    { title: "я уёбываю в джаз", url: "https://soundcloud.com/kishlak/ya-uyobyvayu-v-dzhaz-prod-kishlak" }
+  ]},
+  { name: "БРЕДИШЬ", aliases: ["бредишь", "bredish", "briedish"], profileUrl: "https://soundcloud.com/briedish", profileNote: "Artist profile is not verified; releases carry label and ISRC metadata", tracks: [
+    { title: "ИЯЙ", url: "https://soundcloud.com/briedish/iyaj" },
+    { title: "Сон", url: "https://soundcloud.com/briedish/son" },
+    { title: "Кода", url: "https://soundcloud.com/briedish/koda" }
+  ]}
+];
+function soundCloudWidgetUrl(trackUrl: string) {
+  const params = new URLSearchParams({ url: trackUrl, auto_play: "false", hide_related: "true", show_comments: "false", show_user: "true", show_reposts: "false", visual: "false", color: "#8b5cf6" });
+  return `https://w.soundcloud.com/player/?${params.toString()}`;
+}
+
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 const duration = (seconds?: number | null) => seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "";
 
@@ -28,6 +53,14 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const searchSequence = useRef(0);
+  const matchingSoundCloudArtists = prioritySoundCloudArtists.filter((artist) => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    const compactQuery = normalized.replace(/\\s+/g, "");
+    return normalized.length >= 2 && artist.aliases.some((alias) => {
+      const compactAlias = alias.toLocaleLowerCase("ru").replace(/\\s+/g, "");
+      return normalized.includes(alias.toLocaleLowerCase("ru")) || alias.toLocaleLowerCase("ru").includes(normalized) || compactQuery.includes(compactAlias) || compactAlias.includes(compactQuery);
+    });
+  });
 
   const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
     if (searchQuery.trim().length < 2) return;
@@ -124,6 +157,14 @@ export default function SearchPage() {
         <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("MusicBrainz identifies recordings and releases. It does not provide audio playback.")}</p></div>
         <div className="w-full min-w-0 space-y-2">{metadata.map((item) => <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/[0.06] px-4 py-3 hover:bg-white/[0.03]"><Disc3 size={18} className="text-slate-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm">{item.title}</p><p className="truncate text-xs text-slate-500">{item.artist}{item.album ? " · " + item.album : ""}</p></div><span className="text-[10px] text-slate-500">{item.provider}</span><ExternalLink size={14} className="text-slate-500"/></a>)}</div>
       </section>}
+      {matchingSoundCloudArtists.length > 0 && <section className="mt-10 space-y-6" aria-label={t("SoundCloud artist players")}>
+        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">SoundCloud · Embedded players</p><h2 className="mt-2 text-2xl font-semibold">{t("More from this artist")}</h2><p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">{t("Audio plays through the SoundCloud player. SONORA does not host or copy these recordings.")}</p></div>
+        {matchingSoundCloudArtists.map((artist) => <div key={artist.name} className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-4 md:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h3 className="text-lg font-semibold">{artist.name}</h3><p className="mt-1 text-[11px] text-slate-500">{artist.profileNote}</p></div><a href={artist.profileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-xs text-slate-300 hover:bg-white/5">{t("SoundCloud profile")} <ExternalLink size={13}/></a></div>
+          <div className="grid gap-3 lg:grid-cols-2">{artist.tracks.map((track) => <article key={track.url} className="min-w-0 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/20 p-3"><div className="mb-2 flex items-center justify-between gap-2"><p className="truncate text-sm font-medium">{track.title}</p><a href={track.url} target="_blank" rel="noreferrer" aria-label={t("Open SoundCloud track")} className="shrink-0 text-slate-500 hover:text-white"><ExternalLink size={14}/></a></div><iframe title={`${artist.name} · ${track.title} · SoundCloud player`} width="100%" height="166" scrolling="no" frameBorder="0" allow="autoplay" src={soundCloudWidgetUrl(track.url)} loading="lazy" /></article>)}</div>
+        </div>)}
+      </section>}
+
       <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Federated discovery · Every playable result remains attributed to its source")}</footer>
     </main>
   );
