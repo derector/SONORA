@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, LoaderCircle, Music2, Play } from "lucide-react";
-import { usePlayer, type PlayerTrack } from "../../../components/player-provider";
-import { useLanguage } from "../../../components/language-provider";
+import { usePlayer, type PlayerTrack } from "../../../../components/player-provider";
+import { useLanguage } from "../../../../components/language-provider";
 
-type ArtistTrack = PlayerTrack & {
+type ArtistTrack = Omit<PlayerTrack, "audioUrl"> & {
+  audioUrl: string | null;
   provider: string;
   providerTrackId: string;
   playable: boolean;
@@ -77,7 +78,9 @@ export default function ArtistCatalogPage() {
     void loadPage(0, false);
   }, [loadPage]);
 
-  const playable = tracks.filter((track) => track.playable && Boolean(track.audioUrl));
+  const playable = tracks.filter((track): track is ArtistTrack & { audioUrl: string } =>
+    track.playable && typeof track.audioUrl === "string" && track.audioUrl.length > 0
+  );
 
   return (
     <main className="mx-auto min-h-screen max-w-[1100px] px-4 py-6 pb-36 md:px-8">
@@ -125,8 +128,10 @@ export default function ArtistCatalogPage() {
                   type="button"
                   disabled={!track.playable || !track.audioUrl}
                   onClick={() => {
+                    if (!track.playable || !track.audioUrl) return;
+                    const playableTrack: PlayerTrack = { ...track, audioUrl: track.audioUrl };
                     const start = playable.findIndex((item) => item.id === track.id);
-                    playTrack(track, start >= 0 ? playable.slice(start) : [track]);
+                    playTrack(playableTrack, start >= 0 ? playable.slice(start) : [playableTrack]);
                   }}
                   aria-label={t("Play track")}
                   className="shrink-0 rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"
