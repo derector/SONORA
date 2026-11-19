@@ -74,15 +74,6 @@ export default function Home() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-[1440px] px-4 py-5 md:px-8">
       <section className="min-w-0 flex-1 pb-32">
-        <header className="flex items-center justify-between gap-4 py-3">
-          <div className="flex items-center gap-2 font-semibold tracking-[.2em] md:hidden"><AudioLines className="text-violet-300"/> SONORA</div>
-          <div className="hidden text-sm text-slate-400 md:block">{t("Your music, from connected catalogs.")}</div>
-          <div className="flex items-center gap-3">
-            <a href="/settings" aria-label={t("Settings")} className="rounded-full border border-white/10 p-2 text-slate-300 hover:bg-white/5"><Settings size={16}/></a>
-            <a href="/import" className="hidden text-xs text-slate-400 hover:text-white sm:inline">{t("Import tracks")}</a>
-            {loading ? <span className="h-9 w-20 animate-pulse rounded-full bg-white/10" /> : user ? <a href="/profile" aria-label={t("Your profile")} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1.5 pr-3 text-xs text-slate-200 hover:bg-white/10">{user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" /> : <span className="grid h-7 w-7 place-items-center rounded-full bg-violet-200/20 text-violet-100">{(user.displayName || user.username || user.email).slice(0,1).toUpperCase()}</span>}<span className="max-w-24 truncate">{user.displayName || user.username || t("Your profile")}</span></a> : <a href="/auth" className="rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323] transition hover:bg-white">{t("Sign in")}</a>}
-          </div>
-        </header>
 
         <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
           <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-fuchsia-500/15 blur-3xl"/>
