@@ -59,7 +59,7 @@ export default function PlaylistDetailPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<{ session?: { access_token?: string } }> : null)
       .then(async (data) => {
         const accessToken = data?.session?.access_token;
