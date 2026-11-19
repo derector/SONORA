@@ -523,3 +523,24 @@ User requested a real production-site registration/login test using their own ma
 - Profile editing and avatar upload/replacement: pending.
 - Security/negative/mobile tests: pending.
 - No production account has been created or changed by this planning update.
+
+
+## Production search QA — 2026-11-19
+
+A read-only browser QA pass was completed against the live production web app and API using the query `ambient`.
+
+- Search API returned HTTP 200.
+- Provider badges: Jamendo 0, Audius artists 15, Audius tracks 15, MusicBrainz 15.
+- Two Audius tracks were actually played in the browser: “Ambient Snow” and “Nature Ambient Sounds”; both advanced audio playback time and produced no media error.
+- MusicBrainz matches were clearly marked metadata-only with an explicit no-playback explanation.
+- One Audius result appeared in the playable section but its Play control was disabled, without a reason shown. The integrated search UI in draft PR #41 moves any result lacking either `playable=true` or `audioUrl` out of the playable section into a clearly labeled rights/discovery section.
+- No browser console errors, warnings, page errors or unhandled promise rejections were observed in this run. An unauthenticated background session refresh returned HTTP 401, as expected without a signed-in account.
+- No registration, sign-in or user-data changes were performed in this QA pass.
+
+Evidence URLs:
+- https://sonora-web-production-fb072d10.up.railway.app/search
+- https://sonora-web-api-production.up.railway.app/api/v1/search/music?q=ambient&type=all&limit=15
+- https://api.audius.co/v1/tracks/mWB22/stream?app_name=SONORA
+- https://api.audius.co/v1/tracks/J55W3vk/stream?app_name=SONORA
+
+The two tested streams confirm playback for those individual Audius items only; they do not establish that every search result or provider stream works.
