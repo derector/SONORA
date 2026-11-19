@@ -126,14 +126,28 @@ private fun SonoraApp() {
         if (player == null) return@DisposableEffect onDispose { }
         val knownTracks = (activeQueue + tracks).associateBy { "${it.provider}:${it.id}" }
         var previousMediaId = player.currentMediaItem?.mediaId
+        var trackedMediaId = previousMediaId
+        var lastPlayerPositionMs = player.currentPosition
+        var listenedMs = 0L
         val completedMediaIds = mutableSetOf<String>()
         fun recordTransition(mediaId: String?, event: String) {
             val track = mediaId?.let { knownTracks[it] } ?: return
             if (!track.provider.equals("Jamendo", ignoreCase = true) || authStep != "signed") return
             if (event == "complete" && !completedMediaIds.add(mediaId)) return
-            val listenedMs = if (event == "complete") track.durationSeconds.coerceAtLeast(0) * 1000 else 0
+            val durationMs = track.durationSeconds.coerceAtLeast(0).toLong() * 1000L
+            val eventListenedMs = if (event == "complete") durationMs else listenedMs.coerceAtMost(durationMs).toInt()
             scope.launch(Dispatchers.IO) {
-                runCatching { SonoraApi.recordProviderHistory(track, event, listenedMs) }
+                runCatching { SonoraApi.recordProviderHistory(track, event, eventListenedMs.toInt()) }
+            }
+        }
+        val positionTracker = scope.launch {
+            while (true) {
+                delay(1000)
+                val position = player.currentPosition
+                if (player.isPlaying && player.currentMediaItem?.mediaId == trackedMediaId) {
+                    listenedMs += (position - lastPlayerPositionMs).coerceIn(0L, 1500L)
+                }
+                lastPlayerPositionMs = position
             }
         }
         val listener = object : Player.Listener {
@@ -147,6 +161,9 @@ private fun SonoraApp() {
                     Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED -> recordTransition(previousMediaId, "skip")
                 }
                 previousMediaId = nextMediaId
+                trackedMediaId = nextMediaId
+                listenedMs = 0L
+                lastPlayerPositionMs = player.currentPosition
                 val mediaId = nextMediaId ?: return
                 completedMediaIds.remove(mediaId)
                 knownTracks[mediaId]?.let { current = it }
@@ -157,7 +174,10 @@ private fun SonoraApp() {
         }
         player.addListener(listener)
         isPlaying = player.isPlaying
-        onDispose { player.removeListener(listener) }
+        onDispose {
+            positionTracker.cancel()
+            player.removeListener(listener)
+        }
     }
 
     fun mediaItem(track: Track, url: String): MediaItem {
