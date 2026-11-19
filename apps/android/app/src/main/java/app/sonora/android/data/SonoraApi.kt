@@ -30,14 +30,29 @@ object SonoraApi {
     }
 
     private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false): JSONObject {
-        val builder = Request.Builder().url(BASE + path).header("Accept", "application/json")
-        if (body != null) builder.header("Content-Type", "application/json").method(method, body.toString().toRequestBody(jsonType))
-        else if (method != "GET") builder.method(method, ByteArray(0).toRequestBody(null))
-        if (authenticated) {
-            val token = prefs.getString("access_token", null) ?: throw IOException("Please sign in to SONORA.")
-            builder.header("Authorization", "Bearer $token")
+        fun buildRequest(): Request {
+            val builder = Request.Builder().url(BASE + path).header("Accept", "application/json")
+            if (body != null) builder.header("Content-Type", "application/json")
+                .method(method, body.toString().toRequestBody(jsonType))
+            else if (method != "GET") builder.method(method, ByteArray(0).toRequestBody(null))
+            if (authenticated) {
+                val token = prefs.getString("access_token", null)
+                    ?: throw IOException("Please sign in to SONORA.")
+                builder.header("Authorization", "Bearer $token")
+            }
+            return builder.build()
         }
-        val response = http.newCall(builder.build()).execute()
+
+        var response = http.newCall(buildRequest()).execute()
+        if (authenticated && response.code == 401) {
+            response.close()
+            if (!refreshSession()) {
+                throw IOException("Your SONORA session expired. Please sign in again.")
+            }
+            // Rebuild the request so it uses the refreshed access token.
+            response = http.newCall(buildRequest()).execute()
+        }
+
         response.use {
             it.header("Set-Cookie")?.let { cookie ->
                 val value = Regex("sonora_refresh=([^;]+)").find(cookie)?.groupValues?.getOrNull(1)
@@ -45,7 +60,14 @@ object SonoraApi {
             }
             val text = it.body?.string().orEmpty()
             val data = if (text.isBlank()) JSONObject() else JSONObject(text)
-            if (!it.isSuccessful) throw IOException(data.optString("error", "SONORA API error ${it.code}"))
+            if (!it.isSuccessful) {
+                val message = if (authenticated && it.code == 401) {
+                    "Your SONORA session expired. Please sign in again."
+                } else {
+                    data.optString("error", "SONORA API error ${it.code}")
+                }
+                throw IOException(message)
+            }
             return data
         }
     }
