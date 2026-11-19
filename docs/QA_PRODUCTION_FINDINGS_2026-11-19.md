@@ -41,3 +41,14 @@ The SoundCloud priority-artist work in PRs #42 and #43 is separate and not merge
 - Verify Android app login and session persistence separately; web success does not prove APK behavior.
 
 No registration was performed. No profile, avatar, or settings changes were made. No production deployment or source merge was performed by this QA work.
+
+
+## Proposed remediation in `fix/auth-first-party-session-proxy`
+
+- Added a same-origin Next.js POST proxy at `/api/auth/[action]` for register, login, verify, refresh and logout.
+- The proxy forwards only the `sonora_refresh` cookie to the API and forwards the logout Authorization header when present.
+- The API's host-only HttpOnly cookie is re-scoped to the SONORA web origin at `Path=/api/auth`; HttpOnly, Secure, SameSite and expiry attributes are retained.
+- Web sign-in, verification, refresh and logout now use the same-origin proxy. Profile and avatar data requests continue to use the API directly with the in-memory access token.
+- The sign-in mode is now selected by default on `/auth`; account creation remains available through the separate Create account tab.
+
+This is a code-level remediation proposal, not yet a verified production fix. It requires CI, deployment to a non-production test environment, a fresh email sign-in, cookie acceptance inspection, reload and fresh-context session tests. Do not merge or deploy until those checks pass.
