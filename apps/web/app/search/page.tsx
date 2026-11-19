@@ -113,10 +113,17 @@ export default function SearchPage() {
       {!loading && artists.length > 0 && <section className="mt-10">
         <h2 className="mb-4 text-2xl font-semibold">{t("Artists")}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {artists.map((artist) => <a key={artist.id} href={artist.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 hover:bg-white/[0.05]">
-            {artist.imageUrl ? <img src={artist.imageUrl} alt="" className="h-12 w-12 rounded-full object-cover"/> : <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-300/10"><UserRound size={20}/></div>}
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{artist.name}</p><p className="text-xs text-slate-500">{artist.provider}{artist.followerCount ? " · " + artist.followerCount.toLocaleString() + " followers" : ""}</p></div><ExternalLink size={15} className="text-slate-500"/>
-          </a>)}
+          {artists.map((artist) => {
+            const audiusId = artist.id.startsWith("audius-user:") ? artist.id.slice("audius-user:".length) : "";
+            const card = <>
+              {artist.imageUrl ? <img src={artist.imageUrl} alt="" className="h-12 w-12 rounded-full object-cover"/> : <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-300/10"><UserRound size={20}/></div>}
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{artist.name}</p><p className="text-xs text-slate-500">{artist.provider}{artist.followerCount ? " · " + artist.followerCount.toLocaleString() + " followers" : ""}</p></div>
+              {artist.provider === "Audius" && audiusId ? <span className="shrink-0 text-[10px] text-violet-200">{t("View tracks")}</span> : <ExternalLink size={15} className="text-slate-500"/>}
+            </>;
+            return artist.provider === "Audius" && audiusId
+              ? <Link key={artist.id} href={`/artists/audius/${encodeURIComponent(audiusId)}`} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 hover:bg-white/[0.05]">{card}</Link>
+              : <a key={artist.id} href={artist.sourceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 hover:bg-white/[0.05]">{card}</a>;
+          })}
         </div>
       </section>}
 
