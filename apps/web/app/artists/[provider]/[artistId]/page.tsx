@@ -12,7 +12,7 @@ type ArtistTrack = Omit<PlayerTrack, "audioUrl"> & {
   provider: string;
   providerTrackId: string;
   playable: boolean;
-  licenseUrl: string;
+  licenseUrl: string | null;
   sourceUrl: string;
   artistId: string;
 };
@@ -20,6 +20,7 @@ type ArtistTrack = Omit<PlayerTrack, "audioUrl"> & {
 type CatalogPage = {
   items?: ArtistTrack[];
   hasMore?: boolean;
+  totalCount?: number | null;
   nextOffset?: number | null;
   error?: string;
 };
@@ -38,6 +39,7 @@ export default function ArtistCatalogPage() {
   const [tracks, setTracks] = useState<ArtistTrack[]>([]);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
@@ -67,6 +69,7 @@ export default function ArtistCatalogPage() {
         : pageItems);
       setOffset(result.nextOffset ?? nextOffset + pageItems.length);
       setHasMore(result.hasMore === true);
+      setTotalCount(typeof result.totalCount === "number" ? result.totalCount : null);
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       setError(err instanceof Error ? err.message : "Artist catalog could not be loaded.");
@@ -83,6 +86,7 @@ export default function ArtistCatalogPage() {
     setTracks([]);
     setOffset(0);
     setHasMore(false);
+    setTotalCount(null);
     void loadPage(0, false);
     return () => requestController.current?.abort();
   }, [loadPage]);
@@ -102,7 +106,7 @@ export default function ArtistCatalogPage() {
         <h1 className="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">{t("Artist discography")}</h1>
         <p className="mt-2 text-sm text-slate-400">{t("Public tracks from this artist, loaded page by page. Tracks restricted by the provider remain visible but cannot be played here.")}</p>
         <div className="mt-5 flex flex-wrap gap-4 text-xs text-slate-400">
-          <span>{tracks.length} {t("tracks loaded")}</span>
+          <span>{tracks.length}{totalCount !== null ? ` / ${totalCount}` : ""} {t("tracks loaded")}</span>
           <span>{playable.length} {t("playable")}</span>
           <a className="inline-flex items-center gap-1 hover:text-white" href={`https://audius.co`} target="_blank" rel="noreferrer">Audius <ExternalLink size={12}/></a>
         </div>
