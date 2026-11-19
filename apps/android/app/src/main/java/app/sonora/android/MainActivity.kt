@@ -65,6 +65,9 @@ private val Panel = Color(0xFF151820)
 private val Lime = Color(0xFFB8F36B)
 private val Muted = Color(0xFF9298A5)
 
+private fun normalizeArtistSearchText(value: String): String =
+    value.trim().lowercase().filterNot(Char::isWhitespace)
+
 private data class SoundCloudSeedTrack(val title: String, val url: String)
 private data class SoundCloudSeedArtist(val name: String, val aliases: List<String>, val profileUrl: String, val verified: Boolean, val tracks: List<SoundCloudSeedTrack>)
 private val PrioritySoundCloudArtists = listOf(
@@ -301,11 +304,11 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 
         val context = LocalContext.current
         val normalizedQuery = query.trim().lowercase()
-        val compactQuery = normalizedQuery.filterNot(Char::isWhitespace)
+        val compactQuery = normalizeArtistSearchText(query)
         val matchingArtists = PrioritySoundCloudArtists.filter { artist ->
             normalizedQuery.length >= 2 && artist.aliases.any { alias ->
                 val normalizedAlias = alias.lowercase()
-                val compactAlias = normalizedAlias.filterNot(Char::isWhitespace)
+                val compactAlias = normalizeArtistSearchText(alias)
                 normalizedQuery.contains(normalizedAlias) || normalizedAlias.contains(normalizedQuery) ||
                     compactQuery.contains(compactAlias) || compactAlias.contains(compactQuery)
             }
