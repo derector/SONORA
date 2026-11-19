@@ -1020,6 +1020,69 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
+function parseProviderCsv(input: string): Array<Record<string, string>> {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (quoted) {
+      if (char === '"' && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"' && field.length === 0) {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field.replace(/\r$/, ""));
+    if (row.some((value) => value.length > 0)) rows.push(row);
+  }
+  const headers = rows.shift() ?? [];
+  return rows.map((values) => Object.fromEntries(
+    headers.map((header, index) => [header, values[index] ?? ""])
+  ));
+}
+
+function safeCcMixterAudioUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "ccmixter.org" ||
+        !url.pathname.startsWith("/content/")) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function ccMixterAllowedLicense(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "creativecommons.org") return false;
+    return /^\/(?:licenses\/(?:by|by-sa)\/[0-9.]+|licenses\/publicdomain\/zero\/[0-9.]+|publicdomain\/zero\/[0-9.]+)\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
@@ -1034,6 +1097,64 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
+
+    tasks.push((async () => {
+      try {
+        const licenseQueries = await Promise.allSettled(["by", "sa", "pd"].map(async (license) => {
+          const params = new URLSearchParams({
+            f: "csv", dataview: "default", limit: String(limit),
+            search: q, search_type: "all", lic: license
+          });
+          const response = await fetch(`https://ccmixter.org/api/query?${params.toString()}`, {
+            headers: { Accept: "text/csv" }, signal: AbortSignal.timeout(9000)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status} for license ${license}`);
+          return parseProviderCsv(await response.text());
+        }));
+        const searchRows = licenseQueries.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+        if (searchRows.length === 0 && licenseQueries.every((result) => result.status === "rejected")) {
+          const firstError = licenseQueries.find((result) => result.status === "rejected");
+          throw new Error(firstError?.status === "rejected" ? String(firstError.reason) : "ccMixter search unavailable");
+        }
+        const ids = [...new Set(searchRows.map((row) => row.upload_id).filter((id) => /^[0-9]+$/.test(id)))].slice(0, limit * 3);
+        if (ids.length === 0) {
+          providers.ccmixter = { ok: true, count: 0 };
+          return;
+        }
+        const detailParams = new URLSearchParams({
+          f: "csv", dataview: "upload_page", limit: String(ids.length), ids: ids.join(",")
+        });
+        const detailResponse = await fetch(`https://ccmixter.org/api/query?${detailParams.toString()}`, {
+          headers: { Accept: "text/csv" }, signal: AbortSignal.timeout(9000)
+        });
+        if (!detailResponse.ok) throw new Error(`HTTP ${detailResponse.status} for track details`);
+        const details = parseProviderCsv(await detailResponse.text());
+        const before = tracks.length;
+        for (const item of details) {
+          if (!item.upload_id || !item.upload_name || !item.file_page_url ||
+              !ccMixterAllowedLicense(item.license_url)) continue;
+          const audioUrl = safeCcMixterAudioUrl(item.fplay_url || item.download_url);
+          const artist = item.user_real_name || item.user_name || "Unknown artist";
+          const title = item.upload_name;
+          const licenseName = item.license_name || "Creative Commons";
+          const sourceUrl = item.file_page_url;
+          tracks.push({
+            id: `ccmixter:${item.upload_id}`, providerTrackId: item.upload_id, provider: "ccMixter",
+            title, artist, album: null, durationSeconds: null, artworkUrl: null,
+            audioUrl, downloadUrl: null, sourceUrl,
+            licenseUrl: item.license_url, licenseName,
+            attribution: `${title} by ${artist}, from ccMixter, licensed under ${licenseName}. ${sourceUrl}`,
+            playable: Boolean(audioUrl), downloadable: false,
+            rightsStatus: audioUrl ? "approved_native_stream" : "rights_review_required",
+            playbackKind: audioUrl ? "native_stream" : "none",
+            rightsNote: "Only ccMixter Attribution, Attribution-ShareAlike and Public Domain results are considered. Downloads remain disabled; verify attribution and the original track page."
+          });
+        }
+        providers.ccmixter = { ok: true, count: tracks.length - before };
+      } catch (error) {
+        providers.ccmixter = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      }
+    })());
     tasks.push((async () => {
       const clientId = process.env.JAMENDO_CLIENT_ID;
       if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
