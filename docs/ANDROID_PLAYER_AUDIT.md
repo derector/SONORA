@@ -33,3 +33,22 @@
 - https://developer.android.com/media/optimize/audio-focus
 
 This audit documents recommendations only. No Android code changes are included in this commit.
+
+## Implementation update (2026-11-19, integration branches)
+
+The following changes are now present in the stacked Android work branches and are awaiting final integration review:
+
+- PR #56: queue and current-track matching use provider-qualified media IDs.
+- PR #57: `PlaybackStateStore` persists queue metadata, current index, position, shuffle/repeat and play intent. Provider stream URLs are not persisted; remote tracks are resolved again when the app starts. Local file URIs are restored only when the file still exists.
+- PR #58: `PlaybackService` implements Media3 1.5.1 `MediaSession.Callback.onPlaybackResumption` and registers `MediaButtonReceiver`. Remote tracks are resolved on a bounded executor. If the former current track cannot be restored, playback starts at position zero on the first playable track.
+
+### Verification status
+
+- PR #56 Android APK workflow: passed.
+- PR #57 Android APK workflow: passed; debug artifact produced. This confirms compilation/package creation, not playback correctness on a physical device.
+- PR #57 general CI: passed.
+- PR #58 general CI: queued/running at the time of this audit update.
+- PR #58 Android APK workflow: not yet confirmed. The stacked feature PR targets another feature branch, while the Android APK workflow filters pull requests by the `android-native` base branch. The integration PR #59 targets `android-native` and is intended to obtain that build.
+- Physical-device verification remains outstanding: process kill/relaunch, headset/Bluetooth resumption, lock-screen controls, queue ordering, seek restoration, offline-track restoration, and offline/network failure behavior.
+
+Do not treat these changes as released. PRs remain drafts; no merge or production deployment has been performed.
