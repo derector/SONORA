@@ -72,26 +72,7 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-[1440px] gap-5 px-4 py-5 md:px-8">
-      <aside className="hidden w-60 shrink-0 flex-col rounded-3xl border border-white/[0.07] bg-white/[0.025] p-5 md:flex">
-        <a href="/" className="mb-12 flex items-center gap-3 text-xl font-semibold tracking-[.22em]"><span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-400/15 text-violet-200"><AudioLines size={20}/></span>SONORA</a>
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[.24em] text-slate-500">{t("Workspace")}</p>
-        <nav className="space-y-2 text-sm text-slate-300">
-          <a className="flex items-center gap-3 rounded-xl bg-violet-400/10 px-3 py-3 text-violet-200" href="/"><Compass size={17}/> {t("Discover")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/search"><Search size={17}/> {t("Search")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><Library size={17}/> {t("Your library")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/favorites"><Heart size={17}/> {t("Liked tracks")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/history"><Clock3 size={17}/> {t("Listening history")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/playlists"><ListMusic size={17}/> {t("Playlists")}</a>
-          <a className="flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-white/5" href="/settings"><Settings size={17}/> {t("Settings")}</a>
-        </nav>
-        <div className="mt-auto rounded-2xl border border-white/[0.07] bg-gradient-to-br from-violet-500/15 to-transparent p-4">
-          <Sparkles className="mb-3 text-violet-200" size={18}/>
-          <p className="text-sm font-medium">{t("Your sound, evolving.")}</p>
-          <p className="mt-1 text-xs leading-5 text-slate-400">{t("Personalized discovery is coming as your listening story grows.")}</p>
-        </div>
-      </aside>
-
+    <main className="mx-auto flex min-h-screen w-full max-w-[1440px] px-4 py-5 md:px-8">
       <section className="min-w-0 flex-1 pb-32">
         <header className="flex items-center justify-between gap-4 py-3">
           <div className="flex items-center gap-2 font-semibold tracking-[.2em] md:hidden"><AudioLines className="text-violet-300"/> SONORA</div>
