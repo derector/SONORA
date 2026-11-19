@@ -255,3 +255,20 @@ All endpoints must enforce user ownership on the server. A session ID supplied b
 5. **Reauthentication for sensitive changes:** follow OWASP for email, recovery methods, passkeys and account deletion.
 6. **OTP lifecycle:** short-lived, single-use, rate-limited, overwritten on resend and never logged.
 7. **Cross-platform consistency:** one account/profile and server policy, but separate secure credentials and session records for web and Android.
+
+
+## 11. Follow-up source review: Android session restoration (2026-11-19)
+
+A deeper review of the native `SonoraApi.restoreSession()` flow found that a temporary network failure could be treated as a sign-out: refresh failure fell through to `/auth/me`, and any exception caused `logout()`, deleting both the access token and refresh credential from encrypted local storage.
+
+A resilience fix has now been added to the existing Android draft PR #33:
+- Distinguish `SIGNED_IN`, `SIGNED_OUT` and `TEMPORARILY_UNAVAILABLE` session-restore outcomes.
+- Classify refresh responses so 429 and server/network failures are not treated as definitive credential rejection.
+- Validate the existing access token separately after refresh failure.
+- Clear local credentials only after the API definitively rejects the access token with 401/403.
+- Keep encrypted credentials on temporary failures and show an explicit retry state in the Profile screen.
+- Keep server authorization authoritative: retaining credentials offline does not grant access to protected API data until the server validates them.
+
+**Validation status:** source change committed to PR #33; the new Android build has not yet been observed for this follow-up commit. Previous successful debug APK artifact belongs to an earlier commit and does not validate this change. Physical-device behavior remains untested.
+
+This finding reinforces the release criterion: temporary outages must preserve recoverable credentials, while expired/revoked sessions must be rejected and cleared only after a definitive server response.
