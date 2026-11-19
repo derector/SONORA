@@ -68,7 +68,7 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-4 py-8 pb-16 md:px-8">
-      <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={16}/>{t("Back to SONORA")}</Link>
+      
       <div className="mt-8 grid gap-5 lg:grid-cols-[260px_1fr]">
         <aside className="h-fit rounded-[2rem] border border-white/10 bg-white/[0.025] p-5">
           <div className="flex items-center gap-3">
