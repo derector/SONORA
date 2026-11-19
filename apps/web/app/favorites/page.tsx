@@ -37,7 +37,7 @@ export default function FavoritesPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<ApiResult> : null)
       .then(async (result) => {
         const accessToken = result?.session?.access_token;
