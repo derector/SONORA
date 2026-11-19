@@ -1020,6 +1020,91 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
+function parseProviderCsv(input: string): Array<Record<string, string>> {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (quoted) {
+      if (char === '"' && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"' && field.length === 0) {
+      quoted = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      if (row.some((value) => value.length > 0)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field.replace(/\r$/, ""));
+    if (row.some((value) => value.length > 0)) rows.push(row);
+  }
+  const headers = rows.shift() ?? [];
+  return rows.map((values) => Object.fromEntries(
+    headers.map((header, index) => [header, values[index] ?? ""])
+  ));
+}
+
+function safeCcMixterAudioUrl(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "ccmixter.org" ||
+        !url.pathname.startsWith("/content/")) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function ccMixterAllowedLicense(value: string | undefined): boolean {
+  if (!value) return false;
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "creativecommons.org") return false;
+    return /^\/(?:licenses\/(?:by|by-sa)\/[0-9.]+|licenses\/publicdomain\/zero\/[0-9.]+|publicdomain\/zero\/[0-9.]+)\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+
+function isArchivePermissiveLicense(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  try {
+    const url = new URL(value);
+    if (url.hostname !== "creativecommons.org") return false;
+    return /^\/(?:licenses\/(?:by|by-sa)\/[0-9.]+|licenses\/publicdomain\/(?:zero|mark)\/[0-9.]+|publicdomain\/(?:zero|mark)\/[0-9.]+)\/?$/i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function archiveDurationSeconds(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const duration = Number(value);
+  return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
+}
+
+function safeArchiveItemIdentifier(value: unknown): string | null {
+  return typeof value === "string" && /^[a-zA-Z0-9._-]{1,120}$/.test(value) ? value : null;
+}
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
@@ -1034,6 +1119,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
+
+
     tasks.push((async () => {
       const clientId = process.env.JAMENDO_CLIENT_ID;
       if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
