@@ -34,8 +34,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val uri = runCatching { URI(url) }.getOrNull()
         val host = uri?.host?.lowercase().orEmpty()
         val trustedHost = host == "jamendo.com" || host.endsWith(".jamendo.com")
-        val recognizedLicense = licenseUrl.startsWith("https://creativecommons.org/") ||
-            licenseUrl.startsWith("http://creativecommons.org/")
+        val recognizedLicense = licenseUrl.startsWith("https://creativecommons.org/")
 
         if (provider != "Jamendo" || !downloadAllowed || !recognizedLicense ||
             uri?.scheme != "https" || !trustedHost) return@withContext Result.failure()
@@ -61,6 +60,11 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
                 .readTimeout(60, TimeUnit.SECONDS)
                 .build()
             client.newCall(requestBuilder.build()).execute().use { response ->
+                val finalUrl = response.request.url
+                val finalHost = finalUrl.host.lowercase()
+                val finalHostTrusted = finalHost == "jamendo.com" || finalHost.endsWith(".jamendo.com")
+                if (finalUrl.scheme != "https" || !finalHostTrusted) return@withContext Result.failure()
+
                 if (response.code == 416) {
                     partialFile.delete()
                     return@withContext Result.retry()
