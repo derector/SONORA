@@ -235,3 +235,39 @@ Test procedure:
 - Never scrape protected Spotify/SoundCloud audio or extract streams. Use official APIs, official embeds, provider links and user-authorized handoff only.
 - This test is now active and must not be deferred again unless the user asks.
 
+
+
+## Young Ruble catalog verification — 2026-11-19 (read-only browser research)
+
+The public-web research run completed. It checked Apple Music, Deezer, YouTube Music, Spotify, SoundCloud, Audius, Jamendo and Bandcamp. Findings below describe public catalog evidence only; they do not establish that SONORA's deployed adapters can find or play these tracks.
+
+### Confirmed release and track links
+- Apple Music album: https://music.apple.com/ru/album/шкёрт/1873987298 — 23 songs, 48 minutes, 6 February 2026; individual song pages and preview controls were visible.
+- Deezer album: https://www.deezer.com/ru/album/912934511 — 23 linked tracks; artist ID 352615202.
+- YouTube Music album: https://music.youtube.com/playlist?list=OLAK5uy_mHcHcPnBuV2Ex0gAbh4yy6w_YhYj0nE4I — 23 songs with individual video links and public play counts.
+- Spotify album: https://open.spotify.com/album/2jek5OrDxJJ37FvLZZumGI and artist https://open.spotify.com/artist/6miZ3wXHS6I4IXLONIQpWs — IDs confirmed; public player only rendered a JS shell during this read-only check. Track «курс» was independently verified.
+- SoundCloud artist profile: https://soundcloud.com/dblvnt-586464205 — profile found, but no official album page confirmed; third-party reposts are not proof of official catalog availability.
+- No matching public result found in this browser pass on Audius, Jamendo or Bandcamp. This is a bounded public-web observation, not proof that no private/unindexed catalog entry exists.
+
+All ten required test tracks were individually matched on Apple Music, Deezer and YouTube Music:
+1. «рублькэш» — Apple https://music.apple.com/ru/song/рублькэш/1873987575 ; Deezer https://www.deezer.com/ru/track/3827203501 ; YouTube Music https://music.youtube.com/watch?v=kCVhk6-B2-0
+2. «ботаника флоу» — Apple https://music.apple.com/ru/song/ботаника-флоу/1873987299 ; Deezer https://www.deezer.com/ru/track/3827203461 ; YouTube Music https://music.youtube.com/watch?v=6U0tWQgZz84
+3. «роллин» — Apple https://music.apple.com/ru/song/роллин/1873987300 ; Deezer https://www.deezer.com/ru/track/3827203471 ; YouTube Music https://music.youtube.com/watch?v=faIJw0eXEuY
+4. «сделал это» — Apple https://music.apple.com/ru/song/сделал-это/1873987302 ; Deezer https://www.deezer.com/ru/track/3827203481 ; YouTube Music https://music.youtube.com/watch?v=o--hoQFPxFQ
+5. «фантастическая материя» — Apple https://music.apple.com/ru/song/фантастическая-материя/1873987573 ; Deezer https://www.deezer.com/ru/track/3827203491 ; YouTube Music https://music.youtube.com/watch?v=I9LfeMznGqU
+6. «амахасла» — Apple https://music.apple.com/ru/song/амахасла/1873987576 ; Deezer https://www.deezer.com/ru/track/3827203511 ; YouTube Music https://music.youtube.com/watch?v=z1RzOJr7hY0
+7. «курс» — Apple https://music.apple.com/ru/song/курс/1873987577 ; Deezer https://www.deezer.com/ru/track/3827203531 ; YouTube Music https://music.youtube.com/watch?v=YUXoGq0tg1U
+8. «практически ветер» — Apple https://music.apple.com/ru/song/практически-ветер/1873987579 ; Deezer https://www.deezer.com/ru/track/3827203541 ; YouTube Music https://music.youtube.com/watch?v=AhcyhUscX2M
+9. «прямо на пол» — Apple https://music.apple.com/ru/song/прямо-на-пол/1873987582 ; Deezer https://www.deezer.com/ru/track/3827203551 ; YouTube Music https://music.youtube.com/watch?v=K52Ih-ZYask
+10. «стиснув зубы» — Apple https://music.apple.com/ru/song/стиснув-зубы/1873987594 ; Deezer https://www.deezer.com/ru/track/3827203641 ; YouTube Music https://music.youtube.com/watch?v=v5eBG6rqxtY
+
+### Result classification
+- Apple Music: album + all ten track identities confirmed; previews visible. Full playback was not started. Classify as preview/catalog evidence, not SONORA-playable.
+- Deezer: album + all ten track identities confirmed. Full playback was not started. Classify as catalog/external provider result pending approved API/player entitlement verification.
+- YouTube Music: album + all ten video identities confirmed. Full playback was not started. Use official video links/player only; do not extract audio.
+- Spotify: artist/album IDs and one track verified, but public page rendering was incomplete. Keep metadata status partial pending official API access.
+- SoundCloud: artist profile found; official album/track coverage unconfirmed.
+- Audius, Jamendo, Bandcamp: no matching public result in this browser pass; confirm through official API and SONORA's own search before final not_found state.
+
+### Implementation consequence
+Add Apple Music and Deezer as high-priority metadata/catalog adapters, subject to official API credentials, scopes, current territory rules and developer terms. Add YouTube as a video-result adapter using official APIs/player, never as extracted audio. Keep provider capabilities separate: catalog match, preview, official embed, external handoff, full playback and download are independent states. Do not add these sources to SONORA's unified native audio queue until a permitted playback path is documented and tested. This research did not access SONORA's production UI or deployed API, and did not test full playback.
