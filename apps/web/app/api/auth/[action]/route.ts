@@ -50,11 +50,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     // Re-scope the API's host-only HttpOnly cookie to the first-party web
     // origin and this proxy path. Keep Secure, HttpOnly, SameSite and expiry.
-    const setCookie = upstream.headers.get("set-cookie");
-    if (setCookie) {
+    const upstreamCookies = typeof upstream.headers.getSetCookie === "function"
+      ? upstream.headers.getSetCookie()
+      : [upstream.headers.get("set-cookie")].filter((value): value is string => Boolean(value));
+
+    for (const setCookie of upstreamCookies) {
       const firstPartyCookie = setCookie.replace(
-        "Path=/api/v1/auth",
-        "Path=/api/auth"
+        /;\\s*Path=\\/api\\/v1\\/auth(?=;|$)/i,
+        "; Path=/api/auth"
       );
       responseHeaders.append("Set-Cookie", firstPartyCookie);
     }
