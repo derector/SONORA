@@ -666,6 +666,7 @@ private fun LibraryScreen(
     val scope = rememberCoroutineScope()
     var playlists by remember { mutableStateOf<List<SonoraApi.Playlist>>(emptyList()) }
     var favorites by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var recentHistory by remember { mutableStateOf<List<Track>>(emptyList()) }
     var selected by remember { mutableStateOf<SonoraApi.Playlist?>(null) }
     var playlistTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var title by remember { mutableStateOf("") }
@@ -678,10 +679,11 @@ private fun LibraryScreen(
             busy = true
             try {
                 val loaded = withContext(Dispatchers.IO) {
-                    SonoraApi.getPlaylists() to SonoraApi.getProviderFavorites()
+                    Triple(SonoraApi.getPlaylists(), SonoraApi.getProviderFavorites(), SonoraApi.getProviderHistory())
                 }
                 playlists = loaded.first
                 favorites = loaded.second
+                recentHistory = loaded.third
                 error = ""
             } catch (e: Exception) { error = e.message ?: "Не удалось загрузить медиатеку" }
             finally { busy = false }
@@ -690,7 +692,7 @@ private fun LibraryScreen(
 
     LaunchedEffect(signedIn) {
         if (signedIn) refreshLibrary()
-        else { playlists = emptyList(); favorites = emptyList(); selected = null; playlistTracks = emptyList() }
+        else { playlists = emptyList(); favorites = emptyList(); recentHistory = emptyList(); selected = null; playlistTracks = emptyList() }
     }
 
     Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
@@ -774,6 +776,26 @@ private fun LibraryScreen(
                                 finally { busy = false }
                             }
                         }, enabled = !busy) { Icon(Icons.Default.Favorite, "Убрать из избранного", tint = Lime) }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Недавно слушали", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (recentHistory.isEmpty() && !busy) {
+                    Text("История появится после прослушивания треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                }
+                recentHistory.take(8).forEach { recent ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(recent.artworkUrl, null, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            Text(recent.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(recent.artist, color = Muted, fontSize = 12.sp, maxLines = 1)
+                        }
+                        IconButton(onClick = { if (recent.playable) play(recent) else error = "Трек временно недоступен для воспроизведения" }) {
+                            Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = if (recent.playable) Lime else Muted)
+                        }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
