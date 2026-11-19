@@ -134,6 +134,17 @@ const ru: Record<string, string> = {
   "Metadata only": "Только информация",
   "Recording matches": "Найденные записи",
   "MusicBrainz identifies recordings and releases. It does not provide audio playback.": "MusicBrainz помогает находить записи и релизы, но не предоставляет воспроизведение аудио.",
+  "Back to search": "Назад к поиску",
+  "Artist discography": "Дискография исполнителя",
+  "Public tracks from this artist, loaded page by page. Tracks restricted by the provider remain visible but cannot be played here.": "Публичные треки этого исполнителя загружаются страницами. Треки с ограничениями провайдера видны, но недоступны для воспроизведения здесь.",
+  "tracks loaded": "треков загружено",
+  "playable": "доступно для прослушивания",
+  "Loading artist catalog…": "Загружаем каталог исполнителя…",
+  "No public tracks were returned for this artist.": "Публичные треки этого исполнителя не найдены.",
+  "loaded": "загружено",
+  "Playable via Audius": "Доступно через Audius",
+  "Provider-restricted or unavailable": "Ограничено провайдером или недоступно",
+  "Load more tracks": "Загрузить ещё треки",
   "SONORA · Federated discovery · Every playable result remains attributed to its source": "SONORA · Поиск по каталогам · У каждого трека сохраняется ссылка на источник",
 };
 
