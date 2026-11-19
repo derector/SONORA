@@ -208,7 +208,7 @@ private fun SonoraApp() {
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
                         scope.launch(Dispatchers.IO) {
                             runCatching { File(item.localPath).delete() }
-                            OfflineDatabase.get(context).offlineTracks().delete(item.id)
+                            OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
                     "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
@@ -277,7 +277,7 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
 private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val context = LocalContext.current
     val workManager = remember(context) { WorkManager.getInstance(context) }
-    val workName = "offline-" + track.id
+    val workName = "offline-" + track.provider + "-" + track.id
     val workInfos by remember(workManager, workName) {
         workManager.getWorkInfosForUniqueWorkFlow(workName)
     }.collectAsState(initial = emptyList())
@@ -285,7 +285,7 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val workState = workInfo?.state
     val progress = workInfo?.progress?.getInt("progress", -1) ?: -1
     val offlineTracks by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
-    val isDownloaded = offlineTracks.any { it.id == track.id }
+    val isDownloaded = offlineTracks.any { it.id == track.id && it.provider == track.provider }
     val isDownloading = workState == WorkInfo.State.ENQUEUED ||
         workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.BLOCKED
 
@@ -634,7 +634,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
             Text("Здесь появятся загруженные треки. Скачивание доступно только для источников, которые явно разрешают офлайн-копирование.", color = Muted)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(offline, key = { it.id }) { track ->
+                items(offline, key = { "${it.provider}:${it.id}" }) { track ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { onPlay(track) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
