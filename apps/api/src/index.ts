@@ -1089,11 +1089,12 @@ app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: 
           audioUrl: streamable
             ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`
             : null,
+          license: typeof track.license === "string" ? track.license : null,
           licenseUrl: typeof track.license === "string" && /^https:\/\//i.test(track.license)
             ? track.license : null,
           sourceUrl: (() => {
             try {
-              const source = new URL(track.permalink ?? "");
+              const source = new URL(track.permalink ?? "", "https://audius.co");
               return source.protocol === "https:" &&
                 (source.hostname === "audius.co" || source.hostname === "www.audius.co")
                 ? source.toString() : "https://audius.co";
