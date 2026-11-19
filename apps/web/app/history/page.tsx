@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, CheckCircle2, Clock3, Headphones, ListMusic, Music2, SkipForward } from "lucide-react";
+import { CheckCircle2, Clock3, Headphones, ListMusic, LoaderCircle, Music2, Play, SkipForward } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
+import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
 type HistoryItem = {
   id: string;
@@ -20,6 +21,7 @@ type HistoryItem = {
   occurred_at: string;
 };
 type ApiResult = { items?: HistoryItem[]; error?: string; session?: { access_token?: string } };
+type TrackResult = { items?: PlayerTrack[]; error?: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
 function timeLabel(ms: number) {
@@ -37,10 +39,34 @@ function eventLabel(event: HistoryItem["event_type"]) {
 
 export default function HistoryPage() {
   const { t } = useLanguage();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
+  const [startingTrack, setStartingTrack] = useState("");
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState("");
+
+  async function startHistoryTrack(item: HistoryItem) {
+    if (currentTrack?.id === item.provider_track_id) {
+      togglePlay();
+      return;
+    }
+    setStartingTrack(item.provider_track_id);
+    setError("");
+    try {
+      const params = new URLSearchParams({ id: item.provider_track_id });
+      const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?${params.toString()}`);
+      const result = await response.json() as TrackResult;
+      if (!response.ok) throw new Error(result.error || "Could not load this track for playback.");
+      const track = result.items?.[0];
+      if (!track || track.id !== item.provider_track_id) throw new Error("This track is no longer available for licensed playback.");
+      playTrack(track, [track]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start this track.");
+    } finally {
+      setStartingTrack("");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -87,6 +113,7 @@ export default function HistoryPage() {
             {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
             <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{item.title}</h3><p className="mt-1 truncate text-xs text-slate-400">{item.artist_name} · {item.album_name || "Independent release"}</p><p className="mt-1 text-[11px] text-slate-500">{dateLabel(item.occurred_at)} · {timeLabel(item.listened_ms)} listened</p></div>
             <span className="hidden items-center gap-1 text-[11px] text-slate-400 sm:inline-flex">{item.event_type === "complete" ? <CheckCircle2 size={13}/> : item.event_type === "skip" ? <SkipForward size={13}/> : <Headphones size={13}/>} {eventLabel(item.event_type)}</span>
+            <button type="button" onClick={() => void startHistoryTrack(item)} disabled={startingTrack === item.provider_track_id} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10 disabled:opacity-40" aria-label={t("Play") + " " + item.title}>{startingTrack === item.provider_track_id ? <LoaderCircle size={16} className="animate-spin"/> : <Play size={16} fill="currentColor"/>}</button>
             <a href={item.source_url} target="_blank" rel="noreferrer" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white" aria-label={t("Open Jamendo source")}><Music2 size={16}/></a>
           </article>)}
         </section>
