@@ -154,6 +154,71 @@ object SonoraApi {
         return parseTracks(request(path).optJSONArray("items"))
     }
 
+    // Jamendo provider favorites are stored separately from UUID-based catalog tracks.
+    fun getProviderFavorites(): List<Track> {
+        val items = request("/api/v1/provider-favorites", authenticated = true).optJSONArray("items")
+            ?: return emptyList()
+        val result = mutableListOf<Track>()
+        for (i in 0 until items.length()) {
+            val saved = items.optJSONObject(i) ?: continue
+            val providerId = saved.optString("provider_track_id")
+            if (providerId.isBlank()) continue
+            val fresh = runCatching { resolveTrack("jamendo", providerId) }.getOrNull()
+            result += fresh ?: Track(
+                id = providerId,
+                providerTrackId = providerId,
+                provider = "Jamendo",
+                title = saved.optString("title", "Unknown track"),
+                artist = saved.optString("artist_name", "Unknown artist"),
+                album = saved.optString("album_name").takeIf { it.isNotBlank() && it != "null" },
+                durationSeconds = saved.optInt("duration_seconds"),
+                artworkUrl = saved.optString("artwork_url").takeIf { it.startsWith("https://") },
+                licenseUrl = saved.optString("license_url").takeIf { it.startsWith("https://") },
+                sourceUrl = saved.optString("source_url").takeIf { it.startsWith("https://") },
+                playable = false
+            )
+        }
+        return result
+    }
+
+    fun addProviderFavorite(track: Track) {
+        if (!track.provider.equals("Jamendo", ignoreCase = true)) {
+            throw IOException("Пока избранное с проверкой лицензии доступно для Jamendo.")
+        }
+        request(
+            "/api/v1/provider-favorites",
+            "POST",
+            JSONObject().put("providerTrackId", track.providerTrackId),
+            authenticated = true
+        )
+    }
+
+    fun removeProviderFavorite(track: Track) {
+        val id = java.net.URLEncoder.encode(track.providerTrackId, "UTF-8")
+        request("/api/v1/provider-favorites/$id", "DELETE", authenticated = true)
+    }
+
+    fun recordProviderHistory(track: Track, eventType: String = "play", listenedMs: Int = 0) {
+        if (!track.provider.equals("Jamendo", ignoreCase = true)) return
+        val license = track.licenseUrl?.takeIf {
+            it.startsWith("https://creativecommons.org/") || it.startsWith("http://creativecommons.org/")
+        } ?: return
+        val source = track.sourceUrl?.takeIf { it.startsWith("https://www.jamendo.com/") } ?: return
+        if (track.durationSeconds < 1 || track.providerTrackId.isBlank()) return
+        val body = JSONObject()
+            .put("providerTrackId", track.providerTrackId)
+            .put("title", track.title)
+            .put("artistName", track.artist)
+            .put("albumName", track.album)
+            .put("durationSeconds", track.durationSeconds)
+            .put("artworkUrl", track.artworkUrl)
+            .put("licenseUrl", license)
+            .put("sourceUrl", source)
+            .put("eventType", eventType)
+            .put("listenedMs", listenedMs.coerceAtLeast(0))
+        request("/api/v1/provider-history", "POST", body, authenticated = true)
+    }
+
     data class Playlist(val id: String, val title: String, val description: String? = null, val trackCount: Int = 0)
 
     fun getPlaylists(): List<Playlist> {
