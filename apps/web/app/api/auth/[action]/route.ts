@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     for (const setCookie of upstreamCookies) {
       const firstPartyCookie = setCookie.replace(
-        /;\\s*Path=\\/api\\/v1\\/auth(?=;|$)/i,
+        /;\s*Path=\/api\/v1\/auth(?=;|$)/i,
         "; Path=/api/auth"
       );
       responseHeaders.append("Set-Cookie", firstPartyCookie);
