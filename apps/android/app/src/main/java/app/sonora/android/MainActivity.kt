@@ -105,7 +105,14 @@ private fun SonoraApp() {
     LaunchedEffect(Unit) {
         try {
             val restored = withContext(Dispatchers.IO) { SonoraApi.restoreSession() }
-            authStep = if (restored) "signed" else "welcome"
+            when (restored) {
+                SonoraApi.SessionRestoreResult.SIGNED_IN -> { authStep = "signed"; message = "" }
+                SonoraApi.SessionRestoreResult.SIGNED_OUT -> { authStep = "welcome"; message = "" }
+                SonoraApi.SessionRestoreResult.TEMPORARILY_UNAVAILABLE -> {
+                    authStep = "offline"
+                    message = "Не удалось проверить сессию. Проверь подключение и повтори попытку."
+                }
+            }
         } catch (_: Exception) {
             authStep = "welcome"
         }
@@ -244,6 +251,21 @@ private fun SonoraApp() {
                                 withContext(Dispatchers.IO) { SonoraApi.logout() }
                                 authStep = "welcome"
                                 message = "Вы вышли из аккаунта"
+                                busy = false
+                            }
+                        },
+                        onRetry = {
+                            scope.launch {
+                                busy = true
+                                val restored = withContext(Dispatchers.IO) { SonoraApi.restoreSession() }
+                                when (restored) {
+                                    SonoraApi.SessionRestoreResult.SIGNED_IN -> { authStep = "signed"; message = "Сессия восстановлена" }
+                                    SonoraApi.SessionRestoreResult.SIGNED_OUT -> { authStep = "welcome"; message = "Сессия завершена. Войди снова." }
+                                    SonoraApi.SessionRestoreResult.TEMPORARILY_UNAVAILABLE -> {
+                                        authStep = "offline"
+                                        message = "Сервер пока недоступен. Сохранённые данные входа оставлены на устройстве."
+                                    }
+                                }
                                 busy = false
                             }
                         }
@@ -689,7 +711,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
 }
 
 @Composable
-private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, authMode: String, setAuthMode: (String) -> Unit, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit) {
+private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, authMode: String, setAuthMode: (String) -> Unit, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit, onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Профиль", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         when (step) {
@@ -697,6 +719,11 @@ private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Uni
                 Text("Ты вошёл в SONORA", color = Lime, fontSize = 18.sp)
                 Text(email, color = Muted)
                 OutlinedButton(onClick = onLogout) { Text("Выйти") }
+            }
+            "offline" -> {
+                Text("Не удалось проверить вход", color = Color.White, fontSize = 18.sp)
+                Text("Сохранённые данные сессии не удалены. Подключись к интернету и повтори проверку.", color = Muted)
+                OutlinedButton(onClick = onRetry, enabled = !busy) { Text("Повторить проверку") }
             }
             "verify" -> {
                 Text("Проверь почту", color = Color.White, fontSize = 20.sp)
