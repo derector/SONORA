@@ -127,7 +127,7 @@ object SonoraApi {
     fun discover(provider: String): List<Track> {
         val path = when (provider) {
             "Audius" -> "/api/v1/providers/audius/tracks?sort=trending&limit=24"
-            else -> "/api/v1/providers/jamendo/tracks?q=music&limit=24"
+            else -> "/api/v1/providers/jamendo/tracks?limit=24"
         }
         return parseTracks(request(path).optJSONArray("items"))
     }
@@ -192,6 +192,17 @@ object SonoraApi {
             } catch (_: Exception) { }
         }
         return resolved
+    }
+
+    fun resolveTrack(provider: String, providerTrackId: String): Track? {
+        val encodedId = java.net.URLEncoder.encode(providerTrackId, "UTF-8")
+        val path = when (provider.lowercase()) {
+            "audius" -> "/api/v1/providers/audius/tracks?id=$encodedId"
+            "jamendo" -> "/api/v1/providers/jamendo/tracks?id=$encodedId"
+            else -> return null
+        }
+        return parseTracks(request(path).optJSONArray("items"))
+            .firstOrNull { it.providerTrackId == providerTrackId || it.id == providerTrackId }
     }
 
     fun search(query: String): List<Track> {
