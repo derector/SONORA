@@ -6,6 +6,11 @@ on:
     paths:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [android-native]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 concurrency:
