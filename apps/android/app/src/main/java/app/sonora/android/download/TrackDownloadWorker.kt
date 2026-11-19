@@ -9,14 +9,20 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import app.sonora.android.R
 import app.sonora.android.data.OfflineDatabase
 import app.sonora.android.data.OfflineTrack
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 class TrackDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -24,77 +30,199 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val url = inputData.getString("url") ?: return@withContext Result.failure()
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val provider = inputData.getString("provider") ?: return@withContext Result.failure()
-        if (provider != "Jamendo" || !url.startsWith("https://")) return@withContext Result.failure()
-        var partialFile: File? = null
-        var pendingFinalFile: File? = null
+        val providerName = provider.trim().lowercase().replaceFirstChar { it.titlecase() }
+        val downloadAllowed = inputData.getBoolean("downloadAllowed", false)
+        val licenseUrl = inputData.getString("licenseUrl").orEmpty()
+        if (!provider.equals("Jamendo", ignoreCase = true) || !downloadAllowed ||
+            !isAllowedCreativeCommonsLicense(licenseUrl) || !isSecureJamendoUrl(url)) return@withContext Result.failure()
+
+        val directory = File(applicationContext.filesDir, "offline")
+        if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
+        val safeKey = stableFileKey(provider, id)
+        val finalFile = File(directory, "$safeKey.audio")
+        val partialFile = File(directory, "$safeKey.audio.part")
+        val backupFile = File(directory, "$safeKey.audio.bak")
+        val notificationId = notificationIdFor(provider, id)
+        var newFinalCreated = false
+
         try {
-            setForeground(createForegroundInfo("Загружаем трек…"))
-            val client = OkHttpClient.Builder().callTimeout(10, TimeUnit.MINUTES).build()
-            val response = client.newCall(Request.Builder().url(url).header("Accept", "audio/*,application/octet-stream;q=0.9").build()).execute()
-            response.use {
-                if (!it.isSuccessful) {
-                    return@withContext if (it.code >= 500 || it.code == 429) Result.retry() else Result.failure()
+            if (backupFile.exists() && !finalFile.exists()) backupFile.renameTo(finalFile)
+            else if (backupFile.exists() && finalFile.exists()) backupFile.delete()
+
+            val existingBytes = partialFile.takeIf { it.exists() }?.length() ?: 0L
+            setForeground(createForegroundInfo("Подготовка загрузки…", notificationId))
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .header("Accept", "audio/mpeg, audio/*;q=0.9, application/octet-stream;q=0.8")
+            if (existingBytes > 0L) requestBuilder.header("Range", "bytes=$existingBytes-")
+
+            val client = OkHttpClient.Builder()
+                .callTimeout(10, TimeUnit.MINUTES)
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .build()
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                // Reject redirects to hosts outside Jamendo.
+                if (!isSecureJamendoUrl(response.request.url.toString())) return@withContext Result.failure()
+                if (response.code == 416) {
+                    partialFile.delete()
+                    return@withContext Result.retry()
                 }
-                val body = it.body ?: return@withContext Result.failure()
-                val contentType = it.header("Content-Type").orEmpty().lowercase()
-                if (contentType.startsWith("text/") || contentType.contains("application/json")) {
+                if (!response.isSuccessful) {
+                    return@withContext if (response.code == 429 || response.code == 408 || response.code >= 500) Result.retry() else Result.failure()
+                }
+
+                val rangeHeader = response.header("Content-Range").orEmpty()
+                val rangeMatch = Regex("""bytes (\d+)-(\d+)/(\d+|\*)""").matchEntire(rangeHeader)
+                val rangeStart = rangeMatch?.groupValues?.getOrNull(1)?.toLongOrNull()
+                val rangeEnd = rangeMatch?.groupValues?.getOrNull(2)?.toLongOrNull()
+                val rangeTotal = rangeMatch?.groupValues?.getOrNull(3)?.toLongOrNull()
+                if (response.code == 206) {
+                    val bodyLength = response.body?.contentLength() ?: -1L
+                    val validRange = rangeStart == existingBytes &&
+                        rangeEnd != null && rangeEnd >= existingBytes &&
+                        rangeTotal != null && rangeTotal > rangeEnd &&
+                        (bodyLength < 0L || bodyLength == rangeEnd - existingBytes + 1L)
+                    if (!validRange) {
+                        partialFile.delete()
+                        return@withContext Result.failure()
+                    }
+                }
+                val append = existingBytes > 0L && response.code == 206
+                if (existingBytes > 0L && !append) partialFile.delete()
+
+                val body = response.body ?: return@withContext Result.retry()
+                val contentType = response.header("Content-Type").orEmpty().substringBefore(";").trim().lowercase()
+                if (contentType.startsWith("text/") || contentType.contains("application/json") ||
+                    contentType.contains("text/html") ||
+                    (contentType.isNotBlank() && !contentType.startsWith("audio/") && contentType != "application/octet-stream")) {
+                    partialFile.delete()
                     return@withContext Result.failure()
                 }
-                val safeId = id.replace(Regex("[^A-Za-z0-9_-]"), "_")
-                val directory = File(applicationContext.filesDir, "offline")
-                if (!directory.exists() && !directory.mkdirs()) return@withContext Result.retry()
-                val finalFile = File(directory, "$safeId.audio")
-                pendingFinalFile = finalFile
-                partialFile = File(directory, "$safeId.audio.part")
-                partialFile!!.delete()
+
+                val startBytes = if (append) existingBytes else 0L
+                val bodyLength = body.contentLength()
+                val totalBytes = if (append) rangeTotal ?: -1L else bodyLength
+                var downloadedBytes = startBytes
+                var lastReportedBytes = startBytes
                 body.byteStream().use { input ->
-                    partialFile!!.outputStream().use { output -> input.copyTo(output) }
+                    FileOutputStream(partialFile, append).use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        while (true) {
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                            downloadedBytes += count
+                            if (downloadedBytes - lastReportedBytes >= 256 * 1024) {
+                                lastReportedBytes = downloadedBytes
+                                val percent = if (totalBytes > 0L) ((downloadedBytes * 100L) / totalBytes).toInt().coerceIn(0, 99) else -1
+                                setProgress(workDataOf("progress" to percent, "downloadedBytes" to downloadedBytes, "totalBytes" to totalBytes))
+                                updateNotification(if (percent >= 0) "Загрузка $percent%" else "Загрузка…", notificationId)
+                            }
+                        }
+                        output.fd.sync()
+                    }
                 }
-                if (!partialFile!!.exists() || partialFile!!.length() <= 0L) {
-                    partialFile!!.delete()
+
+                val sizeMismatch = totalBytes > 0L && partialFile.length() != totalBytes
+                val invalidAudio = !partialFile.exists() || partialFile.length() <= 0L || !looksLikeMp3(partialFile)
+                if (sizeMismatch || invalidAudio) {
+                    partialFile.delete()
+                    return@withContext if (sizeMismatch) Result.retry() else Result.failure()
+                }
+
+                backupFile.delete()
+                if (finalFile.exists() && !finalFile.renameTo(backupFile)) return@withContext Result.retry()
+                if (!partialFile.renameTo(finalFile)) {
+                    if (backupFile.exists()) backupFile.renameTo(finalFile)
                     return@withContext Result.retry()
                 }
-                if (finalFile.exists() && !finalFile.delete()) {
-                    partialFile!!.delete()
-                    return@withContext Result.retry()
-                }
-                if (!partialFile!!.renameTo(finalFile)) {
-                    partialFile!!.delete()
-                    return@withContext Result.retry()
-                }
-                partialFile = null
-                val meta = OfflineTrack(
+                newFinalCreated = true
+
+                val metadata = OfflineTrack(
                     id = id,
                     title = inputData.getString("title") ?: "Unknown track",
                     artist = inputData.getString("artist") ?: "Unknown artist",
                     artworkUrl = inputData.getString("artwork"),
                     localPath = finalFile.absolutePath,
                     durationSeconds = inputData.getInt("duration", 0),
-                    provider = provider
+                    provider = providerName
                 )
-                OfflineDatabase.get(applicationContext).offlineTracks().insert(meta)
-                pendingFinalFile = null
+                OfflineDatabase.get(applicationContext).offlineTracks().insert(metadata)
+                backupFile.delete()
+                newFinalCreated = false
+                setProgress(workDataOf("progress" to 100, "downloadedBytes" to finalFile.length(), "totalBytes" to finalFile.length()))
+                updateNotification("Трек сохранён офлайн", notificationId)
                 Result.success()
             }
+        } catch (cancelled: CancellationException) {
+            // Keep a partial download for a future retry; rollback only a newly moved final file.
+            if (newFinalCreated) finalFile.delete()
+            if (backupFile.exists() && !finalFile.exists()) backupFile.renameTo(finalFile)
+            throw cancelled
         } catch (_: Exception) {
-            partialFile?.delete()
-            pendingFinalFile?.delete()
+            // Partial bytes are intentionally retained for Range-based retry.
+            if (newFinalCreated) finalFile.delete()
+            if (backupFile.exists() && !finalFile.exists()) backupFile.renameTo(finalFile)
             Result.retry()
         }
     }
 
-    private fun createForegroundInfo(message: String): ForegroundInfo {
+    private fun isSecureJamendoUrl(rawUrl: String): Boolean {
+        val parsed = rawUrl.toHttpUrlOrNull() ?: return false
+        val host = parsed.host.lowercase()
+        return parsed.scheme == "https" && (host == "jamendo.com" || host.endsWith(".jamendo.com"))
+    }
+
+    private fun isAllowedCreativeCommonsLicense(rawUrl: String): Boolean {
+        val parsed = rawUrl.toHttpUrlOrNull() ?: return false
+        if (parsed.scheme != "https") return false
+        val host = parsed.host.lowercase()
+        if (host != "creativecommons.org" && host != "www.creativecommons.org") return false
+        val path = parsed.encodedPath.lowercase()
+        return path.startsWith("/licenses/") || path.startsWith("/publicdomain/zero/")
+    }
+
+    private fun looksLikeMp3(file: File): Boolean {
+        val header = ByteArray(3)
+        val size = FileInputStream(file).use { it.read(header) }
+        return size >= 2 && (
+            (size >= 3 && String(header, 0, 3, Charsets.US_ASCII) == "ID3") ||
+            ((header[0].toInt() and 0xff) == 0xff && (header[1].toInt() and 0xe0) == 0xe0)
+        )
+    }
+
+    private fun stableFileKey(provider: String, trackId: String): String {
+        val input = "${provider.trim().lowercase()}:$trackId"
+        val digest = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
+        return digest.take(16).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    }
+
+    private fun notificationIdFor(provider: String, trackId: String): Int {
+        val prefix = stableFileKey(provider, trackId).take(7)
+        return 10_000 + (prefix.toLong(16) % 900_000L).toInt()
+    }
+
+    private fun updateNotification(message: String, notificationId: Int) {
+        val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(notificationId, buildNotification(message))
+    }
+
+    private fun createForegroundInfo(message: String, notificationId: Int): ForegroundInfo {
         val manager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel("sonora_downloads", "SONORA downloads", NotificationManager.IMPORTANCE_LOW))
         }
-        val notification: Notification = NotificationCompat.Builder(applicationContext, "sonora_downloads")
+        return ForegroundInfo(notificationId, buildNotification(message))
+    }
+
+    private fun buildNotification(message: String): Notification {
+        return NotificationCompat.Builder(applicationContext, "sonora_downloads")
             .setSmallIcon(R.drawable.ic_sonora)
             .setContentTitle("SONORA")
             .setContentText(message)
-            .setOngoing(true)
+            .setOngoing(message != "Трек сохранён офлайн")
             .setOnlyAlertOnce(true)
             .build()
-        return ForegroundInfo(4102, notification)
     }
 }

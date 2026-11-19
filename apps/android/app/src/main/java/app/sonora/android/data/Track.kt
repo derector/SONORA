@@ -14,4 +14,7 @@ data class Track(
     val licenseUrl: String? = null,
     val sourceUrl: String? = null,
     val playable: Boolean = false
-)
+) {
+    val canonicalKey: String
+        get() = "${provider.trim().lowercase()}:${providerTrackId.ifBlank { id }}"
+}

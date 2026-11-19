@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
+import { ArrowLeft, AudioLines, Download, ExternalLink, LoaderCircle, Music2, Play, Search, UserRound, Disc3 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
-type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
+type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string; downloadUrl?: string | null };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; releaseDate?: string | null; sourceUrl: string; playable: false };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
@@ -27,24 +27,28 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const searchSequence = useRef(0);
 
   const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
     if (searchQuery.trim().length < 2) return;
+    const sequence = ++searchSequence.current;
     setLoading(true); setError(""); setSearched(true);
     try {
       const params = new URLSearchParams({ q: searchQuery.trim(), type: searchKind, limit: "15" });
       const response = await fetch(`${API}/api/v1/search/music?${params.toString()}`);
       const data = await response.json() as SearchResponse;
+      if (sequence !== searchSequence.current) return;
       if (!response.ok) throw new Error(data.error || "Music search is temporarily unavailable.");
       setTracks(data.tracks ?? []);
       setArtists(data.artists ?? []);
       setMetadata(data.metadata ?? []);
       setProviders(data.providers ?? {});
     } catch (err) {
+      if (sequence !== searchSequence.current) return;
       setError(err instanceof Error ? err.message : "Music search is temporarily unavailable.");
       setTracks([]); setArtists([]); setMetadata([]); setProviders({});
     } finally {
-      setLoading(false);
+      if (sequence === searchSequence.current) setLoading(false);
     }
   }, []);
 
@@ -78,11 +82,12 @@ export default function SearchPage() {
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">{t("Search tracks, artists and recordings across connected open catalogs. Playable results stay linked to their original provider and rights information.")}</p>
         <form onSubmit={submit} className="mt-7 flex max-w-3xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder={t("Track title, artist or album")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
+          <input value={query} onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }} minLength={2} aria-label={t("Search tracks, artists or albums")} placeholder={t("Track, artist or album")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
           <button disabled={loading || query.trim().length < 2} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] disabled:opacity-50">{loading ? <LoaderCircle className="animate-spin" size={17}/> : t("Search")}</button>
         </form>
+        {query.trim().length === 1 && <p className="mt-2 px-2 text-xs text-slate-400" role="status">{t("Enter at least 2 characters to search.")}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
-          {(["all","tracks","artists"] as const).map((value) => <button key={value} type="button" onClick={() => setKind(value)} aria-pressed={kind === value} className={`rounded-full px-4 py-2 text-xs transition ${kind === value ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-300 hover:bg-white/5"}`}>{value === "all" ? t("All results") : value === "tracks" ? t("Tracks") : t("Artists")}</button>)}
+          {(["all","tracks","artists"] as const).map((value) => <button key={value} type="button" onClick={() => { setKind(value); if (query.trim().length >= 2) void runSearch(query, value); }} aria-pressed={kind === value} className={`rounded-full px-4 py-2 text-xs transition ${kind === value ? "bg-violet-200 text-[#171323]" : "border border-white/10 text-slate-300 hover:bg-white/5"}`}>{value === "all" ? t("All results") : value === "tracks" ? t("Tracks") : t("Artists")}</button>)}
         </div>
       </section>
 
@@ -101,6 +106,7 @@ export default function SearchPage() {
             <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl bg-violet-300/10"><Music2 size={22} className="text-violet-200"/>{track.artworkUrl && <img src={track.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</div>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.provider} · {track.rightsLabel || track.provider} {track.durationSeconds ? "· " + duration(track.durationSeconds) : ""}</p></div>
             <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="shrink-0 rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
+            {track.downloadUrl && <a href={track.downloadUrl} download aria-label={t("Download track")} title={t("Download track")} className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-violet-200"><Download size={16}/></a>}
             <button type="button" onClick={() => { const queue = tracks.filter((item) => item.playable && item.audioUrl); const start = queue.findIndex((item) => item.id === track.id); playTrack(track, start >= 0 ? queue.slice(start) : [track]); }} disabled={!track.playable || !track.audioUrl} aria-label={t("Play track")} className="shrink-0 rounded-full bg-violet-200 p-3 text-[#171323] disabled:cursor-not-allowed disabled:opacity-30"><Play size={16} fill="currentColor"/></button>
           </article>)}
         </div>

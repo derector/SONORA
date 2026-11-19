@@ -12,6 +12,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object SonoraApi {
+    enum class SessionRestoreResult { SIGNED_IN, SIGNED_OUT, TEMPORARILY_UNAVAILABLE }
     private const val BASE = "https://sonora-web-api-production.up.railway.app"
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val http = OkHttpClient.Builder()
@@ -45,7 +46,7 @@ object SonoraApi {
             }
             val text = it.body?.string().orEmpty()
             val data = if (text.isBlank()) JSONObject() else JSONObject(text)
-            if (!it.isSuccessful) throw IOException(data.optString("error", "SONORA API error ${it.code}"))
+            if (!it.isSuccessful) throw ApiException(it.code, data.optString("error", "SONORA API error ${it.code}"))
             return data
         }
     }
@@ -66,8 +67,12 @@ object SonoraApi {
         prefs.edit().putString("access_token", token).putString("email", email.trim()).apply()
     }
 
-    fun refreshSession(): Boolean {
-        val cookie = prefs.getString("refresh_cookie", null) ?: return false
+    private enum class RefreshResult { REFRESHED, REJECTED, TEMPORARY_FAILURE }
+
+    private class ApiException(val statusCode: Int, message: String) : IOException(message)
+
+    private fun refreshSessionInternal(): RefreshResult {
+        val cookie = prefs.getString("refresh_cookie", null) ?: return RefreshResult.REJECTED
         return try {
             val body = JSONObject().toString().toRequestBody(jsonType)
             val req = Request.Builder().url("$BASE/api/v1/auth/refresh")
@@ -78,28 +83,56 @@ object SonoraApi {
                         prefs.edit().putString("refresh_cookie", it).apply()
                     }
                 }
-                if (!response.isSuccessful) return false
+                if (!response.isSuccessful) {
+                    return if (response.code in 400..499 && response.code != 429) {
+                        RefreshResult.REJECTED
+                    } else {
+                        RefreshResult.TEMPORARY_FAILURE
+                    }
+                }
                 val data = JSONObject(response.body?.string().orEmpty())
                 val token = data.optJSONObject("session")?.optString("access_token").orEmpty()
-                if (token.isBlank()) return false
+                if (token.isBlank()) return RefreshResult.TEMPORARY_FAILURE
                 prefs.edit().putString("access_token", token).apply()
-                true
+                RefreshResult.REFRESHED
             }
-        } catch (_: Exception) { false }
+        } catch (_: Exception) {
+            RefreshResult.TEMPORARY_FAILURE
+        }
     }
 
-    fun restoreSession(): Boolean {
-        if (prefs.getString("access_token", null).isNullOrBlank()) return false
-        if (!prefs.getString("refresh_cookie", null).isNullOrBlank()) {
-            if (refreshSession()) return true
+    fun refreshSession(): Boolean = refreshSessionInternal() == RefreshResult.REFRESHED
+
+    fun restoreSession(): SessionRestoreResult {
+        if (prefs.getString("access_token", null).isNullOrBlank()) {
+            return SessionRestoreResult.SIGNED_OUT
         }
+
+        if (!prefs.getString("refresh_cookie", null).isNullOrBlank()) {
+            if (refreshSessionInternal() == RefreshResult.REFRESHED) {
+                return SessionRestoreResult.SIGNED_IN
+            }
+        }
+
+        // A failed refresh does not prove that the access token is invalid.
+        // Validate it separately, and preserve credentials on network/5xx errors.
         return try {
             request("/api/v1/auth/me", authenticated = true)
-            true
+            SessionRestoreResult.SIGNED_IN
+        } catch (error: ApiException) {
+            if (error.statusCode == 401 || error.statusCode == 403) {
+                clearLocalSession()
+                SessionRestoreResult.SIGNED_OUT
+            } else {
+                SessionRestoreResult.TEMPORARILY_UNAVAILABLE
+            }
         } catch (_: Exception) {
-            logout()
-            false
+            SessionRestoreResult.TEMPORARILY_UNAVAILABLE
         }
+    }
+
+    private fun clearLocalSession() {
+        prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply()
     }
 
     fun logout() {
@@ -118,7 +151,7 @@ object SonoraApi {
         } catch (_: Exception) {
             // Always clear this device's credentials, even if the API is unreachable.
         } finally {
-            prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply()
+            clearLocalSession()
         }
     }
     fun email(): String = prefs.getString("email", "").orEmpty()

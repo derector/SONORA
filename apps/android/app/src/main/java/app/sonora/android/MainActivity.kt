@@ -2,6 +2,7 @@ package app.sonora.android
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -86,6 +87,7 @@ private fun SonoraApp() {
     var displayName by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var authStep by remember { mutableStateOf(if (SonoraApi.isSignedIn()) "signed" else "welcome") }
+    var authMode by remember { mutableStateOf("login") }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
@@ -103,13 +105,30 @@ private fun SonoraApp() {
     LaunchedEffect(Unit) {
         try {
             val restored = withContext(Dispatchers.IO) { SonoraApi.restoreSession() }
-            authStep = if (restored) "signed" else "welcome"
+            when (restored) {
+                SonoraApi.SessionRestoreResult.SIGNED_IN -> { authStep = "signed"; message = "" }
+                SonoraApi.SessionRestoreResult.SIGNED_OUT -> { authStep = "welcome"; message = "" }
+                SonoraApi.SessionRestoreResult.TEMPORARILY_UNAVAILABLE -> {
+                    authStep = "offline"
+                    message = "Не удалось проверить сессию. Проверь подключение и повтори попытку."
+                }
+            }
         } catch (_: Exception) {
             authStep = "welcome"
         }
         try {
             controller = withContext(Dispatchers.IO) {
                 MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
+            }
+            controller?.let { mediaController ->
+                val restoredQueue = (0 until mediaController.mediaItemCount).mapNotNull { index ->
+                    trackFromMediaItem(mediaController.getMediaItemAt(index))
+                }
+                if (restoredQueue.isNotEmpty()) {
+                    activeQueue = restoredQueue
+                    current = restoredQueue.getOrNull(mediaController.currentMediaItemIndex)
+                    isPlaying = mediaController.isPlaying
+                }
             }
         } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
         loadTracks("Audius") { tracks = it }
@@ -122,7 +141,7 @@ private fun SonoraApp() {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val id = mediaItem?.mediaId ?: return
-                (activeQueue + tracks).firstOrNull { it.id == id }?.let { current = it }
+                (activeQueue + tracks).firstOrNull { it.canonicalKey == id }?.let { current = it }
             }
         }
         player.addListener(listener)
@@ -133,7 +152,7 @@ private fun SonoraApp() {
     fun mediaItem(track: Track, url: String): MediaItem {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artworkUrl?.let { android.net.Uri.parse(it) }).build()
-        return MediaItem.Builder().setMediaId(track.id).setUri(url).setMediaMetadata(metadata).build()
+        return MediaItem.Builder().setMediaId(track.canonicalKey).setUri(url).setMediaMetadata(metadata).build()
     }
 
     fun startTrack(track: Track, local: Boolean = false) {
@@ -150,9 +169,9 @@ private fun SonoraApp() {
             return
         }
         val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
-            .distinctBy { it.id }
+            .distinctBy { it.canonicalKey }
         activeQueue = queue
-        val selectedIndex = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        val selectedIndex = queue.indexOfFirst { it.canonicalKey == track.canonicalKey }.coerceAtLeast(0)
         player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
         player.prepare()
         player.play()
@@ -162,10 +181,15 @@ private fun SonoraApp() {
     fun play(track: Track) = startTrack(track)
 
     fun playOffline(track: OfflineTrack) {
+        val file = safeOfflineFile(context, track.localPath)
+        if (file == null) {
+            message = "Офлайн-файл не найден или путь недействителен"
+            return
+        }
         val localTrack = Track(
             id = track.id, providerTrackId = track.id, provider = track.provider,
             title = track.title, artist = track.artist, durationSeconds = track.durationSeconds,
-            artworkUrl = track.artworkUrl, audioUrl = android.net.Uri.fromFile(File(track.localPath)).toString(),
+            artworkUrl = track.artworkUrl, audioUrl = android.net.Uri.fromFile(file).toString(),
             playable = true
         )
         startTrack(localTrack, local = true)
@@ -207,11 +231,11 @@ private fun SonoraApp() {
                     )
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
                         scope.launch(Dispatchers.IO) {
-                            runCatching { File(item.localPath).delete() }
-                            OfflineDatabase.get(context).offlineTracks().delete(item.id)
+                            safeOfflineFile(context, item.localPath)?.delete()
+                            OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
-                    "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
+                    "Профиль" -> ProfileScreen(authStep, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message, authMode, { authMode = it },
                         onRegister = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.requestOtp(email, username, displayName, true) }; authStep = "verify"; message = "Код отправлен на почту" } catch (e: Exception) { message = e.message ?: "Ошибка регистрации" }; busy = false }
                         },
@@ -227,6 +251,21 @@ private fun SonoraApp() {
                                 withContext(Dispatchers.IO) { SonoraApi.logout() }
                                 authStep = "welcome"
                                 message = "Вы вышли из аккаунта"
+                                busy = false
+                            }
+                        },
+                        onRetry = {
+                            scope.launch {
+                                busy = true
+                                val restored = withContext(Dispatchers.IO) { SonoraApi.restoreSession() }
+                                when (restored) {
+                                    SonoraApi.SessionRestoreResult.SIGNED_IN -> { authStep = "signed"; message = "Сессия восстановлена" }
+                                    SonoraApi.SessionRestoreResult.SIGNED_OUT -> { authStep = "welcome"; message = "Сессия завершена. Войди снова." }
+                                    SonoraApi.SessionRestoreResult.TEMPORARILY_UNAVAILABLE -> {
+                                        authStep = "offline"
+                                        message = "Сервер пока недоступен. Сохранённые данные входа оставлены на устройстве."
+                                    }
+                                }
                                 busy = false
                             }
                         }
@@ -257,7 +296,7 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, openPlayer) }
+            items(tracks, key = { it.canonicalKey }) { track -> TrackRow(track, { play(track) }, openPlayer) }
         }
     }
 }
@@ -269,39 +308,69 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.canonicalKey }) { TrackRow(it, { play(it) }, {}) } }
     }
 }
 
 @Composable
 private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val context = LocalContext.current
+    val workManager = remember(context) { WorkManager.getInstance(context) }
+    val workName = "offline-" + track.canonicalKey
+    val workInfos by remember(workManager, workName) {
+        workManager.getWorkInfosForUniqueWorkFlow(workName)
+    }.collectAsState(initial = emptyList())
+    val workInfo = workInfos.firstOrNull()
+    val workState = workInfo?.state
+    val progress = workInfo?.progress?.getInt("progress", -1) ?: -1
+    val providerTrackId = track.providerTrackId.ifBlank { track.id }
+    val offlineTracks by OfflineDatabase.get(context).offlineTracks().observeAll().collectAsState(initial = emptyList())
+    val isDownloaded = offlineTracks.any { it.provider.equals(track.provider, ignoreCase = true) && it.id == providerTrackId }
+    val isDownloading = workState == WorkInfo.State.ENQUEUED || workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.BLOCKED
+
     val enqueueDownload = {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setInputData(workDataOf(
-                "url" to track.downloadUrl, "id" to track.id,
+                "url" to track.downloadUrl, "id" to providerTrackId,
                 "provider" to track.provider, "title" to track.title,
                 "artist" to track.artist, "artwork" to track.artworkUrl,
-                "duration" to track.durationSeconds
+                "duration" to track.durationSeconds,
+                "downloadAllowed" to (track.downloadUrl != null),
+                "licenseUrl" to track.licenseUrl
             )).build()
-        WorkManager.getInstance(context).enqueueUniqueWork("offline-" + track.id, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, request)
     }
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) enqueueDownload()
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        enqueueDownload()
     }
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (isDownloading) {
+                Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
+            } else if (workState == WorkInfo.State.FAILED) {
+                Text("Не удалось скачать. Нажми повторить.", color = Color(0xFFFF9A8D), fontSize = 10.sp)
+            } else if (isDownloaded) {
+                Text("Сохранено офлайн", color = Lime, fontSize = 10.sp)
+            }
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
-            IconButton(onClick = {
-                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                } else enqueueDownload()
-            }) { Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime) }
+            when {
+                isDownloading -> IconButton(onClick = { workManager.cancelUniqueWork(workName) }) {
+                    Icon(Icons.Default.Close, "Отменить загрузку", tint = Color(0xFFFF9A8D))
+                }
+                isDownloaded -> Icon(Icons.Default.CheckCircle, "Сохранено офлайн", tint = Lime, modifier = Modifier.padding(12.dp))
+                else -> IconButton(onClick = {
+                    if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else enqueueDownload()
+                }) {
+                    Icon(Icons.Default.Download, "Скачать офлайн", tint = Lime)
+                }
+            }
         }
         IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
     }
@@ -333,7 +402,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
-    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.id } }
+    val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { it.canonicalKey } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
     var speed by remember(controller) { mutableFloatStateOf(controller?.playbackParameters?.speed ?: 1f) }
@@ -355,10 +424,10 @@ private fun FullPlayer(
             }
             Text("Следующие треки", color = Muted, modifier = Modifier.padding(vertical = 12.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(playableQueue, key = { it.id }) { item ->
+                items(playableQueue, key = { it.canonicalKey }) { item ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable {
                         val player = controller ?: return@clickable
-                        val index = playableQueue.indexOfFirst { it.id == item.id }
+                        val index = playableQueue.indexOfFirst { it.canonicalKey == item.canonicalKey }
                         if (index >= 0) player.seekTo(index, 0L)
                         player.play()
                         showQueue = false
@@ -368,7 +437,7 @@ private fun FullPlayer(
                             Text(item.title, color = Color.White, maxLines = 1)
                             Text(item.artist, color = Muted, fontSize = 12.sp)
                         }
-                        if (item.id == track?.id) Icon(Icons.Default.GraphicEq, null, tint = Lime)
+                        if (item.canonicalKey == track?.canonicalKey) Icon(Icons.Default.GraphicEq, null, tint = Lime)
                     }
                 }
             }
@@ -557,7 +626,7 @@ private fun LibraryScreen(
                 }
                 if (playlistTracks.isEmpty() && !busy) Text("В этом плейлисте пока нет доступных треков.", color = Muted, modifier = Modifier.padding(top = 10.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
-                    items(playlistTracks, key = { it.id }) { track ->
+                    items(playlistTracks, key = { it.canonicalKey }) { track ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -574,7 +643,7 @@ private fun LibraryScreen(
                                     busy = true
                                     try {
                                         withContext(Dispatchers.IO) { SonoraApi.removeTrackFromPlaylist(target.id, track) }
-                                        playlistTracks = playlistTracks.filterNot { it.id == track.id }
+                                        playlistTracks = playlistTracks.filterNot { it.canonicalKey == track.canonicalKey }
                                         error = ""
                                     } catch (e: Exception) { error = e.message ?: "Не удалось удалить трек" }
                                     finally { busy = false }
@@ -590,6 +659,30 @@ private fun LibraryScreen(
     }
 }
 
+private fun trackFromMediaItem(item: MediaItem): Track? {
+    val mediaId = item.mediaId
+    val separator = mediaId.indexOf(':')
+    if (separator <= 0 || separator == mediaId.lastIndex) return null
+    val uri = item.localConfiguration?.uri?.toString().orEmpty()
+    if (uri.isBlank()) return null
+    val metadata = item.mediaMetadata
+    val provider = mediaId.substring(0, separator)
+    val providerTrackId = mediaId.substring(separator + 1)
+    return Track(
+        id = mediaId, providerTrackId = providerTrackId, provider = provider,
+        title = metadata.title?.toString() ?: "Unknown track",
+        artist = metadata.artist?.toString() ?: "Unknown artist",
+        album = metadata.albumTitle?.toString(),
+        artworkUrl = metadata.artworkUri?.toString(), audioUrl = uri, playable = true
+    )
+}
+
+private fun safeOfflineFile(context: Context, path: String): File? = runCatching {
+    val offlineDirectory = File(context.filesDir, "offline").canonicalFile
+    val file = File(path).canonicalFile
+    if (file.isFile && file.parentFile == offlineDirectory) file else null
+}.getOrNull()
+
 @Composable
 private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTrack) -> Unit) {
     val context = LocalContext.current
@@ -601,7 +694,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
             Text("Здесь появятся загруженные треки. Скачивание доступно только для источников, которые явно разрешают офлайн-копирование.", color = Muted)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(offline, key = { it.id }) { track ->
+                items(offline, key = { "${it.provider.lowercase()}:${it.id}" }) { track ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).clickable { onPlay(track) }.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(track.artworkUrl, null, Modifier.size(48.dp).clip(RoundedCornerShape(9.dp)), contentScale = ContentScale.Crop)
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
@@ -618,7 +711,7 @@ private fun DownloadsScreen(onPlay: (OfflineTrack) -> Unit, onDelete: (OfflineTr
 }
 
 @Composable
-private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit) {
+private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Unit, username: String, setUsername: (String) -> Unit, displayName: String, setDisplayName: (String) -> Unit, code: String, setCode: (String) -> Unit, busy: Boolean, message: String, authMode: String, setAuthMode: (String) -> Unit, onRegister: () -> Unit, onLogin: () -> Unit, onVerify: () -> Unit, onLogout: () -> Unit, onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Профиль", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
         when (step) {
@@ -627,17 +720,37 @@ private fun ProfileScreen(step: String, email: String, setEmail: (String) -> Uni
                 Text(email, color = Muted)
                 OutlinedButton(onClick = onLogout) { Text("Выйти") }
             }
+            "offline" -> {
+                Text("Не удалось проверить вход", color = Color.White, fontSize = 18.sp)
+                Text("Сохранённые данные сессии не удалены. Подключись к интернету и повтори проверку.", color = Muted)
+                OutlinedButton(onClick = onRetry, enabled = !busy) { Text("Повторить проверку") }
+            }
             "verify" -> {
                 Text("Проверь почту", color = Color.White, fontSize = 20.sp)
                 OutlinedTextField(code, setCode, Modifier.fillMaxWidth(), label = { Text("Код из письма") }, singleLine = true)
                 Button(onClick = onVerify, enabled = !busy && code.length == 8, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Подтвердить") }
             }
             else -> {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = authMode == "login",
+                        onClick = { setAuthMode("login") },
+                        label = { Text("Войти") }
+                    )
+                    FilterChip(
+                        selected = authMode == "register",
+                        onClick = { setAuthMode("register") },
+                        label = { Text("Создать аккаунт") }
+                    )
+                }
                 OutlinedTextField(email, setEmail, Modifier.fillMaxWidth(), label = { Text("Электронная почта") }, singleLine = true)
-                OutlinedTextField(username, setUsername, Modifier.fillMaxWidth(), label = { Text("Имя пользователя для регистрации") }, singleLine = true)
-                OutlinedTextField(displayName, setDisplayName, Modifier.fillMaxWidth(), label = { Text("Отображаемое имя") }, singleLine = true)
-                Button(onClick = onRegister, enabled = !busy && email.contains("@") && username.length >= 3 && displayName.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.fillMaxWidth()) { Text("Создать аккаунт") }
-                OutlinedButton(onClick = onLogin, enabled = !busy && email.contains("@"), modifier = Modifier.fillMaxWidth()) { Text("У меня уже есть аккаунт") }
+                if (authMode == "register") {
+                    OutlinedTextField(username, setUsername, Modifier.fillMaxWidth(), label = { Text("Имя пользователя") }, singleLine = true)
+                    OutlinedTextField(displayName, setDisplayName, Modifier.fillMaxWidth(), label = { Text("Отображаемое имя") }, singleLine = true)
+                    Button(onClick = onRegister, enabled = !busy && email.contains("@") && username.length >= 3 && displayName.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.fillMaxWidth()) { Text("Создать аккаунт") }
+                } else {
+                    Button(onClick = onLogin, enabled = !busy && email.contains("@"), colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.fillMaxWidth()) { Text("Войти по почте") }
+                }
             }
         }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
