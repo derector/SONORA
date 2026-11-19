@@ -544,3 +544,14 @@ Evidence URLs:
 - https://api.audius.co/v1/tracks/J55W3vk/stream?app_name=SONORA
 
 The two tested streams confirm playback for those individual Audius items only; they do not establish that every search result or provider stream works.
+
+
+## Combined provider integration build — 2026-11-19
+
+Draft PR #41: https://github.com/derector/SONORA/pull/41
+
+- Branch: `integration/provider-expansion-qa`.
+- Combines Openverse, ccMixter and Internet Archive API adapters with the search UI's playable-vs-rights-review split.
+- GitHub Actions run #44460293974 completed successfully: dependency install, TypeScript typecheck and production build all passed.
+- This confirms the combined web/API source compiles and builds. It does not confirm live combined provider requests or ccMixter end-to-end player playback.
+- PR #41 remains draft/open, unmerged and undeployed. Production remains unchanged.
