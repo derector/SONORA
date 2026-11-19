@@ -366,7 +366,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       <audio ref={audioRef} preload="metadata" playsInline />
       {currentTrack && (
         <>
-          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-[#10111a]/96 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_-16px_50px_rgba(0,0,0,.45)] backdrop-blur-2xl md:px-8">
+          <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-[1440px] overflow-hidden rounded-[24px] border border-white/10 bg-[#11121d]/96 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_18px_60px_rgba(0,0,0,.55)] backdrop-blur-2xl md:px-6">
             <div className="mx-auto max-w-[1440px]">
               <div className="mb-1.5 flex items-center gap-2 text-[10px] tabular-nums text-slate-500">
                 <span>{timeLabel(currentTime)}</span>
