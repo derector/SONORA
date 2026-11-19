@@ -1058,7 +1058,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
     tasks.push((async () => {
       try {
-        const escapedQuery = q.replace(/[\\"]/g, "\\q.replace(/[\\\\"]/g, "\\$&")");
+        const escapedQuery = q.replace(/[\\"]/g, "\\$&");
         const params = new URLSearchParams({
           q: `mediatype:audio AND ("${escapedQuery}")`,
           fl: "identifier,title,creator,licenseurl,mediatype",
@@ -1099,6 +1099,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           metadataResults.push(...batch);
         }
 
+        const before = tracks.length;
         for (const result of metadataResults) {
           if (result.status !== "fulfilled" || !result.value) continue;
           const { search, metadata, files } = result.value;
