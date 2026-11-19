@@ -46,7 +46,7 @@ export default function HistoryPage() {
     let active = true;
     async function load() {
       try {
-        const refresh = await fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" });
+        const refresh = await fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" });
         if (!refresh.ok) return;
         const session = await refresh.json() as ApiResult;
         const token = session.session?.access_token;
