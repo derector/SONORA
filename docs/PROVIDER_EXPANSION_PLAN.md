@@ -479,3 +479,14 @@ P3: scale provider onboarding, rights ledger, royalty/reporting, takedown workfl
 - unavailable: removed, dead, blocked, region-denied or no stream.
 
 A result may move to a stronger capability only after a real provider response, license/terms review and end-to-end playback test. No provider gets approved_native_stream merely because its public page contains an audio URL.
+
+### Implementation update — 2026-11-19
+
+The first provider expansion slices are now in separate draft PRs, intentionally not merged or deployed:
+
+- **Openverse discovery — PR #37**: unified-search adapter preserves creator, source and license attribution. Results remain non-playable pending original-source rights verification. CI typecheck/build passed.
+- **ccMixter — PR #38**: public Query API search plus item-detail lookup; exact BY, BY-SA and Public Domain license allowlist; source/attribution preserved; direct HTTPS ccMixter MP3 stream is exposed only for approved license classes and matching `/content/` media URLs. Downloads remain disabled. CI typecheck/build passed.
+- **Internet Archive — PR #39**: Advanced Search plus Metadata API; only original MP3 files from audio items with matching uploader-declared BY/BY-SA/CC0/Public Domain metadata are surfaced. These remain metadata-only and non-playable until independent rights verification. Typecheck passed on the latest head; build is running.
+- **Search UI — PR #40**: separate playable results from rights-review/discovery results; keep Play disabled unless both playable=true and an audio URL exist. CI is running.
+
+Live API inspection confirmed ccMixter's CSV data views expose item license and stream fields, and Internet Archive's Metadata API exposes original MP3 file metadata. These inspections are not end-to-end playback QA. The search UI and provider adapters remain separate draft PRs until CI and integration QA are complete.
