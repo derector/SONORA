@@ -68,7 +68,7 @@ private val Muted = Color(0xFF9298A5)
 private data class SoundCloudSeedTrack(val title: String, val url: String)
 private data class SoundCloudSeedArtist(val name: String, val aliases: List<String>, val profileUrl: String, val verified: Boolean, val tracks: List<SoundCloudSeedTrack>)
 private val PrioritySoundCloudArtists = listOf(
-    SoundCloudSeedArtist("молодой рубль", listOf("молодой рубль", "molodoy rubl", "molodoyrubl"), "https://soundcloud.com/dblvnt-586464205", false, listOf(
+    SoundCloudSeedArtist("Молодой рубль", listOf("молодой рубль", "molodoy rubl", "molodoyrubl"), "https://soundcloud.com/dblvnt-586464205", false, listOf(
         SoundCloudSeedTrack("чисто гипотетически", "https://soundcloud.com/dblvnt-586464205/chisto-gipoteticheski-prod-by"),
         SoundCloudSeedTrack("красный ход", "https://soundcloud.com/dblvnt-586464205/krasnyj-xod-prod-by-sw3rvv"),
         SoundCloudSeedTrack("базар", "https://soundcloud.com/dblvnt-586464205/bazar-prod-by-uraniumseller")
