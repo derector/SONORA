@@ -96,9 +96,9 @@ export default function AuthPage() {
             <>
               <h1 className="text-2xl font-semibold">{mode === "register" ? t("Create your account.") : t("Welcome back.")}</h1>
               <p className="mt-2 text-sm leading-6 text-slate-400">{t("Sign in securely with a one-time code sent to your email.")}</p>
-              <div className="mt-6 grid grid-cols-2 rounded-full border border-white/10 bg-black/20 p-1">
-                <button type="button" onClick={() => setMode("register")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "register" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>{t("Create account")}</button>
-                <button type="button" onClick={() => setMode("login")} className={`rounded-full px-3 py-2 text-xs transition ${mode === "login" ? "bg-violet-200 text-[#171323] font-semibold" : "text-slate-400"}`}>{t("Sign in")}</button>
+              <div className="mt-6 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-black/20 p-1.5" aria-label={t("Account access")}>
+                <button type="button" disabled={busy} aria-pressed={mode === "register"} onClick={() => { setMode("register"); setError(""); setMessage(""); }} className={`min-h-11 rounded-xl px-3 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-200 disabled:cursor-not-allowed ${mode === "register" ? "bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/20" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>{t("Create account")}</button>
+                <button type="button" disabled={busy} aria-pressed={mode === "login"} onClick={() => { setMode("login"); setError(""); setMessage(""); }} className={`min-h-11 rounded-xl px-3 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-200 disabled:cursor-not-allowed ${mode === "login" ? "bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/20" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>{t("I already have an account")}</button>
               </div>
               <form onSubmit={submitDetails} className="mt-6 space-y-4">
                 {mode === "register" && <>
