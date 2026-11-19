@@ -135,7 +135,7 @@ private fun SonoraApp() {
             if (!track.provider.equals("Jamendo", ignoreCase = true) || authStep != "signed") return
             if (event == "complete" && !completedMediaIds.add(mediaId)) return
             val durationMs = track.durationSeconds.coerceAtLeast(0).toLong() * 1000L
-            val eventListenedMs = if (event == "complete") durationMs else listenedMs.coerceAtMost(durationMs).toInt()
+            val eventListenedMs = if (event == "complete") durationMs else listenedMs.coerceAtMost(durationMs)
             scope.launch(Dispatchers.IO) {
                 runCatching { SonoraApi.recordProviderHistory(track, event, eventListenedMs.toInt()) }
             }
