@@ -24,7 +24,7 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         val url = inputData.getString("url") ?: return@withContext Result.failure()
         val id = inputData.getString("id") ?: return@withContext Result.failure()
         val provider = inputData.getString("provider") ?: return@withContext Result.failure()
-        if (provider != "Jamendo" || !url.startsWith("https://")) return@withContext Result.failure()
+        if (!provider.equals("Jamendo", ignoreCase = true) || !url.startsWith("https://")) return@withContext Result.failure()
         var partialFile: File? = null
         var pendingFinalFile: File? = null
         try {

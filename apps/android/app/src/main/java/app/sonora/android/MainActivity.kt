@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -90,6 +91,7 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var jamendoFavoriteIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     fun loadTracks(source: String, done: (List<Track>) -> Unit) {
         scope.launch {
@@ -98,6 +100,13 @@ private fun SonoraApp() {
             catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
             finally { busy = false }
         }
+    }
+
+    LaunchedEffect(authStep) {
+        if (authStep == "signed") {
+            try { jamendoFavoriteIds = withContext(Dispatchers.IO) { SonoraApi.getJamendoFavoriteIds() } }
+            catch (_: Exception) { message = "Не удалось синхронизировать избранное" }
+        } else jamendoFavoriteIds = emptySet()
     }
 
     LaunchedEffect(Unit) {
@@ -191,7 +200,17 @@ private fun SonoraApp() {
             AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
                 when (screen) {
                     "Главная" -> DiscoverScreen(tracks, provider, busy, message, { source -> provider = source; loadTracks(source) { tracks = it } }, ::play, { tab = "Плеер" })
-                    "Поиск" -> SearchScreen(query, { query = it }, tracks, busy, message, {
+                    "Поиск" -> SearchScreen(query, { query = it }, tracks, busy, message, authStep == "signed", jamendoFavoriteIds, { track ->
+                        scope.launch {
+                            busy = true
+                            try {
+                                withContext(Dispatchers.IO) { if (track.providerTrackId in jamendoFavoriteIds) SonoraApi.removeJamendoFavorite(track.providerTrackId) else SonoraApi.saveJamendoFavorite(track.providerTrackId) }
+                                jamendoFavoriteIds = if (track.providerTrackId in jamendoFavoriteIds) jamendoFavoriteIds - track.providerTrackId else jamendoFavoriteIds + track.providerTrackId
+                                message = ""
+                            } catch (e: Exception) { message = e.message ?: "Не удалось обновить избранное" }
+                            finally { busy = false }
+                        }
+                    }, {
                         scope.launch {
                             busy = true
                             try { tracks = withContext(Dispatchers.IO) { SonoraApi.search(query) }; message = "" }
@@ -202,6 +221,7 @@ private fun SonoraApp() {
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
+                        onFavoriteRemoved = { id -> jamendoFavoriteIds = jamendoFavoriteIds - id },
                         openProfile = { tab = "Профиль" },
                         play = ::play
                     )
@@ -263,18 +283,18 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, signedIn: Boolean, favoriteIds: Set<String>, toggleFavorite: (Track) -> Unit, search: () -> Unit, play: (Track) -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(query, onQuery, Modifier.fillMaxWidth(), placeholder = { Text("Трек, исполнитель, альбом") }, singleLine = true, trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, null, tint = Lime) } }, colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White))
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { TrackRow(it, { play(it) }, {}) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.id }) { track -> TrackRow(track, { play(track) }, {}, isJamendo = track.provider == "Jamendo", isFavorite = signedIn && track.providerTrackId in favoriteIds, showFavorite = signedIn && track.provider == "Jamendo", toggleFavorite = { toggleFavorite(track) }) } }
     }
 }
 
 @Composable
-private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
+private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit, isJamendo: Boolean = track.provider == "Jamendo", isFavorite: Boolean = false, showFavorite: Boolean = false, toggleFavorite: () -> Unit = {}) {
     val context = LocalContext.current
     val enqueueDownload = {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
@@ -296,7 +316,10 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        if (track.provider == "Jamendo" && track.downloadUrl != null) {
+        if (showFavorite && isJamendo) {
+            IconButton(onClick = toggleFavorite) { Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Удалить из избранного" else "Добавить в избранное", tint = if (isFavorite) Color(0xFFFF6B86) else Muted) }
+        }
+        if (track.provider.equals("Jamendo", ignoreCase = true) && track.downloadUrl != null) {
             IconButton(onClick = {
                 if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -437,6 +460,7 @@ private fun formatTime(milliseconds: Long): String {
 private fun LibraryScreen(
     signedIn: Boolean,
     currentTrack: Track?,
+    onFavoriteRemoved: (String) -> Unit,
     openProfile: () -> Unit,
     play: (Track) -> Unit
 ) {
@@ -444,9 +468,20 @@ private fun LibraryScreen(
     var playlists by remember { mutableStateOf<List<SonoraApi.Playlist>>(emptyList()) }
     var selected by remember { mutableStateOf<SonoraApi.Playlist?>(null) }
     var playlistTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var favoriteTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var title by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var favoriteMenuTrackId by remember { mutableStateOf<String?>(null) }
+    var notice by remember { mutableStateOf("") }
+
+    fun refreshFavorites() {
+        scope.launch {
+            try {
+                favoriteTracks = withContext(Dispatchers.IO) { SonoraApi.getJamendoFavoriteTracks() }
+            } catch (e: Exception) { error = e.message ?: "Не удалось загрузить избранное" }
+        }
+    }
 
     fun refreshPlaylists() {
         scope.launch {
@@ -460,14 +495,14 @@ private fun LibraryScreen(
     }
 
     LaunchedEffect(signedIn) {
-        if (signedIn) refreshPlaylists()
-        else { playlists = emptyList(); selected = null; playlistTracks = emptyList() }
+        if (signedIn) { refreshPlaylists(); refreshFavorites() }
+        else { playlists = emptyList(); selected = null; playlistTracks = emptyList(); favoriteTracks = emptyList() }
     }
 
     Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Медиатека", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (signedIn) IconButton(onClick = { refreshPlaylists() }, enabled = !busy) {
+            if (signedIn) IconButton(onClick = { refreshPlaylists(); refreshFavorites() }, enabled = !busy) {
                 Icon(Icons.Default.Refresh, "Обновить", tint = Lime)
             }
         }
@@ -475,6 +510,63 @@ private fun LibraryScreen(
             Text("Войди, чтобы синхронизировать плейлисты между сайтом и приложением.", color = Muted)
             Button(onClick = openProfile, colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)) { Text("Войти в SONORA") }
         } else {
+            Text("Избранное", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
+            if (favoriteTracks.isEmpty()) {
+                Text("Добавляй треки сердечком в поиске, они появятся здесь.", color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+            } else {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
+                    items(favoriteTracks, key = { "favorite-" + it.providerTrackId }) { track ->
+                        Surface(color = Panel, shape = RoundedCornerShape(16.dp), modifier = Modifier.width(220.dp)) {
+                            Column(Modifier.padding(12.dp)) {
+                                AsyncImage(track.artworkUrl, null, Modifier.fillMaxWidth().height(115.dp).clip(RoundedCornerShape(10.dp)), contentScale = ContentScale.Crop)
+                                Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                                Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(onClick = { play(track) }) { Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = Lime) }
+                                    IconButton(onClick = { favoriteMenuTrackId = track.providerTrackId }) {
+                                        Icon(Icons.Default.QueueMusic, "Добавить в плейлист", tint = Muted)
+                                    }
+                                    DropdownMenu(
+                                        expanded = favoriteMenuTrackId == track.providerTrackId,
+                                        onDismissRequest = { favoriteMenuTrackId = null }
+                                    ) {
+                                        if (playlists.isEmpty()) {
+                                            DropdownMenuItem(text = { Text("Сначала создай плейлист") }, onClick = { favoriteMenuTrackId = null })
+                                        } else {
+                                            playlists.forEach { playlist ->
+                                                DropdownMenuItem(
+                                                    text = { Text(playlist.title) },
+                                                    onClick = {
+                                                        favoriteMenuTrackId = null
+                                                        scope.launch {
+                                                            try {
+                                                                withContext(Dispatchers.IO) { SonoraApi.addTrackToPlaylist(playlist.id, track) }
+                                                                notice = "Добавлено в «${playlist.title}»"
+                                                                error = ""
+                                                            } catch (e: Exception) { error = e.message ?: "Не удалось добавить в плейлист" }
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            try {
+                                                withContext(Dispatchers.IO) { SonoraApi.removeJamendoFavorite(track.providerTrackId) }
+                                                favoriteTracks = favoriteTracks.filterNot { it.providerTrackId == track.providerTrackId }
+                                                onFavoriteRemoved(track.providerTrackId)
+                                                notice = ""
+                                                error = ""
+                                            } catch (e: Exception) { error = e.message ?: "Не удалось удалить из избранного" }
+                                        }
+                                    }) { Icon(Icons.Default.Favorite, "Убрать из избранного", tint = Color(0xFFFF6B86)) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = title, onValueChange = { title = it.take(80) },
                 modifier = Modifier.fillMaxWidth(),
@@ -585,6 +677,7 @@ private fun LibraryScreen(
                 }
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime)
+            if (notice.isNotBlank()) Text(notice, color = Lime, modifier = Modifier.padding(top = 8.dp))
             if (error.isNotBlank()) Text(error, color = Color(0xFFFF9A8D), modifier = Modifier.padding(top = 8.dp))
         }
     }

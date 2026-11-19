@@ -10,6 +10,10 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 object SonoraApi {
     private const val BASE = "https://sonora-web-api-production.up.railway.app"
@@ -29,7 +33,7 @@ object SonoraApi {
         )
     }
 
-    private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false): JSONObject {
+    private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false, retryAuth: Boolean = true): JSONObject {
         val builder = Request.Builder().url(BASE + path).header("Accept", "application/json")
         if (body != null) builder.header("Content-Type", "application/json").method(method, body.toString().toRequestBody(jsonType))
         else if (method != "GET") builder.method(method, ByteArray(0).toRequestBody(null))
@@ -38,6 +42,10 @@ object SonoraApi {
             builder.header("Authorization", "Bearer $token")
         }
         val response = http.newCall(builder.build()).execute()
+        if (authenticated && response.code == 401 && retryAuth) {
+            response.close()
+            if (refreshSession()) return request(path, method, body, authenticated, retryAuth = false)
+        }
         response.use {
             it.header("Set-Cookie")?.let { cookie ->
                 val value = Regex("sonora_refresh=([^;]+)").find(cookie)?.groupValues?.getOrNull(1)
@@ -172,27 +180,73 @@ object SonoraApi {
         request("/api/v1/playlists/$id", "DELETE", authenticated = true)
     }
 
-    fun getPlaylistTracks(playlistId: String): List<Track> {
+    suspend fun getPlaylistTracks(playlistId: String): List<Track> {
         val playlist = request("/api/v1/playlists/${java.net.URLEncoder.encode(playlistId, "UTF-8")}", authenticated = true)
             .optJSONObject("playlist") ?: return emptyList()
         val items = playlist.optJSONArray("provider_playlist_tracks") ?: return emptyList()
-        val resolved = mutableListOf<Track>()
-        for (i in 0 until items.length()) {
-            val saved = items.optJSONObject(i) ?: continue
-            val provider = saved.optString("provider")
-            val providerId = saved.optString("provider_track_id")
-            val path = when (provider) {
-                "audius" -> "/api/v1/providers/audius/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
-                "jamendo" -> "/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
-                else -> continue
+        val savedTracks = (0 until items.length()).mapNotNull { index ->
+            items.optJSONObject(index)?.let { saved ->
+                val provider = saved.optString("provider")
+                val providerId = saved.optString("provider_track_id")
+                val path = when (provider) {
+                    "audius" -> "/api/v1/providers/audius/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                    "jamendo" -> "/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(providerId, "UTF-8")}"
+                    else -> null
+                }
+                path
             }
-            try {
-                val fresh = parseTracks(request(path).optJSONArray("items")).firstOrNull()
-                if (fresh != null && fresh.playable) resolved += fresh
-            } catch (_: Exception) { }
         }
-        return resolved
+        return coroutineScope {
+            savedTracks.map { path ->
+                async(Dispatchers.IO) {
+                    try {
+                        parseTracks(request(path).optJSONArray("items")).firstOrNull { it.playable }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
     }
+
+    suspend fun getJamendoFavoriteTracks(): List<Track> {
+        val ids = getJamendoFavoriteIds()
+        return coroutineScope {
+            ids.map { id ->
+                async(Dispatchers.IO) {
+                    try {
+                        parseTracks(request("/api/v1/providers/jamendo/tracks?id=${java.net.URLEncoder.encode(id, "UTF-8")}").optJSONArray("items"))
+                            .firstOrNull { it.providerTrackId == id && it.playable }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }.awaitAll().filterNotNull()
+        }
+    }
+
+    fun getJamendoFavoriteIds(): Set<String> {
+        val items = request("/api/v1/provider-favorites", authenticated = true).optJSONArray("items")
+        val ids = mutableSetOf<String>()
+        if (items != null) for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            item.optString("provider_track_id").takeIf { it.matches(Regex("^[0-9]{1,24}$")) }?.let(ids::add)
+        }
+        return ids
+    }
+
+
+    fun saveJamendoFavorite(trackId: String) {
+        if (!trackId.matches(Regex("^[0-9]{1,24}$"))) throw IOException("Invalid Jamendo track ID.")
+        request("/api/v1/provider-favorites", "POST", JSONObject().put("providerTrackId", trackId), authenticated = true)
+    }
+
+
+    fun removeJamendoFavorite(trackId: String) {
+        if (!trackId.matches(Regex("^[0-9]{1,24}$"))) throw IOException("Invalid Jamendo track ID.")
+        request("/api/v1/provider-favorites/${java.net.URLEncoder.encode(trackId, "UTF-8")}", "DELETE", authenticated = true)
+    }
+
 
     fun search(query: String): List<Track> {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
