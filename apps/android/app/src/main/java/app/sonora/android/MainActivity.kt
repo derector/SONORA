@@ -121,7 +121,7 @@ private fun SonoraApp() {
         loadTracks("Audius") { tracks = it }
     }
 
-    DisposableEffect(controller, tracks, activeQueue) {
+    DisposableEffect(controller, tracks, activeQueue, authStep) {
         val player = controller
         if (player == null) return@DisposableEffect onDispose { }
         val knownTracks = (activeQueue + tracks).associateBy { "${it.provider}:${it.id}" }
@@ -148,6 +148,7 @@ private fun SonoraApp() {
                 }
                 previousMediaId = nextMediaId
                 val mediaId = nextMediaId ?: return
+                completedMediaIds.remove(mediaId)
                 knownTracks[mediaId]?.let { current = it }
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
