@@ -312,6 +312,7 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
 
 @Composable
 private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit, openSoundCloud: (SoundCloudSeedTrack, SoundCloudSeedArtist) -> Unit) {
+    val context = LocalContext.current
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
 
@@ -376,6 +377,7 @@ private fun SoundCloudEmbedScreen(title: String, trackUrl: String?, onBack: () -
                         val widget = "https://w.soundcloud.com/player/?url=" +
                             java.net.URLEncoder.encode(trackUrl, "UTF-8") +
                             "&auto_play=false&hide_related=true&show_comments=false&show_user=true&visual=false"
+                        tag = widget
                         loadUrl(widget)
                     }
                 },
