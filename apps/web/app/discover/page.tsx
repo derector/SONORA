@@ -64,7 +64,7 @@ export default function DiscoverPage() {
 
   useEffect(() => {
     void loadTracks();
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<{ session?: { access_token?: string } }> : null)
       .then(async (result) => {
         const accessToken = result?.session?.access_token;
