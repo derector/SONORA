@@ -66,7 +66,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`${API}/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<ApiResult> : null)
       .then((result) => { if (active) setToken(result?.session?.access_token ?? ""); })
       .catch(() => undefined)
