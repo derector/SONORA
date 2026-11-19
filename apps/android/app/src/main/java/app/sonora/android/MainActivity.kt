@@ -224,6 +224,11 @@ private fun SonoraApp() {
         player.prepare()
         player.play()
         current = track
+        if (track.provider.equals("Jamendo", ignoreCase = true) && authStep == "signed") {
+            scope.launch(Dispatchers.IO) {
+                runCatching { SonoraApi.recordProviderHistory(track, "play", 0) }
+            }
+        }
     }
 
     fun play(track: Track) = startTrack(track)
@@ -660,32 +665,37 @@ private fun LibraryScreen(
 ) {
     val scope = rememberCoroutineScope()
     var playlists by remember { mutableStateOf<List<SonoraApi.Playlist>>(emptyList()) }
+    var favorites by remember { mutableStateOf<List<Track>>(emptyList()) }
     var selected by remember { mutableStateOf<SonoraApi.Playlist?>(null) }
     var playlistTracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var title by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
 
-    fun refreshPlaylists() {
+    fun refreshLibrary() {
         scope.launch {
             busy = true
             try {
-                playlists = withContext(Dispatchers.IO) { SonoraApi.getPlaylists() }
+                val loaded = withContext(Dispatchers.IO) {
+                    SonoraApi.getPlaylists() to SonoraApi.getProviderFavorites()
+                }
+                playlists = loaded.first
+                favorites = loaded.second
                 error = ""
-            } catch (e: Exception) { error = e.message ?: "Не удалось загрузить плейлисты" }
+            } catch (e: Exception) { error = e.message ?: "Не удалось загрузить медиатеку" }
             finally { busy = false }
         }
     }
 
     LaunchedEffect(signedIn) {
-        if (signedIn) refreshPlaylists()
-        else { playlists = emptyList(); selected = null; playlistTracks = emptyList() }
+        if (signedIn) refreshLibrary()
+        else { playlists = emptyList(); favorites = emptyList(); selected = null; playlistTracks = emptyList() }
     }
 
     Column(Modifier.fillMaxSize().background(Ink).padding(20.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Медиатека", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            if (signedIn) IconButton(onClick = { refreshPlaylists() }, enabled = !busy) {
+            if (signedIn) IconButton(onClick = { refreshLibrary() }, enabled = !busy) {
                 Icon(Icons.Default.Refresh, "Обновить", tint = Lime)
             }
         }
@@ -716,6 +726,56 @@ private fun LibraryScreen(
             )
             Spacer(Modifier.height(12.dp))
             if (selected == null) {
+                if (currentTrack?.provider.equals("Jamendo", ignoreCase = true)) {
+                    OutlinedButton(
+                        onClick = {
+                            val target = currentTrack ?: return@OutlinedButton
+                            scope.launch {
+                                busy = true
+                                try {
+                                    withContext(Dispatchers.IO) { SonoraApi.addProviderFavorite(target) }
+                                    favorites = withContext(Dispatchers.IO) { SonoraApi.getProviderFavorites() }
+                                    error = "Добавлено в избранное"
+                                } catch (e: Exception) { error = e.message ?: "Не удалось добавить в избранное" }
+                                finally { busy = false }
+                            }
+                        },
+                        enabled = !busy && favorites.none { it.providerTrackId == currentTrack.providerTrackId }
+                    ) {
+                        Icon(Icons.Default.Favorite, null, tint = Lime)
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (favorites.any { it.providerTrackId == currentTrack.providerTrackId }) "Уже в избранном" else "Добавить текущий трек в избранное")
+                    }
+                }
+                Text("Избранное Jamendo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (favorites.isEmpty() && !busy) Text("Пока нет избранных треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                favorites.forEach { favorite ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(favorite.artworkUrl, null, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
+                        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+                            Text(favorite.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(favorite.artist, color = Muted, fontSize = 12.sp, maxLines = 1)
+                        }
+                        IconButton(onClick = { if (favorite.playable) play(favorite) else error = "Трек временно недоступен для воспроизведения" }) {
+                            Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = if (favorite.playable) Lime else Muted)
+                        }
+                        IconButton(onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    withContext(Dispatchers.IO) { SonoraApi.removeProviderFavorite(favorite) }
+                                    favorites = favorites.filterNot { it.providerTrackId == favorite.providerTrackId }
+                                    error = ""
+                                } catch (e: Exception) { error = e.message ?: "Не удалось удалить избранное" }
+                                finally { busy = false }
+                            }
+                        }, enabled = !busy) { Icon(Icons.Default.Favorite, "Убрать из избранного", tint = Lime) }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
                 Text("Твои плейлисты", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 if (playlists.isEmpty() && !busy) Text("Пока нет плейлистов. Создай первый выше.", color = Muted, modifier = Modifier.padding(top = 10.dp))
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 10.dp)) {
