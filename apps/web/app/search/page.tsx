@@ -16,7 +16,7 @@ type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadat
 type SoundCloudTrack = { title: string; url: string };
 type SoundCloudArtist = { name: string; aliases: string[]; profileUrl: string; profileNote: string; tracks: SoundCloudTrack[] };
 const prioritySoundCloudArtists: SoundCloudArtist[] = [
-  { name: "молодой рубль", aliases: ["молодой рубль", "molodoy rubl", "molodoyrubl"], profileUrl: "https://soundcloud.com/dblvnt-586464205", profileNote: "SoundCloud profile is not verified", tracks: [
+  { name: "Молодой рубль", aliases: ["молодой рубль", "molodoy rubl", "molodoyrubl"], profileUrl: "https://soundcloud.com/dblvnt-586464205", profileNote: "SoundCloud profile is not verified", tracks: [
     { title: "чисто гипотетически", url: "https://soundcloud.com/dblvnt-586464205/chisto-gipoteticheski-prod-by" },
     { title: "красный ход", url: "https://soundcloud.com/dblvnt-586464205/krasnyj-xod-prod-by-sw3rvv" },
     { title: "базар", url: "https://soundcloud.com/dblvnt-586464205/bazar-prod-by-uraniumseller" }
