@@ -368,3 +368,11 @@ P0 Jamendo regression investigation should therefore test the exact Jamendo ID 1
 6. If a valid permitted playable source is found, attach it as a separate provider-source mapping and play that source. If no source is found, keep the imported playlist row with a clear unavailable status and allow the user to choose another match.
 7. Do not tell the user the Spotify track itself is playing when SONORA is actually playing a SoundCloud/Jamendo/other source match. Show actual source provider, quality/format where available, and rights/availability state.
 8. Per-user: imported playlist, source mappings, likes, history, queue and connected provider tokens are scoped to that SONORA user. OAuth tokens are encrypted and never shared; disconnect revokes/deletes user connection state as required. For playback from a provider, the source's own entitlement and session rules apply independently.
+
+
+### Existing SONORA playlist-import audit (main branch snapshot)
+- The current web import page accepts CSV/plain-text lists. Its source selector (Spotify, Apple Music, YouTube Music, SoundCloud, Yandex, VK, Telegram, Other/CSV) is informational only; it does not authenticate to or query the selected platform.
+- Matching currently calls Jamendo in batches of five, capped at 100 rows. It asks the user to choose candidates, then saves selected matches through provider-favorites. It does not currently import a provider playlist URL, recreate playlist structure/order, or save imported matches directly as a new SONORA playlist.
+- Album metadata is parsed but currently unused for disambiguation. There is no documented Spotify OAuth/playlist API connection in this import flow.
+- Therefore do not describe current SONORA as having live Spotify/SoundCloud/Yandex playlist import. The UI currently supports matching exported metadata lists against Jamendo, with the source dropdown acting as a label.
+- Required implementation: provider-specific official playlist readers behind connection adapters; retain source playlist name/order/IDs; cross-catalog match each row against actual authorized streams; preview matched/unmatched/ambiguous rows; require user confirmation; create a SONORA playlist preserving order and provider source mapping. Do not silently write to favorites or substitute weak title matches.
