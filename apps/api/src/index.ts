@@ -1042,6 +1042,20 @@ app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: 
         limit: String(limitValue),
         offset: String(offsetValue)
       });
+      const countParams = new URLSearchParams({
+        app_name: "SONORA",
+        filter_tracks: "public"
+      });
+      const countRequest = fetch(
+        `https://api.audius.co/v1/users/${encodeURIComponent(artistId)}/tracks/count?${countParams.toString()}`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) }
+      ).then(async (countResponse) => {
+        if (!countResponse.ok) return null;
+        const countPayload = await countResponse.json() as { data?: number };
+        return typeof countPayload.data === "number" &&
+          Number.isInteger(countPayload.data) && countPayload.data >= 0
+          ? countPayload.data : null;
+      }).catch(() => null);
       const response = await fetch(
         `https://api.audius.co/v1/users/${encodeURIComponent(artistId)}/tracks?${params.toString()}`,
         { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(12000) }
@@ -1058,6 +1072,7 @@ app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: 
         album?: { playlist_name?: string };
       }> };
       const records = payload.data ?? [];
+      const totalCount = await countRequest;
       const items = records.flatMap((track) => {
         if (!track.id || !track.title) return [];
         const streamable = track.is_streamable === true && track.is_stream_gated !== true;
@@ -1074,9 +1089,18 @@ app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: 
           audioUrl: streamable
             ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`
             : null,
-          licenseUrl: typeof track.license === "string" && track.license.startsWith("http")
-            ? track.license : "https://audius.co/terms",
-          sourceUrl: track.permalink ?? "https://audius.co",
+          licenseUrl: typeof track.license === "string" && /^https:\/\//i.test(track.license)
+            ? track.license : null,
+          sourceUrl: (() => {
+            try {
+              const source = new URL(track.permalink ?? "");
+              return source.protocol === "https:" &&
+                (source.hostname === "audius.co" || source.hostname === "www.audius.co")
+                ? source.toString() : "https://audius.co";
+            } catch {
+              return "https://audius.co";
+            }
+          })(),
           playable: streamable
         }];
       });
@@ -1087,8 +1111,14 @@ app.get<{ Params: { artistId: string }; Querystring: { limit?: string; offset?: 
         limit: limitValue,
         offset: offsetValue,
         sourceCount: records.length,
-        hasMore: records.length === limitValue,
-        nextOffset: records.length === limitValue ? offsetValue + records.length : null
+        totalCount,
+        hasMore: totalCount !== null
+          ? offsetValue + records.length < totalCount
+          : records.length === limitValue,
+        nextOffset: (totalCount !== null
+          ? offsetValue + records.length < totalCount
+          : records.length === limitValue)
+          ? offsetValue + records.length : null
       };
     } catch (error) {
       request.log.warn({ err: error, artistId }, "Audius artist catalog unavailable");
