@@ -11,7 +11,8 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-object SonoraApi {\n    enum class SessionRestoreResult { SIGNED_IN, SIGNED_OUT, TEMPORARILY_UNAVAILABLE }
+object SonoraApi {
+    enum class SessionRestoreResult { SIGNED_IN, SIGNED_OUT, TEMPORARILY_UNAVAILABLE }
     private const val BASE = "https://sonora-web-api-production.up.railway.app"
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val http = OkHttpClient.Builder()
@@ -150,7 +151,7 @@ object SonoraApi {\n    enum class SessionRestoreResult { SIGNED_IN, SIGNED_OUT,
         } catch (_: Exception) {
             // Always clear this device's credentials, even if the API is unreachable.
         } finally {
-            prefs.edit().remove("access_token").remove("refresh_cookie").remove("email").apply()
+            clearLocalSession()
         }
     }
     fun email(): String = prefs.getString("email", "").orEmpty()
