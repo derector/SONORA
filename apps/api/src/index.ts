@@ -2,6 +2,13 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import {
+  ACCENT_PRESETS, PROFILE_COLUMNS, PROFILE_ROLES, mapProfile, normalizeGenres,
+  normalizeLinks, normalizePrivacy, registerProfileRoutes
+} from "./profile-routes.js";
+
+const ACCENT_PRESET_IDS: readonly string[] = ACCENT_PRESETS;
+const PROFILE_ROLE_IDS: readonly string[] = PROFILE_ROLES;
 
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
@@ -268,21 +275,39 @@ app.get("/api/v1/auth/me", async (request, reply) => {
 app.get("/api/v1/profile", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
+  // Profile Center columns exist only after migration 010. Read them when
+  // present and degrade to the base row instead of failing the request.
+  const full = await auth.client.from("users").select(PROFILE_COLUMNS)
+    .eq("id", auth.user.id).single();
+  if (!full.error && full.data) {
+    return { user: mapProfile(full.data as unknown as Record<string, unknown>) };
+  }
+  if (full.error && full.error.code !== "42703") {
+    request.log.error({ code: full.error.code }, "Profile read failed");
+    return reply.code(404).send(authError(404, "Profile not found."));
+  }
+  request.log.warn("Profile Center columns are not migrated yet (010_profile_center.sql)");
   const { data, error } = await auth.client.from("users")
     .select("id,email,username,display_name,avatar_url,created_at")
     .eq("id", auth.user.id).single();
   if (error || !data) return reply.code(404).send(authError(404, "Profile not found."));
-  return { user: {
-    id: data.id, email: data.email, username: data.username,
-    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
-  }};
+  return {
+    partial: true,
+    user: mapProfile(data as unknown as Record<string, unknown>)
+  };
 });
 
-app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profile", async (request, reply) => {
+app.patch<{
+  Body: {
+    displayName?: string; username?: string; bio?: string | null; accent?: string | null;
+    role?: string | null; status?: string | null; links?: unknown; privacy?: unknown;
+    favoriteGenres?: unknown;
+  }
+}>("/api/v1/profile", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
-  const { displayName, username } = request.body ?? {};
-  const update: Record<string, string> = {};
+  const { displayName, username, bio, accent, role, status, links, privacy, favoriteGenres } = request.body ?? {};
+  const update: Record<string, unknown> = {};
   if (displayName !== undefined) {
     if (!cleanText(displayName, 1, 48)) return reply.code(400).send(authError(400, "Display name must be 1-48 characters."));
     update.display_name = displayName.trim();
@@ -293,11 +318,55 @@ app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profil
     }
     update.username = username.trim().toLowerCase();
   }
+  if (bio !== undefined) {
+    if (bio === null || bio === "") update.bio = null;
+    else if (typeof bio !== "string" || bio.trim().length > 280) {
+      return reply.code(400).send(authError(400, "About me is 280 characters or fewer."));
+    } else update.bio = bio.trim();
+  }
+  if (status !== undefined) {
+    if (status === null || status === "") update.status = null;
+    else if (typeof status !== "string" || status.trim().length > 60) {
+      return reply.code(400).send(authError(400, "Status is 60 characters or fewer."));
+    } else update.status = status.trim();
+  }
+  if (accent !== undefined) {
+    if (accent === null || accent === "") update.accent = null;
+    else if (typeof accent !== "string" || !ACCENT_PRESET_IDS.includes(accent)) {
+      return reply.code(400).send(authError(400, `Cover style must be one of: ${ACCENT_PRESET_IDS.join(", ")}.`));
+    } else update.accent = accent;
+  }
+  if (role !== undefined) {
+    if (role === null || role === "") update.role = null;
+    else if (typeof role !== "string" || !PROFILE_ROLE_IDS.includes(role)) {
+      return reply.code(400).send(authError(400, `Role must be one of: ${PROFILE_ROLE_IDS.join(", ")}.`));
+    } else update.role = role;
+  }
+  if (links !== undefined) {
+    const result = normalizeLinks(links);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.links = result.items;
+  }
+  if (privacy !== undefined) {
+    const result = normalizePrivacy(privacy);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.privacy = result.privacy;
+  }
+  if (favoriteGenres !== undefined) {
+    const result = normalizeGenres(favoriteGenres);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.favorite_genres = result.genres;
+  }
   if (!Object.keys(update).length) return reply.code(400).send(authError(400, "No profile changes were provided."));
   update.updated_at = new Date().toISOString();
   const { data, error } = await auth.client.from("users").update(update)
     .eq("id", auth.user.id)
     .select("id,email,username,display_name,avatar_url,created_at").single();
+  // Undefined column means migration 010 has not landed: say that instead of
+  // the generic update failure.
+  if (error?.code === "42703") {
+    return reply.code(503).send(authError(503, "Profile Center fields need migration 010 before they can be saved."));
+  }
   if (error || !data) {
     if (error?.code === "23505") return reply.code(409).send(authError(409, "That username is already taken."));
     request.log.error({ code: error?.code }, "Profile update failed");
@@ -1192,6 +1261,9 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     artists: artists.slice(0, limit), providers
   };
 });
+
+// Profile Center v2: cover media, stats, taste, feedback and the social graph.
+registerProfileRoutes(app, { authClient, requireUser, authError });
 
 try {
   await app.listen({ port, host });
