@@ -1,45 +1,62 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
+import rateLimit from "@fastify/rate-limit";
+import type { FastifyRequest } from "fastify";
+import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
+import { registerProfileRoutes } from "./profile-routes.js";
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
 await app.register(cookie);
-
 await app.register(cors, {
   origin: process.env.CORS_ORIGIN?.split(",").map((value) => value.trim()) ?? ["http://localhost:3000"],
   credentials: true
 });
-
-function authClient(accessToken?: string): SupabaseClient {
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Supabase Auth is not configured on the API service");
-  }
-
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: accessToken
-      ? { headers: { Authorization: `Bearer ${accessToken}` } }
-      : undefined
-  });
-}
+// Abuse protection for public and auth endpoints. Limits are conservative for
+// legitimate single-user sessions and can be overridden per route via configs.
+await app.register(rateLimit, {
+  global: false,
+  keyGenerator: (request: FastifyRequest) => request.ip,
+  max: 300,
+  timeWindow: "1 minute",
+  cache: 5000,
+  errorResponseBuilder: () => ({ statusCode: 429, error: "Too many requests, please slow down." })
+});
+const otpRateLimit = {
+  config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 10, timeWindow: "1 minute" } }
+};
+const verifyRateLimit = {
+  config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 15, timeWindow: "1 minute" } }
+};
+const refreshRateLimit = {
+  config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 60, timeWindow: "1 minute" } }
+};
+const writeRateLimit = {
+  config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 120, timeWindow: "1 minute" } }
+};
 
 function validEmail(value: unknown): value is string {
   return typeof value === "string" && value.length <= 254 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function cleanText(value: unknown, min: number, max: number): value is string {
-  return typeof value === "string" && value.trim().length >= min && value.trim().length <= max;
-}
-
-function authError(statusCode: number, message: string) {
-  return { statusCode, error: message };
+// Verifies a provider stream URL with a tiny ranged request. Signed provider
+// URLs can expire or point at removed tracks; players must report the truth
+// instead of starting a stream that cannot load (never fake playback).
+async function probeStream(audioUrl: unknown): Promise<boolean> {
+  if (typeof audioUrl !== "string" || !audioUrl.startsWith("https://")) return false;
+  try {
+    const response = await fetch(audioUrl, {
+      method: "GET", headers: { Range: "bytes=0-2047" }, signal: AbortSignal.timeout(6000)
+    });
+    if (!response.ok) return false;
+    const contentType = response.headers.get("content-type") ?? "";
+    return contentType.startsWith("audio") || contentType === "";
+  } catch {
+    return false;
+  }
 }
 
 app.get("/health", async () => ({
@@ -65,7 +82,16 @@ app.get("/api/v1", async () => ({
     "/api/v1/catalog/tracks",
     "/api/v1/catalog/search",
     "/api/v1/search/music",
+    "/api/v1/discovery/search",
+    "/api/v1/discovery/resolve",
     "/api/v1/providers/jamendo/tracks",
+    "/api/v1/providers/audius/tracks",
+    "/api/v1/recommendations",
+    "/api/v1/assistant",
+    "/api/v1/import/link",
+    "/api/v1/import/file",
+    "/api/v1/import/jobs",
+    "/api/v1/import/jobs/:id",
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
@@ -83,6 +109,7 @@ app.get("/api/v1", async () => ({
 
 app.post<{ Body: { email?: string; username?: string; displayName?: string } }>(
   "/api/v1/auth/register",
+  otpRateLimit,
   async (request, reply) => {
     const { email, username, displayName } = request.body ?? {};
     if (!validEmail(email) || !cleanText(username, 3, 24) ||
@@ -112,7 +139,7 @@ app.post<{ Body: { email?: string; username?: string; displayName?: string } }>(
   }
 );
 
-app.post<{ Body: { email?: string } }>("/api/v1/auth/login", async (request, reply) => {
+app.post<{ Body: { email?: string } }>("/api/v1/auth/login", otpRateLimit, async (request, reply) => {
   const { email } = request.body ?? {};
   if (!validEmail(email)) return reply.code(400).send(authError(400, "Enter a valid email address."));
 
@@ -132,7 +159,7 @@ app.post<{ Body: { email?: string } }>("/api/v1/auth/login", async (request, rep
   }
 });
 
-app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", async (request, reply) => {
+app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", verifyRateLimit, async (request, reply) => {
   const { email, token } = request.body ?? {};
   if (!validEmail(email) || typeof token !== "string" || !/^\d{8}$/.test(token)) {
     return reply.code(400).send(authError(400, "Enter the email address and eight-digit code."));
@@ -192,7 +219,7 @@ app.post<{ Body: { email?: string; token?: string } }>("/api/v1/auth/verify", as
   }
 });
 
-app.post("/api/v1/auth/refresh", async (request, reply) => {
+app.post("/api/v1/auth/refresh", refreshRateLimit, async (request, reply) => {
   const refreshToken = request.cookies.sonora_refresh;
   if (!cleanText(refreshToken, 10, 4096)) {
     return reply.code(401).send(authError(401, "A valid refresh token is required."));
@@ -205,7 +232,8 @@ app.post("/api/v1/auth/refresh", async (request, reply) => {
       return reply.code(401).send(authError(401, "Session expired. Please sign in again."));
     }
 
-    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 30 });
+    // Keep the refresh cookie lifetime consistent with the initial sign-in (90 days).
+    reply.setCookie("sonora_refresh", data.session.refresh_token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/api/v1/auth", maxAge: 60 * 60 * 24 * 90 });
 
     const metadata = data.user.user_metadata ?? {};
     const profileClient = authClient(data.session.access_token);
@@ -424,28 +452,6 @@ app.get<{ Querystring: { q?: string; limit?: string } }>("/api/v1/catalog/search
   }
 });
 
-async function requireUser(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) {
-  const authorization = request.headers.authorization;
-  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!token) {
-    await reply.code(401).send(authError(401, "Authentication required."));
-    return null;
-  }
-  try {
-    const client = authClient(token);
-    const { data, error } = await client.auth.getUser(token);
-    if (error || !data.user) {
-      await reply.code(401).send(authError(401, "Session is invalid or expired."));
-      return null;
-    }
-    return { client, user: data.user };
-  } catch (error) {
-    request.log.error({ err: error }, "User authentication unavailable");
-    await reply.code(503).send(authError(503, "Authentication service is temporarily unavailable."));
-    return null;
-  }
-}
-
 app.get("/api/v1/playlists", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
@@ -590,10 +596,11 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
       return reply.code(502).send(authError(502, "Audius could not verify this track right now."));
     }
   }
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  const jamendo = jamendoConfig();
+  if (!jamendo) {
+    return reply.code(503).send(authError(503, "Jamendo catalog is not configured."));
   }
+  const clientId = jamendo.clientId;
   try {
     const params = new URLSearchParams({
       client_id: clientId, format: "json", id: providerTrackId,
@@ -764,7 +771,7 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/provider-history", async (
 app.post<{ Body: {
   providerTrackId?: string; title?: string; artistName?: string; albumName?: string | null;
   durationSeconds?: number; artworkUrl?: string | null; licenseUrl?: string; sourceUrl?: string;
-  eventType?: "play" | "complete" | "skip"; listenedMs?: number;
+  eventType?: "play" | "complete" | "skip"; listenedMs?: number; clientEventId?: string;
 } }>("/api/v1/provider-history", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
@@ -789,20 +796,31 @@ app.post<{ Body: {
       typeof licenseUrl !== "string" || licenseUrl.length > 2048 || !(licenseUrl.startsWith("https://creativecommons.org/") || licenseUrl.startsWith("http://creativecommons.org/")) ||
       typeof sourceUrl !== "string" || sourceUrl.length > 2048 || !sourceUrl.startsWith("https://www.jamendo.com/") ||
       !["play", "complete", "skip"].includes(eventType ?? "") ||
-      (listenedMs !== undefined && (typeof listenedMs !== "number" || !Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86400000))) {
+      (listenedMs !== undefined && (typeof listenedMs !== "number" || !Number.isInteger(listenedMs) || listenedMs < 0 || listenedMs > 86400000)) ||
+      (body.clientEventId !== undefined && !(typeof body.clientEventId === "string" && /^[A-Za-z0-9_-]{8,64}$/.test(body.clientEventId)))) {
     return reply.code(400).send(authError(400, "Invalid provider track metadata or listening event."));
+  }
+  // Offline replay safety: clients may attach a stable idempotency key so a
+  // queued-but-already-delivered event is silently deduplicated, not double counted.
+  const clientEventId = body.clientEventId;
+  if (typeof clientEventId === "string") {
+    const { data: existing } = await auth.client.from("provider_listening_events")
+      .select("id").eq("user_id", auth.user.id).eq("provider", "jamendo")
+      .eq("client_event_id", clientEventId).limit(1).maybeSingle();
+    if (existing) return { ok: true, deduplicated: true };
   }
   const { data, error } = await auth.client.from("provider_listening_events").insert({
     user_id: auth.user.id, provider: "jamendo", provider_track_id: providerTrackId,
     title: title.trim(), artist_name: artistName.trim(), album_name: albumName?.trim() || null,
     duration_seconds: durationSeconds, artwork_url: artworkUrl ?? null,
     license_url: licenseUrl.replace(/^http:/, "https:"), source_url: sourceUrl, event_type: eventType,
-    listened_ms: listenedMs ?? 0
+    listened_ms: listenedMs ?? 0, client_event_id: clientEventId ?? null
   }).select("id,event_type,listened_ms,occurred_at").single();
-  if (error) {
+  if (error && error.code !== "23505") {
     request.log.warn({ code: error.code }, "Provider listening event could not be stored");
     return reply.code(400).send(authError(400, "Listening event could not be saved."));
   }
+  if (error) return { ok: true, deduplicated: true };
   return reply.code(201).send({ event: data });
 });
 
@@ -829,10 +847,11 @@ app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", a
   if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
     return reply.code(400).send(authError(400, "A valid Jamendo track ID is required."));
   }
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  const jamendo = jamendoConfig();
+  if (!jamendo) {
+    return reply.code(503).send(authError(503, "Jamendo catalog is not configured."));
   }
+  const clientId = jamendo.clientId;
   try {
     const params = new URLSearchParams({
       client_id: clientId, format: "json", id: providerTrackId,
@@ -955,6 +974,7 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
       if (!licenseAllowed || !track.audio || !track.id) return [];
       return [{
         id: track.id,
+        providerTrackId: track.id,
         title: track.name,
         artist: track.artist_name,
         album: track.album_name ?? null,
@@ -964,10 +984,18 @@ app.get<{ Querystring: { q?: string; id?: string; limit?: string; page?: string 
         downloadUrl: track.audiodownload_allowed === true ? track.audiodownload ?? null : null,
         licenseUrl,
         sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
-        provider: "Jamendo"
+        provider: "Jamendo",
+        playable: true
       }];
     });
-    return { provider: "Jamendo", items, page, limit, sourceCount: payload.results?.length ?? 0 };
+    let resolvedItems = items;
+    if (trackId && items.length === 1) {
+      // Single-track resolve: verify the freshly signed stream so callers get a
+      // truthful availability flag before they hand the URL to a media element.
+      const available = await probeStream(items[0].audioUrl);
+      resolvedItems = [{ ...items[0], playable: available, available } as (typeof items)[number] & { available: boolean }];
+    }
+    return { provider: "Jamendo", items: resolvedItems, page, limit, sourceCount: payload.results?.length ?? 0 };
   } catch (error) {
     request.log.error({ err: error }, "Jamendo catalog unavailable");
     return reply.code(502).send(authError(502, "Music provider is temporarily unavailable."));
@@ -1035,11 +1063,12 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
     tasks.push((async () => {
-      const clientId = process.env.JAMENDO_CLIENT_ID;
-      if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-        providers.jamendo = { ok: false, count: 0, error: "Jamendo non-commercial access is not configured." };
+      const jamendo = jamendoConfig();
+      if (!jamendo) {
+        providers.jamendo = { ok: false, count: 0, error: "Jamendo catalog is not configured." };
         return;
       }
+      const clientId = jamendo.clientId;
       try {
         const params = new URLSearchParams({
           client_id: clientId, format: "json", limit: String(limit), order: "relevance",
@@ -1050,13 +1079,11 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         const payload = await response.json() as { results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
           image?: string; album_image?: string; audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string; shareurl?: string;
-        }> };
+        }>; headers?: { status?: string; error?: string } };
+        if (payload.headers?.status === "error") throw new Error(payload.headers.error || "Jamendo API rejected the request.");
         for (const track of payload.results ?? []) {
           const licenseUrl = track.license_ccurl ?? "";
-          const normalized = licenseUrl.toLowerCase().replace(/^https?:\/\/(www\.)?creativecommons\.org\//, "");
-          const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
-          const known = normalized.startsWith("publicdomain/zero/") || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
-          if (!known || !track.audio || !track.id) continue;
+          if (!track.audio || !track.id || !jamendoLicenseAllowed(licenseUrl, jamendo.nonCommercial)) continue;
           tracks.push({
             id: `jamendo:${track.id}`, providerTrackId: track.id, provider: "Jamendo",
             title: track.name, artist: track.artist_name, album: track.album_name ?? null,
@@ -1087,8 +1114,9 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
           const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
-          const streamable = track.is_streamable === true && track.is_stream_gated !== true;
-          tracks.push({
+          const streamable = track.is_streamable === true && track.is_stream_gated !== true &&
+            (!track.duration || track.duration <= PLAYABLE_MAX_DURATION_SECONDS);
+         tracks.push({
             id: `audius:${track.id}`, providerTrackId: track.id, provider: "Audius",
             title: track.title, artist, album: track.album?.playlist_name ?? null,
             durationSeconds: track.duration ?? 0,
@@ -1193,8 +1221,243 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   };
 });
 
+// Personalized recommendations built from real listening behavior: favorites,
+// play/complete/skip events and measured listening time. Ranking is the
+// deterministic, network-free core shared with unit tests.
+import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
+// Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
+// module so the import service and the core routes use identical access.
+import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
+import { registerImportRoutes } from "./import-routes.js";
+// Universal Music Discovery & Import Engine: adapters, grouping, resolve.
+import { registerDiscoveryRoutes } from "./discovery.js";
+
+app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
+  const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));
+  const auth = await requireUser(request, reply);
+  if (!auth) return;
+  const taste: TasteSignal[] = [];
+  const heardIds = new Set<string>();
+  const { data: favorites } = await auth.client.from("user_provider_favorites")
+    .select("provider_track_id,artist_name").eq("user_id", auth.user.id).limit(100);
+  for (const favorite of favorites ?? []) {
+    taste.push({ artist: favorite.artist_name, liked: true });
+    heardIds.add(`jamendo:${favorite.provider_track_id}`);
+  }
+  const { data: events } = await auth.client.from("provider_listening_events")
+    .select("provider_track_id,artist_name,event_type,listened_ms").eq("user_id", auth.user.id)
+    .order("occurred_at", { ascending: false }).limit(300);
+  const playsByArtist = new Map<string, number>();
+  for (const event of events ?? []) {
+    if (event.event_type === "skip" && (event.listened_ms ?? 0) < 20000) {
+      taste.push({ artist: event.artist_name, skipped: true });
+    } else {
+      playsByArtist.set(event.artist_name, (playsByArtist.get(event.artist_name) ?? 0) + 1);
+    }
+    heardIds.add(`jamendo:${event.provider_track_id}`);
+  }
+  for (const [artist, plays] of playsByArtist) taste.push({ artist, plays });
+  const topArtists = [...playsByArtist.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([artist]) => artist);
+  const favoriteArtists = (favorites ?? []).map((favorite) => favorite.artist_name).slice(0, 3);
+  const queries = [...new Set([...topArtists, ...favoriteArtists])].slice(0, 5);
+  const pools = await Promise.all([
+    ...queries.map((query) => jamendoCandidates(query, 12)),
+    // A trending pool keeps first-run users (no history yet) supplied with
+    // popular licensed tracks instead of an empty screen.
+    jamendoCandidates("", Math.max(limit, 24), "popularity_total")
+  ]);
+  const seen = new Set<string>();
+  const candidates: JamendoCandidate[] = [];
+  for (const pool of pools) {
+    for (const track of pool) {
+      if (heardIds.has(track.id) || seen.has(track.id)) continue;
+      seen.add(track.id);
+      candidates.push(track);
+    }
+  }
+  if (candidates.length === 0) {
+    return reply.code(503).send(authError(503, "Recommendation catalogs are temporarily unavailable."));
+  }
+  const ranked = rankRecommendations(candidates, taste, limit);
+  return {
+    personalized: taste.length > 0,
+    basedOn: topArtists.slice(0, 4),
+    items: ranked.map(({ score, reasons, ...track }) => ({ ...track, score, reasons }))
+  };
+});
+
+// SONORA music assistant. Works fully offline through a deterministic RU/EN
+// intent parser over the licensed catalogs; upgrades to an LLM only when the
+// operator provides their own OPENAI_API_KEY (service stays free by default).
+const MOOD_QUERIES: Array<{ words: string[]; query: string; label: string }> = [
+  { words: ["relax", "calm", "chill", "релакс", "спокойн", "отдых", "медитац", "ambient"], query: "calm ambient relaxation", label: "Relaxation" },
+  { words: ["focus", "study", "work", "фокус", "работа", "учёб", "учеб", "концентр"], query: "lofi study focus", label: "Focus" },
+  { words: ["energy", "energetic", "workout", "run", "gym", "бодр", "энерг", "тренеровк", "пробежк", "спорт"], query: "upbeat electronic energy", label: "Energy" },
+  { words: ["party", "dance", "club", "вечеринк", "танц", "дискотек"], query: "party dance", label: "Party" },
+  { words: ["sleep", "night", "dream", "сон", "сном", "ночн", "расслабь и усни"], query: "sleep dreamy", label: "Sleep" },
+  { words: ["happy", "fun", "bright", "весел", "радост", "классн", "позитив"], query: "happy upbeat indie", label: "Happy" },
+  { words: ["sad", "melanchol", "груст", "печал", "минор"], query: "sad piano melancholic", label: "Melancholy" },
+  { words: ["jazz", "джаз", "swing", "свинг"], query: "jazz swing", label: "Jazz" },
+  { words: ["classical", "orchestral", "классич", "оркестр", "фортепиано", "piano"], query: "classical piano orchestral", label: "Classical" },
+  { words: ["rock", "гитар", "метал", "metal", "punk"], query: "rock guitar", label: "Rock" },
+  { words: ["electronic", "electro", "synth", "электрон", "синт", "techno", "house"], query: "electronic synth", label: "Electronic" }
+];
+type AssistantIntent = {
+  action: "search" | "create_playlist" | "similar" | "explain" | "greeting";
+  query: string; label: string; playlistName?: string;
+};
+function parseAssistantMessage(rawMessage: string): AssistantIntent {
+  const message = rawMessage.toLowerCase();
+  const wantsPlaylist = /(плейлист|playlist|собери|сделай|create|make|создай)/.test(message);
+  const wantsSimilar = /(похож|like|similar|в духе|рядом с|аналогичн)/.test(message);
+  const wantsExplain = /(почему|why|recommend|совет|что слушать|посоветуй|подбери)/.test(message);
+  const mood = MOOD_QUERIES.find((entry) => entry.words.some((word) => message.includes(word)));
+  const artistMatch = /(?:похож[ееа]? на|like|в духе|аналогичн[а-я]* )\s*([a-zа-яё0-9][a-zа-яё0-9 .+&_-]{1,59})/i.exec(rawMessage.trim());
+  if (wantsSimilar && artistMatch?.[1]) {
+    const query = artistMatch[1].trim();
+    return { action: "similar", query, label: query, playlistName: wantsPlaylist ? `Similar to ${query}` : undefined };
+  }
+  if (mood) {
+    return {
+      action: wantsPlaylist ? "create_playlist" : "search",
+      query: mood.query, label: mood.label,
+      playlistName: wantsPlaylist ? `${mood.label} mix` : undefined
+    };
+  }
+  if (wantsExplain && !wantsSimilar) {
+    return { action: "explain", query: "", label: "recommendations" };
+  }
+  if (/(привет|здравств|hello|hi|start)/.test(message) && message.length < 40) {
+    return { action: "greeting", query: "", label: "greeting" };
+  }
+  // Free text: strip command words and search the remainder.
+  const stripped = message
+    .replace(/(собери|создай|сделай|найди|поищем|плейлист|playlist|для|мне|пожалуйста|create|make|find|play|search|some|a|the)/gi, " ")
+    .replace(/\s+/g, " ").trim();
+  return { action: "search", query: stripped || rawMessage.trim().slice(0, 60), label: "search" };
+}
+async function assistantViaLlm(message: string): Promise<AssistantIntent | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+  const baseUrl = process.env.OPENAI_API_BASE ?? "https://api.openai.com/v1";
+  try {
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+        messages: [
+          { role: "system", content: 'Classify a music assistant request. Reply ONLY with JSON {"action":"search|create_playlist|similar|explain|greeting","query":"catalog search terms","label":"short human label","playlistName":"only for create_playlist"}. Query must name genre/mood/artist in English.' },
+          { role: "user", content: message }
+        ],
+        temperature: 0, max_tokens: 120, response_format: { type: "json_object" }
+      }),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const parsed = JSON.parse(payload.choices?.[0]?.message?.content ?? "{}") as Partial<AssistantIntent>;
+    if (!parsed.action || !["search", "create_playlist", "similar", "explain", "greeting"].includes(parsed.action)) return null;
+    return {
+      action: parsed.action,
+      query: typeof parsed.query === "string" ? parsed.query.slice(0, 100) : "",
+      label: typeof parsed.label === "string" ? parsed.label.slice(0, 60) : "assistant",
+      playlistName: typeof parsed.playlistName === "string" ? parsed.playlistName.slice(1, 80) : undefined
+    };
+  } catch {
+    return null;
+  }
+}
+app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, async (request, reply) => {
+  const message = typeof request.body?.message === "string" ? request.body.message.trim().slice(0, 300) : "";
+  if (message.length < 2) return reply.code(400).send(authError(400, "Ask the assistant something about music."));
+  const intent = (await assistantViaLlm(message)) ?? parseAssistantMessage(message);
+  const bearer = request.headers.authorization;
+  const auth = bearer ? await requireUser(request, reply) : null;
+  if (bearer && !auth) return; // token was present but invalid
+  if (intent.action === "greeting") {
+    return { reply: "I can find music by mood, artist or occasion, explain recommendations and build playlists. Try: 'собери плейлист для вечерней пробежки'.", intent, tracks: [] };
+  }
+  if (intent.action === "explain") {
+    if (!auth) {
+      return { reply: "Recommendations explain themselves once you sign in and start listening — I learn from real plays, skips and favorites.", intent, tracks: [] };
+    }
+    const { items } = await (async () => {
+      const taste: TasteSignal[] = [];
+      const { data: favorites } = await auth.client.from("user_provider_favorites").select("artist_name").eq("user_id", auth.user.id).limit(30);
+      for (const favorite of favorites ?? []) taste.push({ artist: favorite.artist_name, liked: true });
+      const { data: events } = await auth.client.from("provider_listening_events").select("artist_name,event_type,listened_ms").eq("user_id", auth.user.id).order("occurred_at", { ascending: false }).limit(200);
+      const plays = new Map<string, number>();
+      for (const event of events ?? []) {
+        if (event.event_type === "skip" && (event.listened_ms ?? 0) < 20000) taste.push({ artist: event.artist_name, skipped: true });
+        else plays.set(event.artist_name, (plays.get(event.artist_name) ?? 0) + 1);
+      }
+      for (const [artist, count] of plays) taste.push({ artist, plays: count });
+      const pool = await jamendoCandidates([...plays.keys()].slice(0, 2).join(" "), 24);
+      return { items: rankRecommendations(pool, taste, 6) };
+    })();
+    const topReasons = items.slice(0, 3).map((item) => `“${item.title}” — ${item.reasons.join(", ") || "popular in licensed catalogs"}`);
+    return {
+      reply: topReasons.length
+        ? `You picked these because of your listening story: ${topReasons.join("; ")}.`
+        : "Your listening history is still small. Play a few tracks and I will explain every suggestion.",
+      intent, tracks: items.map(({ score, reasons, ...track }) => ({ ...track, reasons }))
+    };
+  }
+  const candidates = await jamendoCandidates(intent.query, 24);
+  if (candidates.length === 0) {
+    return { reply: "The catalogs are quiet right now — no licensed matches for that request. Try another mood or artist.", intent, tracks: [] };
+  }
+  let playlist: { id: string; name: string } | null = null;
+  if (intent.action === "create_playlist") {
+    if (!auth) {
+      return {
+        reply: `Here is a ${intent.label.toLowerCase()} selection. Sign in and ask again and I will save it as a playlist “${intent.playlistName ?? intent.label}”.`,
+        intent, tracks: candidates.slice(0, 15)
+      };
+    }
+    const name = (intent.playlistName ?? `${intent.label} mix`).slice(0, 80);
+    const { data: created, error: createError } = await auth.client.from("playlists").insert({
+      owner_id: auth.user.id, title: name, description: `Created by the SONORA assistant from: ${message.slice(0, 120)}`, is_public: false
+    }).select("id,title").single();
+    if (createError || !created) {
+      return { reply: "I found the tracks but could not save the playlist. Try again in a moment.", intent, tracks: candidates.slice(0, 15) };
+    }
+    const chosen = candidates.slice(0, 15);
+    const rows = chosen.map((track, index) => ({
+      playlist_id: created.id, provider: "jamendo", provider_track_id: track.providerTrackId,
+      title: track.title, artist_name: track.artist, album_name: track.album,
+      duration_seconds: track.durationSeconds ?? 0, artwork_url: track.artworkUrl,
+      license_url: track.licenseUrl || "https://jamendo.com/legal/license", source_url: track.sourceUrl,
+      position: index
+    }));
+    const { error: addError } = await auth.client.from("provider_playlist_tracks").insert(rows);
+    if (addError) {
+      await auth.client.from("playlists").delete().eq("id", created.id).eq("owner_id", auth.user.id);
+      return { reply: "Tracks could not be attached to the new playlist. Try again later.", intent, tracks: chosen };
+    }
+    playlist = { id: created.id, name: created.title };
+  }
+  return {
+    reply: playlist
+      ? `Saved playlist “${playlist.name}” with ${Math.min(15, candidates.length)} licensed tracks.`
+      : intent.action === "similar"
+        ? `Tracks close to “${intent.label}” from Jamendo's licensed catalog:`
+        : `A ${intent.label.toLowerCase()} selection from the licensed catalogs:`,
+    intent, tracks: candidates.slice(0, 15), playlist
+  };
+});
+
+// Server-side music import from other platforms (public links + export files).
+registerImportRoutes(app);
+// Multi-source discovery (GET /discovery/search, POST /discovery/resolve).
+registerDiscoveryRoutes(app);
+
 try {
-  await app.listen({ port, host });
+  registerProfileRoutes(app, { authClient, authError, requireUser });
+
+await app.listen({ port, host });
 } catch (error) {
   app.log.error(error);
   process.exit(1);

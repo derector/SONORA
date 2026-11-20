@@ -1,10 +1,13 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Pause, Search, ShieldCheck } from "lucide-react";
-import Link from "next/link";
+import { Heart, Music2, Play, Search } from "lucide-react";
 import { usePlayer } from "../../components/player-provider";
 import { useLanguage } from "../../components/language-provider";
+import { Rail } from "../../components/ui/rail";
+import { TrackCard } from "../../components/ui/track-card";
+import { ErrorBlock, RailSkeleton, StateBlock } from "../../components/ui/states";
+import { useReveal } from "../../lib/motion";
 
 type Track = {
   id: string;
@@ -22,12 +25,12 @@ type Track = {
 type Result = { items?: Track[]; error?: string };
 type CatalogSource = "jamendo" | "audius";
 type AudiusSort = "trending" | "latest";
+// Recommendations arrive as catalog tracks plus the short reasons the API used
+// to pick them. Source identity stays inside the data, never on the card.
+type Recommendation = Track & { reasons?: string[] };
+type RecommendationResult = { items?: Recommendation[]; tracks?: Recommendation[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-
-function duration(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 export default function DiscoverPage() {
   const { t } = useLanguage();
@@ -40,7 +43,9 @@ export default function DiscoverPage() {
   const [token, setToken] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [savingFavorite, setSavingFavorite] = useState<string>("");
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
+  const exploreHead = useReveal<HTMLDivElement>();
 
   async function loadTracks(search = "", selectedSource: CatalogSource = source, selectedSort: AudiusSort = audiusSort) {
     setLoading(true);
@@ -48,7 +53,7 @@ export default function DiscoverPage() {
     try {
       const params = new URLSearchParams({ limit: "24" });
       if (selectedSource === "audius") params.set("sort", selectedSort);
-      else if (search.trim()) params.set("q", search.trim());
+      else params.set("q", search.trim() || "music");
       const endpoint = selectedSource === "audius" ? "audius" : "jamendo";
       const response = await fetch(`${API}/api/v1/providers/${endpoint}/tracks?${params.toString()}`);
       const result = await response.json() as Result;
@@ -64,7 +69,7 @@ export default function DiscoverPage() {
 
   useEffect(() => {
     void loadTracks();
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<{ session?: { access_token?: string } }> : null)
       .then(async (result) => {
         const accessToken = result?.session?.access_token;
@@ -80,6 +85,19 @@ export default function DiscoverPage() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    // Personal picks are optional: any failure simply keeps the section hidden.
+    void fetch(`${API}/api/v1/recommendations?limit=12`, {
+      headers: { Authorization: `Bearer ${token}` }, credentials: "include", cache: "no-store"
+    })
+      .then(async (response) => response.ok ? await response.json() as RecommendationResult : null)
+      .then((result) => { if (active) setRecommendations(result?.items ?? result?.tracks ?? []); })
+      .catch(() => { if (active) setRecommendations([]); });
+    return () => { active = false; };
+  }, [token]);
 
   async function toggleFavorite(track: Track) {
     if (!token) {
@@ -112,73 +130,111 @@ export default function DiscoverPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] px-4 py-6 pb-36 md:px-8">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-3 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> {t("Back to SONORA")}</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</div>
-      </header>
+    <main className="mx-auto min-h-screen w-full max-w-[1440px] px-4 py-6 pb-36 md:px-8">
 
-      <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> {t("Discover independent music")}</p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Find your next frequency.")}</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Explore independent releases from open music catalogs. Tracks play from their original provider, with creator attribution and access restrictions preserved.")}</p>
-        <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
-          <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
-          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
+      <section className="panel-hero mt-6 px-6 py-8 md:px-10 md:py-11">
+        <p className="t-eyebrow flex items-center gap-2 text-violet-200"><Music2 size={13} /> {t("Discover independent music")}</p>
+        <h1 className="t-display mt-4">{t("Find your next frequency.")}</h1>
+        <p className="t-meta mt-3 max-w-xl leading-6">{t("Explore independent releases from licensed catalogs. Every track plays in full, with creator attribution and license terms preserved.")}</p>
+        <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl items-center gap-2 rounded-panel border border-white/10 bg-black/25 p-2">
+          <Search className="ml-2 shrink-0 text-muted" size={18} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[color:var(--fg-faint)]" />
+          <button disabled={loading} className="btn-press btn-primary !px-5 !py-2 text-sm">{t("Search")}</button>
         </form>
       </section>
 
-      <div className="mt-9 flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Open catalogs")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks to explore")}</h2></div>
+      {recommendations.length > 0 && (
+        <Rail eyebrow={t("Picked from your listening")} title={t("For you")} titleId="discover-for-you-heading">
+          {recommendations.map((track) => (
+            <div key={track.id} className="rail-item">
+              <TrackCard
+                title={track.title}
+                artist={track.artist}
+                artworkUrl={track.artworkUrl}
+                isCurrent={currentTrack?.id === track.id}
+                isPlaying={isPlaying}
+                onPlay={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, recommendations)}
+                footer={track.reasons?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {track.reasons.slice(0, 2).map((reason) => (
+                      <span key={reason} className="rounded-pill border border-violet-200/15 bg-violet-200/[0.07] px-2 py-0.5 text-[11px] text-violet-100">{t(reason)}</span>
+                    ))}
+                  </div>
+                ) : null}
+              />
+            </div>
+          ))}
+        </Rail>
+      )}
+
+      <div ref={exploreHead} className="rv rv-mask mt-10 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="t-eyebrow">{t("Open catalogs")}</p>
+          <h2 className="t-h2 mt-1">{t("Tracks to explore")}</h2>
+        </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => { setSource("jamendo"); void loadTracks("", "jamendo"); }} aria-pressed={source === "jamendo"} className={source === "jamendo" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Jamendo</button>
-          <button type="button" onClick={() => { setSource("audius"); void loadTracks("", "audius", audiusSort); }} aria-pressed={source === "audius"} className={source === "audius" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Audius</button>
+          <button type="button" onClick={() => { setSource("jamendo"); void loadTracks("", "jamendo"); }} aria-pressed={source === "jamendo"} className="btn-press chip">{t("Collections")}</button>
+          <button type="button" onClick={() => { setSource("audius"); void loadTracks("", "audius", audiusSort); }} aria-pressed={source === "audius"} className="btn-press chip">{t("Creator uploads")}</button>
         </div>
       </div>
-      {source === "audius" && <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => { setAudiusSort("trending"); void loadTracks("", "audius", "trending"); }} aria-pressed={audiusSort === "trending"} className={audiusSort === "trending" ? "rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white" : "rounded-full px-3 py-1.5 text-[11px] text-slate-400"}>{t("Trending this week")}</button>
-        <button type="button" onClick={() => { setAudiusSort("latest"); void loadTracks("", "audius", "latest"); }} aria-pressed={audiusSort === "latest"} className={audiusSort === "latest" ? "rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white" : "rounded-full px-3 py-1.5 text-[11px] text-slate-400"}>{t("Latest uploads")}</button>
-        <span className="text-[11px] text-slate-500">{t("Public tracks available through the Audius API")}</span>
-      </div>}
-
-      {loading ? (
-        <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading the catalog…")}</div>
-      ) : error ? (
-        <div className="mt-6 rounded-2xl border border-amber-300/15 bg-amber-300/5 p-6">
-          <p className="font-medium text-amber-100">{t("Catalog connection is not ready.")}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{error}</p>
-          <p className="mt-3 text-xs text-slate-500">{t("The provider API key must be configured server-side. No demo tracks are substituted.")}</p>
-        </div>
-      ) : tracks.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.025] p-8 text-center text-sm text-slate-400">{t("No tracks found. Try another search.")}</div>
-      ) : (
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {tracks.map((track) => (
-            <article key={track.id} className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025] p-3">
-              <div className="flex gap-4">
-                {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-20 w-20 rounded-2xl object-cover" loading="lazy"/> : <div className="grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-violet-500/30 to-sky-500/20"><Music2 className="text-violet-100" size={28}/></div>}
-                <div className="min-w-0 flex-1 py-1">
-                  <div className="flex items-start gap-2"><h3 className="min-w-0 flex-1 truncate font-medium">{track.title}</h3>{source === "jamendo" && <button type="button" onClick={() => void toggleFavorite(track)} disabled={savingFavorite === track.id} aria-label={favoriteIds.includes(track.id) ? t("Remove from favorites") : t("Add to favorites")} className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-400/10 hover:text-rose-200 disabled:opacity-40"><Heart size={16} fill={favoriteIds.includes(track.id) ? "currentColor" : "none"}/></button>}</div>
-                  <p className="mt-1 truncate text-sm text-slate-400">{track.artist}</p>
-                  <p className="mt-2 text-xs text-slate-500">{track.album || "Independent release"} · {duration(track.durationSeconds)}</p>
-                </div>
-              </div>
-              <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20" aria-label={`${currentTrack?.id === track.id && isPlaying ? "Pause" : "Play"} ${track.title}`}>{currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? "Pause" : "Play track"}</button>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/[0.07] pt-3 text-[11px]">
-                <span className="inline-flex items-center gap-1 text-emerald-200"><ShieldCheck size={13}/> {source === "jamendo" ? t("CC license") : t("Audius API access")}</span>
-                <div className="flex items-center gap-3 text-slate-400">
-                  <a href={track.licenseUrl} target="_blank" rel="noreferrer" className="hover:text-white">{t("License")}</a>
-                  <a href={track.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">{source === "jamendo" ? "Jamendo" : "Audius"} <ExternalLink size={11}/></a>
-                </div>
-              </div>
-              <p className="mt-2 text-[10px] leading-4 text-slate-600">Artist: {track.artist} · Source: {source === "jamendo" ? "Jamendo" : "Audius"} · Provider terms apply.</p>
-            </article>
-          ))}
+      {source === "audius" && (
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => { setAudiusSort("trending"); void loadTracks("", "audius", "trending"); }} aria-pressed={audiusSort === "trending"} className="chip !px-3 !py-1 text-xs">{t("Trending this week")}</button>
+          <button type="button" onClick={() => { setAudiusSort("latest"); void loadTracks("", "audius", "latest"); }} aria-pressed={audiusSort === "latest"} className="chip !px-3 !py-1 text-xs">{t("Latest uploads")}</button>
+          <span className="t-meta">{t("Public tracks shared directly by their creators")}</span>
         </div>
       )}
 
-      <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Independent music discovery · Rights and attribution stay attached to every track")}</footer>
+      {loading ? <div className="mt-4"><RailSkeleton count={7} /></div> : error ? (
+        <div className="mt-8">
+          <ErrorBlock
+            title={t("Catalog connection is not ready.")}
+            body={error}
+            onRetry={() => void loadTracks()}
+            retryLabel={t("Try again")}
+          />
+          <p className="t-meta mt-3 text-center">{t("The provider API key must be configured server-side. No demo tracks are substituted.")}</p>
+        </div>
+      ) : tracks.length === 0 ? (
+        <div className="mt-8">
+          <StateBlock
+            icon={Music2}
+            tone="neutral"
+            title={t("No tracks found. Try another search.")}
+            body={t("Search tracks, artists or moods")}
+            actionHref="/search"
+            actionLabel={t("Search music")}
+          />
+        </div>
+      ) : (
+        <Rail eyebrow={source === "jamendo" ? t("Collections") : t("Creator uploads")} title={t("Music to explore")} titleId="discover-catalog-heading" viewAllHref="/search" viewAllLabel={t("Catalog search")}>
+          {tracks.map((track) => (
+            <div key={track.id} className="rail-item">
+              <TrackCard
+                title={track.title}
+                artist={track.artist}
+                artworkUrl={track.artworkUrl}
+                isCurrent={currentTrack?.id === track.id}
+                isPlaying={isPlaying}
+                onPlay={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, tracks)}
+                corner={source === "jamendo" ? (
+                  <button
+                    type="button"
+                    onClick={() => void toggleFavorite(track)}
+                    disabled={savingFavorite === track.id}
+                    aria-label={favoriteIds.includes(track.id) ? t("Remove from favorites") : t("Add to favorites")}
+                    className={`grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-black/45 backdrop-blur-md transition hover:text-rose-200 ${favoriteIds.includes(track.id) ? "text-rose-300" : "text-white/80"}`}
+                  >
+                    <Heart size={15} fill={favoriteIds.includes(track.id) ? "currentColor" : "none"} />
+                  </button>
+                ) : null}
+              />
+            </div>
+          ))}
+        </Rail>
+      )}
+
+      <footer className="mt-14 border-t border-white/[0.06] py-6 text-[13px] text-muted">{t("SONORA · Independent music discovery · Rights and attribution stay attached to every track")}</footer>
     </main>
   );
 }

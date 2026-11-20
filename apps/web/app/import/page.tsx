@@ -66,7 +66,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<ApiResult> : null)
       .then((result) => { if (active) setToken(result?.session?.access_token ?? ""); })
       .catch(() => undefined)
@@ -138,26 +138,22 @@ export default function ImportPage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><FileUp className="text-violet-300"/> {t("IMPORT")}</span>
-      </header>
-      <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Music2 size={14}/> {t("Bring your music together")}</p>
+      <section className="panel-hero mt-10 p-7 md:p-10">
+        <p className="t-eyebrow flex items-center gap-2 !text-violet-200"><Music2 size={14}/> {t("Bring your music together")}</p>
         <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Import tracks from other platforms.")}</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">{t("Bring in a playlist export or a list of tracks. SONORA will search its licensed catalog, show possible matches and let you save the tracks you choose.")}</p>
       </section>
 
       {loading ? <div className="flex min-h-40 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/>{t("Restoring your session…")}</div> : !token ? (
-        <section className="mt-8 rounded-3xl border border-white/10 p-7">
+        <section className="surface mt-8 p-7">
           <h2 className="text-xl font-semibold">{t("Sign in to import music.")}</h2>
           <Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in or create account")}</Link>
         </section>
       ) : (
         <>
-          <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6 md:p-8">
+          <section className="surface mt-8 p-6 md:p-8">
             <label className="block text-xs font-medium text-slate-400">{t("Source platform")}
-              <select value={source} onChange={(event) => setSource(event.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-[#11111b] px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60">
+              <select value={source} onChange={(event) => setSource(event.target.value)} className="field mt-2 w-full bg-panel">
                 {["Spotify","Apple Music","YouTube Music","SoundCloud","Yandex Music","VK Music","Telegram","Other / CSV"].map((name) => <option key={name}>{name}</option>)}
               </select>
             </label>
@@ -171,16 +167,16 @@ export default function ImportPage() {
           </section>
 
           {rows.length > 0 && <section className="mt-8">
-            <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Import review")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Choose your matches")}</h2></div><button type="button" onClick={() => void importSelected()} disabled={saving || !rows.some((row) => row.selectedId && !row.imported)} className="inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <Check size={16}/>} {t("Import selected")}</button></div>
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="t-eyebrow !text-violet-200">{t("Import review")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Choose your matches")}</h2></div><button type="button" onClick={() => void importSelected()} disabled={saving || !rows.some((row) => row.selectedId && !row.imported)} className="inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <Check size={16}/>} {t("Import selected")}</button></div>
             <div className="space-y-3">
               {rows.map((row) => <article key={row.key} className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || source}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error && !row.candidates.length ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
+                <div className="flex flex-wrap items-center justify-between gap-2"><div className="min-w-0"><h3 className="truncate text-sm font-medium">{row.title}</h3><p className="mt-1 text-xs text-slate-500">{row.artist || t("Unknown artist")}</p></div>{row.imported ? <span className="inline-flex items-center gap-1 text-xs text-emerald-200"><Check size={14}/>{t("Imported")}</span> : row.error && !row.candidates.length ? <span className="text-xs text-amber-200">{row.error}</span> : null}</div>
                 {row.candidates.length > 0 && <div className="mt-3 grid gap-2">
                   {row.candidates.map((candidate) => <label key={candidate.id} className={"flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 " + (row.selectedId === candidate.id ? "border-violet-300/40 bg-violet-300/10" : "border-white/5 bg-black/10")}>
                     <input type="radio" name={row.key} checked={row.selectedId === candidate.id} disabled={row.imported} onChange={() => setRows((items) => items.map((item) => item.key === row.key ? { ...item, selectedId: candidate.id } : item))} className="accent-violet-300"/>
                     {candidate.artworkUrl ? <img src={candidate.artworkUrl} alt="" className="h-10 w-10 rounded-lg object-cover"/> : <div className="grid h-10 w-10 place-items-center rounded-lg bg-violet-300/10"><Music2 size={16}/></div>}
-                    <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{candidate.title}</span><span className="block truncate text-[11px] text-slate-500">{candidate.artist}</span></span>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-200"><ShieldCheck size={12}/> CC</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium">{candidate.title}</span><span className="block truncate text-xs text-muted">{candidate.artist}</span></span>
+                    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-200"><ShieldCheck size={12}/> CC</span>
                     <a href={candidate.sourceUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} aria-label={t("Open source")} className="text-slate-500 hover:text-white"><ExternalLink size={14}/></a>
                   </label>)}
                 </div>}
@@ -191,7 +187,7 @@ export default function ImportPage() {
       )}
       <section className="mt-8 rounded-2xl border border-sky-300/10 bg-sky-300/[0.04] p-5">
         <h2 className="text-sm font-semibold">{t("How importing works")}</h2>
-        <p className="mt-2 text-xs leading-5 text-slate-400">{t("Export a playlist as CSV from the source service, or paste lines in Artist - Track title format. Plain playlist URLs alone do not expose protected track metadata. SONORA imports matches from its own licensed Jamendo catalog; it does not download audio from Spotify, Apple Music or other services.")}</p>
+        <p className="mt-2 text-xs leading-5 text-slate-400">{t("Export a playlist as CSV from the source service, or paste lines in Artist - Track title format. Plain playlist URLs alone do not expose protected track metadata. SONORA matches imported titles inside its own licensed catalogs; it never downloads audio from other services.")}</p>
       </section>
       {notice && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{notice}</p>}
       {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
