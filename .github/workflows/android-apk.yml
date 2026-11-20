@@ -78,12 +78,13 @@ jobs:
           APK=apps/android/app/build/outputs/apk/release/app-release.apk
           SHA256=$(sha256sum "$APK" | cut -d" " -f1)
           cp "$APK" SONORA-latest.apk
+          cp "$APK" "SONORA-release-$TAG.apk"
           git tag -f "$TAG"
           git push -f origin "$TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK#SONORA-release-$TAG.apk" SONORA-latest.apk --clobber
+            gh release upload "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk --clobber
           else
-            gh release create "$TAG" "$APK#SONORA-release-$TAG.apk" SONORA-latest.apk \
+            gh release create "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk \
               --title "SONORA Android $TAG" \
               --notes "Автоматическая CI-сборка #$GITHUB_RUN_NUMBER (commit ${GITHUB_SHA:0:7}).\n\nSHA-256 APK: $SHA256\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).\n\nВ приложении обновление придёт пушем: Настройки → Проверить обновления."
           fi
