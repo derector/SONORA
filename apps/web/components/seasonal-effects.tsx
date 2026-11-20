@@ -38,7 +38,7 @@ function buildParticles(season: Season): Particle[] {
         duration: 1.1 + Math.random() * 0.9,
         drift: -18 - Math.random() * 26,
         spin: 0,
-        opacity: 0.35 + Math.random() * 0.35
+        opacity: 0.28 + Math.random() * 0.17
       };
     }
     if (season === "autumn") {
@@ -49,7 +49,7 @@ function buildParticles(season: Season): Particle[] {
         duration: 9 + Math.random() * 8,
         drift: 40 + Math.random() * 90,
         spin: 220 + Math.round(Math.random() * 420),
-        opacity: 0.55 + Math.random() * 0.35
+        opacity: 0.3 + Math.random() * 0.15
       };
     }
     return {
@@ -57,9 +57,9 @@ function buildParticles(season: Season): Particle[] {
       size: 3 + Math.round(Math.random() * 5),
       delay: -(index % 12) * 0.9 - Math.random() * 0.8,
       duration: 11 + Math.random() * 10,
-      drift: -30 + Math.random() * 60,
-      spin: 0,
-      opacity: 0.35 + Math.random() * 0.45
+        drift: -30 + Math.random() * 60,
+        spin: 0,
+        opacity: 0.3 + Math.random() * 0.15
     };
   });
 }

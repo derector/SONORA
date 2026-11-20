@@ -378,7 +378,9 @@ a, button, article, input {
 .season-overlay {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* Behind the workspace content: particles may drift over the page
+     background but never float across panels or controls. */
+  z-index: 0;
   pointer-events: none;
   overflow: hidden;
   contain: strict;
