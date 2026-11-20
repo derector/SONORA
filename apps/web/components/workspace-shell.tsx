@@ -122,7 +122,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <nav className={`sonora-mobile-nav relative fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-panel border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[calc(max(12px,env(safe-area-inset-bottom))_+_var(--miniplayer-h)_+_14px)]" : "bottom-[max(12px,env(safe-area-inset-bottom))]"}`} aria-label={t("Workspace")}>
+      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-panel border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[calc(max(12px,env(safe-area-inset-bottom))_+_var(--miniplayer-h)_+_14px)]" : "bottom-[max(12px,env(safe-area-inset-bottom))]"}`} aria-label={t("Workspace")}>
         {pill && <span aria-hidden className="nav-pill" style={{ transform: `translate(${pill.left}px, ${pill.top}px)`, width: `${pill.width}px`, height: `${pill.height}px` }} />}
         {mobileTabs.map(({ href, label, icon: Icon }) => (
           <Link key={label} href={href} ref={(node) => { tabRefs.current.set(href, node); }} aria-current={active(href) ? "page" : undefined} className={`relative z-[1] flex min-w-0 flex-col items-center justify-center gap-1 rounded-pill px-1 py-2 text-[10px] font-medium transition-colors duration-200 ${active(href) ? "text-white" : "text-muted hover:text-white"}`}>

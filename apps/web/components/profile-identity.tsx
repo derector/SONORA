@@ -60,13 +60,13 @@ export function ProfileHero({ profile, actions, avatarAction }: { profile: Profi
           {avatarAction}
         </div>
         <div className="min-w-0 flex-1 sm:pt-5">
-          <div className="flex flex-wrap items-center gap-3"><h1 className="t-display break-words !text-3xl sm:!text-4xl">{profile.displayName || profile.username}</h1><span className="rounded-pill border border-white/10 bg-white/5 px-3 py-1 text-xs text-violet-100">{t(ROLE_LABELS[profile.role || "listener"] || "Listener")}</span></div>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="t-display min-w-0 max-w-full break-words !text-3xl sm:!text-4xl">{profile.displayName || profile.username}</h1><span className="rounded-pill border border-white/10 bg-white/5 px-3 py-1 text-xs text-violet-100">{t(ROLE_LABELS[profile.role || "listener"] || "Listener")}</span></div>
           <p className="mt-2 text-sm text-muted">@{profile.username}</p>
         </div>
         {actions && <div className="flex flex-wrap gap-2 sm:pt-5">{actions}</div>}
       </div>
       {profile.status && <p className="mt-5 text-sm text-violet-100">{profile.status}</p>}
-      {profile.bio && <p className="mt-3 max-w-2xl whitespace-pre-wrap text-sm leading-6 text-muted">{profile.bio}</p>}
+      {profile.bio && <p className="mt-3 max-w-2xl break-words whitespace-pre-wrap text-sm leading-6 text-muted">{profile.bio}</p>}
       {profile.links?.length ? <div className="mt-4 flex flex-wrap gap-3">{profile.links.map((link) => <a key={link.url} href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-white"><Link2 size={14} />{link.platform}</a>)}</div> : null}
     </div>
   </section>;
@@ -82,7 +82,7 @@ export function ProfileDialog({ title, onClose, children }: { title: string; onC
     return () => { node?.close(); document.body.style.overflow = previous; };
   }, []);
   const { t } = useLanguage();
-  return <dialog ref={dialog} onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }} className="state-in m-auto max-h-[85dvh] w-[calc(100%-32px)] max-w-xl overflow-y-auto rounded-panel border border-white/10 bg-[#151621] p-0 text-white shadow-float backdrop:bg-black/70">
+  return <dialog ref={dialog} onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }} className="state-in m-auto max-h-[85dvh] w-[calc(100%_-_32px)] max-w-xl overflow-y-auto rounded-panel border border-white/10 bg-[#151621] p-0 text-white shadow-float backdrop:bg-black/70">
     <div className="flex items-center justify-between border-b border-white/10 px-5 py-4"><h2 className="t-h2">{title}</h2><button type="button" onClick={onClose} className="btn-icon" aria-label={t("Close")}><X size={20} /></button></div>
     <div className="p-5">{children}</div>
   </dialog>;

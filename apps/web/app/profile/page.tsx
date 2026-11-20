@@ -51,7 +51,7 @@ export default function ProfilePage() {
         ? (await profileRequest<{ user: ProfileUser }>("/profile", accessToken, { method: "PATCH", body: JSON.stringify(changes) })).user
         : await updateProfile({ displayName: changes.displayName, username: changes.username });
       setProfile((current) => ({ ...current, ...result }));
-      if (extended) await loadProfile();
+      if (extended) { await refreshSession(); await loadProfile(); }
       setDialog(null); setNotice("Profile changes saved.");
     } catch { setError("Could not save your profile."); }
     finally { setBusy(false); }
