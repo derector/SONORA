@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ArrowUpRight, AudioLines, Clock3, Compass, Heart, Headphones, Library, ListMusic, Music2, Pause, Play, Search, Settings, Sparkles, LoaderCircle } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../components/player-provider";
+import { MoodPicker } from "../components/mood-picker";
 
 type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean };
 type CatalogResponse = { items?: CatalogTrack[]; error?: string };
@@ -91,6 +92,8 @@ export default function Home() {
             <AudioLines size={54} strokeWidth={1} className="text-violet-100"/>
           </div>
         </div>
+
+        <MoodPicker/>
 
         <section className="mt-12">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
