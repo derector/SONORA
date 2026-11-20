@@ -2,6 +2,7 @@ package app.sonora.android.playback
 
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import app.sonora.android.data.Track
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,6 +24,9 @@ data class SavedPlaybackState(
 object PlaybackStateStore {
     private const val PREFS = "sonora_playback_state"
     private const val KEY_STATE = "queue_state"
+    // One-shot restore handoff between PlaybackService and MainActivity.
+    private const val KEY_SERVICE_RESUMED = "service_resumed_at"
+    private const val SERVICE_RESUMED_TTL_MS = 30_000L
 
     fun save(
         context: Context,
@@ -97,8 +101,38 @@ object PlaybackStateStore {
         }.getOrNull()
     }
 
+    /**
+     * Restore ownership handoff. Media3 asks [PlaybackService] for the persisted queue
+     * when a controller requests playback without a current item (media button, System
+     * UI). When that resumption succeeds, the service stamps this marker so that
+     * MainActivity's own restore path can see it during the same cold start and stay out
+     * of the way instead of rebuilding the queue a second time.
+     *
+     * The marker carries the write time and is only honoured while fresh, and every read
+     * removes it, so a handoff left behind by an older process can never make the
+     * activity skip a restore it actually has to perform.
+     */
+    fun markQueueResumedByService(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putLong(KEY_SERVICE_RESUMED, SystemClock.elapsedRealtime()).apply()
+    }
+
+    fun clearQueueResumedByService(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().remove(KEY_SERVICE_RESUMED).apply()
+    }
+
+    /** Reads and clears the handoff marker; true only when it was written recently. */
+    fun consumeQueueResumedByService(context: Context): Boolean {
+        val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val resumedAt = preferences.getLong(KEY_SERVICE_RESUMED, 0L)
+        if (resumedAt != 0L) preferences.edit().remove(KEY_SERVICE_RESUMED).apply()
+        return resumedAt != 0L &&
+            SystemClock.elapsedRealtime() - resumedAt <= SERVICE_RESUMED_TTL_MS
+    }
+
     fun clear(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit().remove(KEY_STATE).apply()
+            .edit().remove(KEY_STATE).remove(KEY_SERVICE_RESUMED).apply()
     }
 }

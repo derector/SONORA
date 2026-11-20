@@ -70,6 +70,10 @@ class PlaybackService : MediaSessionService() {
                 val result = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
                 resolverExecutor.execute {
                     try {
+                        // Drop a handoff marker left by an older resumption attempt before
+                        // starting this one, so MainActivity only ever defers to a restore
+                        // that belongs to this cold start.
+                        PlaybackStateStore.clearQueueResumedByService(this@PlaybackService)
                         val saved = PlaybackStateStore.load(this@PlaybackService)
                             ?: throw IllegalStateException("No saved SONORA playback queue.")
                         // Resolve on this callback worker. Avoid nested tasks on the same
@@ -116,6 +120,11 @@ class PlaybackService : MediaSessionService() {
                         mainHandler.post {
                             mediaSession.player.shuffleModeEnabled = saved.shuffleEnabled
                             mediaSession.player.repeatMode = saved.repeatMode
+                            // Restore ownership: the queue is now handed to Media3, which
+                            // prepares (and plays) it. MainActivity reads and clears this
+                            // marker on the same cold start and keeps its own restore path
+                            // out of the way instead of rebuilding the queue a second time.
+                            PlaybackStateStore.markQueueResumedByService(this@PlaybackService)
                             result.set(MediaSession.MediaItemsWithStartPosition(items, startIndex, startPosition))
                         }
                     } catch (error: Exception) {

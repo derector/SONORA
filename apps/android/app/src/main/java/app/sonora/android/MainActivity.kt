@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,7 +81,6 @@ private fun SonoraApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Главная") }
-    var provider by remember { mutableStateOf("Audius") }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
@@ -97,10 +97,35 @@ private fun SonoraApp() {
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
 
-    fun loadTracks(source: String, done: (List<Track>) -> Unit) {
+    // Android 13+ needs POST_NOTIFICATIONS before Media3 can show the playback
+    // notification. Ask once per session, the first time the user actually starts
+    // playback. The answer never gates playback: a denied permission only means no
+    // notification, so the launcher callback intentionally does nothing and playback
+    // is issued right after the request. This is separate from the existing
+    // download-time request in TrackRow, which stays as it is.
+    var playbackNotificationAsked by rememberSaveable { mutableStateOf(false) }
+    val playbackNotificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* No notification when denied; playback itself is unaffected. */ }
+
+    fun ensurePlaybackNotificationPermission() {
+        if (playbackNotificationAsked || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        playbackNotificationAsked = true
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        playbackNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    // One unified catalogue: the API merges every source and keeps each one's ranking,
+    // so the screen neither selects nor shows where a track came from.
+    fun loadCatalog(done: (List<Track>) -> Unit) {
         scope.launch {
             busy = true
-            try { done(withContext(Dispatchers.IO) { SonoraApi.discover(source) }); message = "" }
+            try {
+                done(withContext(Dispatchers.IO) { SonoraApi.discoverCatalog() })
+                message = ""
+            }
             catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
             finally { busy = false }
         }
@@ -118,7 +143,7 @@ private fun SonoraApp() {
                 MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
             }
         } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
-        loadTracks("Audius") { tracks = it }
+        loadCatalog { tracks = it }
     }
 
     DisposableEffect(controller, tracks, activeQueue, authStep) {
@@ -189,6 +214,38 @@ private fun SonoraApp() {
         val player = controller ?: return@LaunchedEffect
         val saved = withContext(Dispatchers.IO) { PlaybackStateStore.load(context) }
             ?: return@LaunchedEffect
+        // ── Restore ownership ──────────────────────────────────────────────────────
+        // PlaybackService.onPlaybackResumption and this effect both know how to rebuild
+        // the persisted queue, so on a cold start they could run at the same time and
+        // prepare the queue twice (playhead reset, duplicated history events).
+        //
+        // Decision: the service owns restoration whenever it has already done it, and
+        // that case is detected conservatively, without restructuring anything:
+        //   1. the one-shot handoff marker the service writes right before it hands the
+        //      resumed items to Media3 (read here and cleared, so it can never be reused
+        //      by a later restore), and
+        //   2. an already populated controller timeline, which additionally makes this
+        //      path idempotent across activity recreation (rotation, relaunch on top of
+        //      a still-playing service).
+        //
+        // When either signal is present MainActivity only mirrors the restored queue into
+        // its UI state and returns; it never re-issues setMediaItems/prepare/play.
+        // Otherwise MainActivity owns the restore below, exactly as before.
+        val restoredByService = withContext(Dispatchers.IO) {
+            PlaybackStateStore.consumeQueueResumedByService(context)
+        } || player.mediaItemCount > 0
+        if (restoredByService) {
+            // Mirror exactly what Media3 restored, joined with the persisted metadata.
+            // Rebuilding from saved.tracks would disagree with the player whenever the
+            // service dropped an unresolvable item, and the periodic state save below
+            // would then write that mismatch back to disk.
+            val savedByMediaId = saved.tracks.associateBy { "${it.provider}:${it.id}" }
+            val resumedQueue = (0 until player.mediaItemCount)
+                .mapNotNull { savedByMediaId[player.getMediaItemAt(it).mediaId] }
+            activeQueue = resumedQueue.ifEmpty { saved.tracks }
+            current = player.currentMediaItem?.mediaId?.let(savedByMediaId::get) ?: activeQueue.firstOrNull()
+            return@LaunchedEffect
+        }
         val resolved = withContext(Dispatchers.IO) {
             saved.tracks.mapNotNull { savedTrack ->
                 if (savedTrack.audioUrl?.startsWith("file:") == true) {
@@ -251,6 +308,10 @@ private fun SonoraApp() {
         if (player == null) { message = "Плеер ещё запускается"; return }
         val url = if (local) track.audioUrl else track.audioUrl
         if (url.isNullOrBlank()) { message = "У этого трека нет доступного источника"; return }
+        // First user-initiated playback of the session: make sure the media
+        // notification can be shown. Non-blocking by design; the request is a no-op
+        // on Android 12 and older and is only ever issued once.
+        ensurePlaybackNotificationPermission()
         if (local) {
             activeQueue = listOf(track)
             player.setMediaItem(mediaItem(track, url))
@@ -305,7 +366,7 @@ private fun SonoraApp() {
         ) { padding ->
             AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
                 when (screen) {
-                    "Главная" -> DiscoverScreen(tracks, provider, busy, message, { source -> provider = source; loadTracks(source) { tracks = it } }, ::play, { tab = "Плеер" }, { tab = "Поиск" })
+                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { tab = "Плеер" }, { tab = "Поиск" })
                     "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
                         val term = query.trim()
                         if (term.isBlank()) {
@@ -361,7 +422,7 @@ private fun SonoraApp() {
 }
 
 @Composable
-private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean, message: String, choose: (String) -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
+private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -390,16 +451,11 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
                     Text("Открыть поиск", color = Color(0xFF171323), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD8CCFF)).clickable(onClick = openSearch).padding(horizontal = 15.dp, vertical = 9.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("Audius  ·  Jamendo", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
+                    Text("Единый каталог", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
                 }
             }
         }
-        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Audius", "Jamendo").forEach { source ->
-                FilterChip(selected = provider == source, onClick = { choose(source) }, label = { Text(source) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Lime, selectedLabelColor = Ink))
-            }
-        }
-        Text("Подборка для тебя", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
         if (!busy && tracks.isEmpty() && message.isBlank()) {
@@ -407,18 +463,14 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
                 Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    if (provider == "Jamendo") "Jamendo пока не вернул доступных треков" else "Пока нет доступных треков",
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("Пока нет доступных треков", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Проверьте подключение и попробуйте обновить каталог.",
                     color = Muted,
                     modifier = Modifier.padding(top = 6.dp, bottom = 14.dp)
                 )
                 Button(
-                    onClick = { choose(provider) },
+                    onClick = refresh,
                     colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
@@ -489,17 +541,24 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         enqueueDownload()
     }
+    // The provider field stays internal (routing, resolve, download eligibility); a row
+    // only ever shows title, artist, artwork and duration. Tracks whose source cannot be
+    // delivered (for example a cleartext stream URL rejected by the manifest policy) are
+    // labelled and tinted as unavailable instead of offering a playback attempt.
+    val available = track.playable && !track.audioUrl.isNullOrBlank()
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (isDownloading) {
                 Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
             } else if (workState == WorkInfo.State.FAILED) {
                 Text("Не удалось скачать. Нажми повторить.", color = Color(0xFFFF9A8D), fontSize = 10.sp)
             } else if (isDownloaded) {
                 Text("Сохранено офлайн", color = Lime, fontSize = 10.sp)
+            } else if (!available) {
+                Text("Недоступно для воспроизведения", color = Muted, fontSize = 10.sp)
             }
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
@@ -517,7 +576,9 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
                 }
             }
         }
-        IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
+        IconButton(onClick = onPlay) {
+            Icon(Icons.Default.PlayCircleFilled, null, tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
+        }
     }
 }
 
@@ -547,6 +608,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
+    var showTrackInfo by remember { mutableStateOf(false) }
     val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { "${it.provider}:${it.id}" } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
@@ -558,6 +620,18 @@ private fun FullPlayer(
         )
     }
     var volume by remember(controller) { mutableFloatStateOf(controller?.volume ?: 1f) }
+
+    // Attribution for an open-licensed track is a details-sheet concern only: the rest of
+    // the interface never names the source, so the licence and the source page are
+    // reachable from this one info affordance.
+    val openLink: (String) -> Unit = { link ->
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
 
     LaunchedEffect(controller) {
         controller?.setPlaybackSpeed(speed)
@@ -627,10 +701,45 @@ private fun FullPlayer(
         return
     }
 
+    if (showTrackInfo) {
+        val details = track
+        if (details != null) {
+            AlertDialog(
+                onDismissRequest = { showTrackInfo = false },
+                containerColor = Panel,
+                title = { Text("О треке", color = Color.White) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(details.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(details.artist, color = Muted, fontSize = 13.sp)
+                        details.album?.let { Text(it, color = Muted, fontSize = 13.sp) }
+                        if (details.durationSeconds > 0) {
+                            Text(formatTime(details.durationSeconds * 1000L), color = Muted, fontSize = 13.sp)
+                        }
+                        details.licenseUrl?.let { license ->
+                            Text("Лицензия", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 10.dp))
+                            Text(license, color = Lime, fontSize = 12.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(license) }.padding(vertical = 4.dp))
+                        }
+                        details.sourceUrl?.let { source ->
+                            Text("Источник", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 6.dp))
+                            Text(source, color = Lime, fontSize = 12.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(source) }.padding(vertical = 4.dp))
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showTrackInfo = false }) { Text("Закрыть", color = Lime) } }
+            )
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF26312A), Ink))).padding(horizontal = 24.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("СЕЙЧАС ИГРАЕТ", color = Lime, letterSpacing = 3.sp, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = { showQueue = true }) { Icon(Icons.Default.QueueMusic, "Очередь", tint = Lime) }
+            IconButton(onClick = { showTrackInfo = true }, enabled = track != null) { Icon(Icons.Default.Info, "О треке", tint = Lime) }
         }
         Spacer(Modifier.height(12.dp))
         AsyncImage(track?.artworkUrl, null, Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(28.dp)), contentScale = ContentScale.Crop)
@@ -793,8 +902,8 @@ private fun LibraryScreen(
                         Text(if (favorites.any { it.providerTrackId == currentJamendoTrack.providerTrackId }) "Уже в избранном" else "Добавить текущий трек в избранное")
                     }
                 }
-                Text("Избранное Jamendo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                if (favorites.isEmpty() && !busy) Text("Пока нет избранных треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                Text("Избранное", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (favorites.isEmpty() && !busy) Text("Пока нет избранных треков.", color = Muted, modifier = Modifier.padding(top = 8.dp))
                 favorites.forEach { favorite ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(8.dp),
@@ -824,7 +933,7 @@ private fun LibraryScreen(
                 Spacer(Modifier.height(14.dp))
                 Text("Недавно слушали", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 if (recentHistory.isEmpty() && !busy) {
-                    Text("История появится после прослушивания треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                    Text("История появится после прослушивания треков.", color = Muted, modifier = Modifier.padding(top = 8.dp))
                 }
                 recentHistory.take(8).forEach { recent ->
                     Row(
