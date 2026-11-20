@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed (Android 13) icon layer: same bars, single flat white, no gradient. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M30,46 L30,62" android:strokeColor="#FFFFFFFF" android:strokeWidth="10" android:strokeLineCap="round" />
+    <path android:pathData="M46,34 L46,74" android:strokeColor="#FFFFFFFF" android:strokeWidth="10" android:strokeLineCap="round" />
+    <path android:pathData="M62,42 L62,66" android:strokeColor="#FFFFFFFF" android:strokeWidth="10" android:strokeLineCap="round" />
+    <path android:pathData="M78,28 L78,80" android:strokeColor="#FFFFFFFF" android:strokeWidth="10" android:strokeLineCap="round" />
+</vector>

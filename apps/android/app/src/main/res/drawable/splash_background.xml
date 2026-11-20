@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  windowBackground for both the splash theme and the app theme: a dark radial wash
+  (#0A0A0F base with a violet bloom where the logo sits). Because the app paints the
+  same darkness behind its own surface, the splash → first frame handoff cannot flash.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="340dp"
+        android:centerX="0.5"
+        android:centerY="0.38"
+        android:startColor="#17162A"
+        android:centerColor="#0E0E17"
+        android:endColor="#0A0A0F" />
+</shape>
