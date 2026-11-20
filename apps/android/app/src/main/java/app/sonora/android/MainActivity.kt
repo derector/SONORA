@@ -608,6 +608,7 @@ private fun FullPlayer(
     var position by remember(controller) { mutableFloatStateOf(0f) }
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
+    var showTrackInfo by remember { mutableStateOf(false) }
     val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { "${it.provider}:${it.id}" } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
@@ -619,6 +620,18 @@ private fun FullPlayer(
         )
     }
     var volume by remember(controller) { mutableFloatStateOf(controller?.volume ?: 1f) }
+
+    // Attribution for an open-licensed track is a details-sheet concern only: the rest of
+    // the interface never names the source, so the licence and the source page are
+    // reachable from this one info affordance.
+    val openLink: (String) -> Unit = { link ->
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }
+    }
 
     LaunchedEffect(controller) {
         controller?.setPlaybackSpeed(speed)
@@ -688,10 +701,45 @@ private fun FullPlayer(
         return
     }
 
+    if (showTrackInfo) {
+        val details = track
+        if (details != null) {
+            AlertDialog(
+                onDismissRequest = { showTrackInfo = false },
+                containerColor = Panel,
+                title = { Text("О треке", color = Color.White) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(details.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(details.artist, color = Muted, fontSize = 13.sp)
+                        details.album?.let { Text(it, color = Muted, fontSize = 13.sp) }
+                        if (details.durationSeconds > 0) {
+                            Text(formatTime(details.durationSeconds * 1000L), color = Muted, fontSize = 13.sp)
+                        }
+                        details.licenseUrl?.let { license ->
+                            Text("Лицензия", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 10.dp))
+                            Text(license, color = Lime, fontSize = 12.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(license) }.padding(vertical = 4.dp))
+                        }
+                        details.sourceUrl?.let { source ->
+                            Text("Источник", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(top = 6.dp))
+                            Text(source, color = Lime, fontSize = 12.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(source) }.padding(vertical = 4.dp))
+                        }
+                    }
+                },
+                confirmButton = { TextButton(onClick = { showTrackInfo = false }) { Text("Закрыть", color = Lime) } }
+            )
+        }
+    }
+
     Column(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF26312A), Ink))).padding(horizontal = 24.dp, vertical = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("СЕЙЧАС ИГРАЕТ", color = Lime, letterSpacing = 3.sp, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = { showQueue = true }) { Icon(Icons.Default.QueueMusic, "Очередь", tint = Lime) }
+            IconButton(onClick = { showTrackInfo = true }, enabled = track != null) { Icon(Icons.Default.Info, "О треке", tint = Lime) }
         }
         Spacer(Modifier.height(12.dp))
         AsyncImage(track?.artworkUrl, null, Modifier.fillMaxWidth().weight(1f).aspectRatio(1f).clip(RoundedCornerShape(28.dp)), contentScale = ContentScale.Crop)

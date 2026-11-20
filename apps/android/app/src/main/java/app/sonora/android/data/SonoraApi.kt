@@ -208,7 +208,8 @@ object SonoraApi {
 
     fun addProviderFavorite(track: Track) {
         if (!track.provider.equals("Jamendo", ignoreCase = true)) {
-            throw IOException("Пока избранное с проверкой лицензии доступно для Jamendo.")
+            // User-facing wording must not name the source; the check itself stays.
+            throw IOException("Избранное с проверкой лицензии доступно не для этого трека.")
         }
         request(
             "/api/v1/provider-favorites",
