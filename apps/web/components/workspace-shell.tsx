@@ -15,6 +15,7 @@ const links = [
   { href: "/favorites", label: "Liked tracks", icon: Heart },
   { href: "/history", label: "Listening history", icon: Clock3 },
   { href: "/import", label: "Import tracks", icon: FileUp },
+  { href: "/assistant", label: "Assistant", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
@@ -87,10 +88,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-[22px] border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[94px]" : "bottom-3"}`} aria-label={t("Workspace")}>
+      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-6 gap-1 rounded-[22px] border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[94px]" : "bottom-3"}`} aria-label={t("Workspace")}>
         {[
           { href: "/", label: "Discover", icon: Compass },
           { href: "/search", label: "Search", icon: Search },
+          { href: "/assistant", label: "Assistant", icon: Sparkles },
           { href: "/playlists", label: "Library", icon: Library },
           { href: "/favorites", label: "Liked tracks", icon: Heart },
           { href: profileHref, label: "Your profile", icon: UserRound }
