@@ -6,6 +6,7 @@ import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
 import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
+import { useReveal } from "../../lib/motion";
 
 type Favorite = {
   provider_track_id: string;
@@ -30,6 +31,8 @@ export default function FavoritesPage() {
   const [items, setItems] = useState<Favorite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const headReveal = useReveal<HTMLDivElement>();
+  const listReveal = useReveal<HTMLDivElement>();
 
   useEffect(() => {
     let active = true;
@@ -121,14 +124,14 @@ export default function FavoritesPage() {
         </div>
       ) : (
         <section className="mt-8" aria-labelledby="favorites-heading">
-          <div className="mb-3 flex items-end justify-between">
+          <div ref={headReveal} className="rv rv-mask mb-3 flex items-end justify-between">
             <div>
               <p className="t-eyebrow">{t("Your collection")}</p>
               <h2 id="favorites-heading" className="t-h2 mt-1">{t("Saved tracks")}</h2>
             </div>
             <span className="t-meta">{items.length} {t("tracks")}</span>
           </div>
-          <div className="min-w-0 space-y-0.5">
+          <div ref={listReveal} className="rv rv-flat rv-stagger-x min-w-0 space-y-0.5">
             {items.map((item) => (
               <TrackRow
                 key={item.provider_track_id}

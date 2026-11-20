@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useLanguage } from "./language-provider";
+import { useReveal } from "../lib/motion";
 
 // Six listening moods. Each tile is a gradient first, so the section still
 // looks finished when the artwork layer has not been published yet: the image
 // removes itself on error and the gradient stays behind.
+// Motion: heading wipes in on scroll, tiles rise in stagger steps and lift
+// with a spring scale on hover (.mood-tile in motion.css).
 type Mood = {
   slug: string;
   label: string;
@@ -25,22 +28,23 @@ const MOODS: Mood[] = [
 
 export function MoodPicker() {
   const { t } = useLanguage();
+  const sectionReveal = useReveal<HTMLElement>();
+  const headReveal = useReveal<HTMLDivElement>();
   return (
-    <section className="mt-12" aria-labelledby="mood-picker-heading">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <section ref={sectionReveal} className="mt-12 rv rv-flat" aria-labelledby="mood-picker-heading">
+      <div ref={headReveal} className="rv rv-mask mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="t-eyebrow text-violet-200">{t("Made for the moment")}</p>
           <h2 id="mood-picker-heading" className="t-h2 mt-1">{t("Pick a mood")}</h2>
           <p className="t-meta mt-1">{t("Each mood opens the catalog with a ready-made search.")}</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {MOODS.map((mood, index) => (
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 rv-stagger">
+        {MOODS.map((mood) => (
           <Link
             key={mood.slug}
             href={`/search?q=${encodeURIComponent(mood.query)}`}
-            className="card-enter btn-press card-lift group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-card border border-white/[0.07] bg-gradient-to-br p-4"
-            style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
+            className="mood-tile btn-press card-lift group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-card border border-white/[0.07] bg-gradient-to-br p-4"
           >
             <span className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${mood.gradient}`} aria-hidden />
             <span className="mood-shimmer pointer-events-none" aria-hidden />

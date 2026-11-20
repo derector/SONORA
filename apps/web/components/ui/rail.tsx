@@ -4,11 +4,14 @@ import { useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useLanguage } from "../language-provider";
+import { useReveal } from "../../lib/motion";
 
 // Spotify-style horizontal rail: snap-scrolling row of cards, section header
 // with an optional "View all" link, hover arrows on desktop and a masked edge
 // fade. Only the presentation lives here; cards and their handlers are passed
 // in as children so pages keep ownership of playback logic.
+// Motion: the section reveals on scroll (.rv), the heading wipes in
+// (.rv-mask) and the cards rise in 60ms stagger steps (.rv-stagger).
 export function Rail({
   eyebrow,
   title,
@@ -30,6 +33,8 @@ export function Rail({
 }) {
   const { t } = useLanguage();
   const scroller = useRef<HTMLDivElement>(null);
+  const sectionReveal = useReveal<HTMLElement>();
+  const headReveal = useReveal<HTMLDivElement>();
 
   function scroll(direction: -1 | 1) {
     const node = scroller.current;
@@ -38,8 +43,8 @@ export function Rail({
   }
 
   return (
-    <section className="rail mt-6" aria-labelledby={titleId}>
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+    <section ref={sectionReveal} className="rail mt-6 rv rv-flat" aria-labelledby={titleId}>
+      <div ref={headReveal} className="rv rv-mask mb-4 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           {eyebrow && <p className="t-eyebrow">{eyebrow}</p>}
           <h2 id={titleId} className={`t-h2 ${eyebrow ? "mt-1" : ""}`}>{title}</h2>
@@ -55,7 +60,7 @@ export function Rail({
         <button type="button" className="rail-arrow is-left" onClick={() => scroll(-1)} aria-label={t("Scroll left")}>
           <ChevronLeft size={18} />
         </button>
-        <div ref={scroller} className="rail-scroll">
+        <div ref={scroller} className="rail-scroll rv-stagger">
           {children}
         </div>
         <button type="button" className="rail-arrow is-right" onClick={() => scroll(1)} aria-label={t("Scroll right")}>

@@ -7,6 +7,7 @@ import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
 import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
 import { Artwork } from "../../components/ui/artwork";
+import { useReveal } from "../../lib/motion";
 
 type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
@@ -29,6 +30,10 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const searchSequence = useRef(0);
+  const tracksHead = useReveal<HTMLDivElement>();
+  const tracksList = useReveal<HTMLDivElement>();
+  const artistsList = useReveal<HTMLDivElement>();
+  const metaList = useReveal<HTMLDivElement>();
 
   const runSearch = useCallback(async (searchQuery: string, searchKind: "all" | "tracks" | "artists") => {
     if (searchQuery.trim().length < 2) return;
@@ -114,14 +119,14 @@ export default function SearchPage() {
 
       {!loading && tracks.length > 0 && (
         <section className="mt-8" aria-labelledby="search-tracks-heading">
-          <div className="mb-3 flex items-end justify-between">
+          <div ref={tracksHead} className="rv rv-mask mb-3 flex items-end justify-between">
             <div>
               <p className="t-eyebrow">{t("Playable catalog results")}</p>
               <h2 id="search-tracks-heading" className="t-h2 mt-1">{t("Tracks")}</h2>
             </div>
             <span className="t-meta">{tracks.length} {t("matches")}</span>
           </div>
-          <div className="min-w-0 space-y-0.5">
+          <div ref={tracksList} className="rv rv-flat rv-stagger-x min-w-0 space-y-0.5">
             {tracks.map((track) => (
               <TrackRow
                 key={track.id}
@@ -146,7 +151,7 @@ export default function SearchPage() {
       {!loading && artists.length > 0 && (
         <section className="mt-10" aria-labelledby="search-artists-heading">
           <h2 id="search-artists-heading" className="t-h2 mb-4">{t("Artists")}</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div ref={artistsList} className="rv rv-flat rv-stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {artists.map((artist) => (
               <a key={artist.id} href={artist.sourceUrl} target="_blank" rel="noreferrer" className="card-lift surface flex min-w-0 items-center gap-3 rounded-card p-3">
                 <Artwork src={artist.imageUrl} rounded="rounded-full" iconSize={20} className="h-12 w-12" />
@@ -168,7 +173,7 @@ export default function SearchPage() {
             <h2 id="search-meta-heading" className="t-h2 mt-1">{t("Recording matches")}</h2>
             <p className="t-meta mt-1">{t("Catalog records identify recordings and releases. They do not provide audio playback.")}</p>
           </div>
-          <div className="min-w-0 space-y-0.5">
+          <div ref={metaList} className="rv rv-flat rv-stagger-x min-w-0 space-y-0.5">
             {metadata.map((item) => (
               <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="track-row group min-w-0 max-w-full">
                 <span className="artwork grid h-11 w-11 shrink-0 place-items-center rounded-tile">

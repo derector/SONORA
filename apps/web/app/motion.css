@@ -72,3 +72,97 @@
   from { transform: translate3d(-110%, 0, 0); }
   to { transform: translate3d(370%, 0, 0); }
 }
+
+/* 3 — Scroll reveal. Elements start hidden and are released once by the
+   shared IntersectionObserver in lib/motion.ts (.rv-in). Stagger groups
+   animate their direct children in 60ms steps, capped at 300ms. */
+.rv {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  transition:
+    opacity var(--dur-reveal) var(--ease-d1),
+    transform var(--dur-reveal) var(--ease-d1),
+    clip-path var(--dur-reveal) var(--ease-d2);
+  transition-delay: var(--rv-delay, 0ms);
+}
+.rv-x { transform: translate3d(24px, 0, 0); }
+.rv-flat { transform: none; }
+.rv.rv-in { opacity: 1; transform: translate3d(0, 0, 0); }
+/* Mask reveal for section headings: a bottom-up clip wipe, no travel. */
+.rv-mask { transform: none; clip-path: inset(0 0 105% 0); }
+.rv-mask.rv-in { clip-path: inset(0 0 -12% 0); }
+
+.rv-in .rv-stagger > *, .rv-in.rv-stagger > * { animation: rv-item-up var(--dur-item) var(--ease-d1) both; }
+.rv-in .rv-stagger-x > *, .rv-in.rv-stagger-x > * { animation: rv-item-x var(--dur-item) var(--ease-d1) both; }
+@keyframes rv-item-up {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes rv-item-x {
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.rv-stagger > *:nth-child(2), .rv-stagger-x > *:nth-child(2) { animation-delay: calc(var(--stagger-step) * 1); }
+.rv-stagger > *:nth-child(3), .rv-stagger-x > *:nth-child(3) { animation-delay: calc(var(--stagger-step) * 2); }
+.rv-stagger > *:nth-child(4), .rv-stagger-x > *:nth-child(4) { animation-delay: calc(var(--stagger-step) * 3); }
+.rv-stagger > *:nth-child(5), .rv-stagger-x > *:nth-child(5) { animation-delay: calc(var(--stagger-step) * 4); }
+.rv-stagger > *:nth-child(6), .rv-stagger-x > *:nth-child(6) { animation-delay: calc(var(--stagger-step) * 5); }
+.rv-stagger > *:nth-child(n+7), .rv-stagger-x > *:nth-child(n+7) { animation-delay: var(--stagger-cap); }
+
+/* 4 — Cards and rows: hover scale + shadow bloom, press squash, cover sheen
+   sweep and the live-row equalizer bars. */
+.track-card {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+.track-card:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow:
+    0 18px 48px rgba(3, 4, 10, .55),
+    0 0 0 1px rgba(139, 92, 246, .16),
+    0 0 32px rgba(139, 92, 246, .14);
+}
+.track-card:active { transform: scale(.97); transition-duration: 90ms; }
+.track-card .artwork::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .22) 50%, transparent 62%);
+  transform: translate3d(-120%, 0, 0);
+}
+.track-card:hover .artwork::after { animation: sheen-sweep 750ms var(--ease-d1) forwards; }
+@keyframes sheen-sweep {
+  from { transform: translate3d(-120%, 0, 0); }
+  to { transform: translate3d(120%, 0, 0); }
+}
+.mood-tile { transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-soft); }
+.mood-tile:hover { transform: translateY(-3px) scale(1.03); box-shadow: var(--shadow-card); }
+.mood-tile:active { transform: scale(.97); transition-duration: 90ms; }
+@media (hover: none) {
+  .track-card:hover, .mood-tile:hover { transform: none; box-shadow: none; }
+  .track-card:hover .artwork::after { animation: none; }
+}
+
+/* Equalizer bars: current track row, queue rows and the logo mark. */
+.eq-bars { display: inline-flex; align-items: flex-end; gap: 2px; width: 13px; height: 12px; flex: none; }
+.eq-bars i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(.3);
+  transform-origin: bottom;
+  animation: eq-bounce 900ms var(--ease-soft) infinite;
+}
+.eq-bars i:nth-child(1) { animation-delay: -260ms; }
+.eq-bars i:nth-child(2) { animation-delay: -610ms; }
+.eq-bars i:nth-child(3) { animation-delay: -430ms; }
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(.3); }
+  50% { transform: scaleY(1); }
+}
