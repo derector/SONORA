@@ -22,6 +22,10 @@ type Track = {
 type Result = { items?: Track[]; error?: string };
 type CatalogSource = "jamendo" | "audius";
 type AudiusSort = "trending" | "latest";
+// Recommendations arrive as catalog tracks plus the short reasons the API used
+// to pick them. Source identity stays inside the data, never on the card.
+type Recommendation = Track & { reasons?: string[] };
+type RecommendationResult = { items?: Recommendation[]; tracks?: Recommendation[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -40,6 +44,7 @@ export default function DiscoverPage() {
   const [token, setToken] = useState("");
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [savingFavorite, setSavingFavorite] = useState<string>("");
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
 
   async function loadTracks(search = "", selectedSource: CatalogSource = source, selectedSort: AudiusSort = audiusSort) {
@@ -80,6 +85,19 @@ export default function DiscoverPage() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    let active = true;
+    // Personal picks are optional: any failure simply keeps the section hidden.
+    void fetch(`${API}/api/v1/recommendations?limit=12`, {
+      headers: { Authorization: `Bearer ${token}` }, credentials: "include", cache: "no-store"
+    })
+      .then(async (response) => response.ok ? await response.json() as RecommendationResult : null)
+      .then((result) => { if (active) setRecommendations(result?.items ?? result?.tracks ?? []); })
+      .catch(() => { if (active) setRecommendations([]); });
+    return () => { active = false; };
+  }, [token]);
 
   async function toggleFavorite(track: Track) {
     if (!token) {
@@ -124,6 +142,30 @@ export default function DiscoverPage() {
           <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
       </section>
+      {recommendations.length > 0 && <section className="mt-10" aria-labelledby="for-you-heading">
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Picked from your listening")}</p><h2 id="for-you-heading" className="mt-2 text-2xl font-semibold">{t("For you")}</h2></div>
+          <span className="text-xs text-slate-500">{recommendations.length} {t("tracks")}</span>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {recommendations.map((track, index) => (
+            <article key={track.id} className="card-enter overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.025] p-3" style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}>
+              <div className="flex gap-4">
+                <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500/30 to-sky-500/20"><Music2 className="text-violet-100" size={28}/>{track.artworkUrl && <img src={track.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</div>
+                <div className="min-w-0 flex-1 py-1">
+                  <h3 className="min-w-0 truncate font-medium">{track.title}</h3>
+                  <p className="mt-1 truncate text-sm text-slate-400">{track.artist}</p>
+                  <p className="mt-2 text-xs text-slate-500">{track.album || t("Independent release")} · {duration(track.durationSeconds)}</p>
+                  {track.reasons?.length ? <div className="mt-2 flex flex-wrap gap-1.5">{track.reasons.slice(0, 3).map((reason) => <span key={reason} className="rounded-full border border-violet-200/15 bg-violet-200/[0.07] px-2 py-1 text-[10px] text-violet-100">{t(reason)}</span>)}</div> : null}
+                </div>
+              </div>
+              <button type="button" onClick={() => currentTrack?.id === track.id ? togglePlay() : playTrack(track, recommendations)} aria-label={`${currentTrack?.id === track.id && isPlaying ? t("Pause") : t("Play")} ${track.title}`} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-violet-200/20 bg-violet-200/10 px-4 py-3 text-sm font-medium text-violet-100 transition hover:bg-violet-200/20">
+                {currentTrack?.id === track.id && isPlaying ? <Pause size={16}/> : <Play size={16} fill="currentColor"/>}{currentTrack?.id === track.id && isPlaying ? t("Pause") : t("Play track")}
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>}
 
       <div className="mt-9 flex flex-wrap items-end justify-between gap-4">
         <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Open catalogs")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Tracks to explore")}</h2></div>
