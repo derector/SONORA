@@ -218,3 +218,55 @@
 }
 .seek-bar { height: 4px; transition: height var(--dur-fast) var(--ease-soft); }
 .seek-bar:hover { height: 6px; }
+
+/* 6 — Tabs, chips and the logo mark. The mobile nav pill is one shared
+   surface measured against the active tab (workspace-shell tabPill);
+   chips get springy press/pop states. */
+.sonora-mobile-nav { transition: bottom 260ms var(--ease-d1); }
+.nav-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), 0 4px 16px rgba(0, 0, 0, .35);
+  transition: transform 280ms var(--ease-spring), width 280ms var(--ease-spring), height 240ms var(--ease-d1), opacity 200ms var(--ease-soft);
+  pointer-events: none;
+}
+.chip {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform 220ms var(--ease-spring),
+    box-shadow 220ms var(--ease-soft);
+}
+.chip:active { transform: scale(.96); }
+.chip[aria-pressed="true"], .chip.is-active { transform: scale(1.03); box-shadow: 0 4px 14px rgba(139, 92, 246, .18); }
+/* Logo equalizer: three idle bars hidden behind the mark, alive on hover. */
+.logo-eq {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 8px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-soft);
+}
+.logo-eq i {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(.3);
+  transform-origin: bottom;
+}
+.logo-mark:hover .logo-eq, .logo-mark:focus-visible .logo-eq { opacity: .95; }
+.logo-mark:hover .logo-eq i { animation: eq-bounce 780ms var(--ease-soft) infinite; }
+.logo-mark:hover .logo-eq i:nth-child(1) { animation-delay: -120ms; }
+.logo-mark:hover .logo-eq i:nth-child(2) { animation-delay: -380ms; }
+.logo-mark:hover .logo-eq i:nth-child(3) { animation-delay: -250ms; }
