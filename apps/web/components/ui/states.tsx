@@ -38,8 +38,8 @@ export function StateBlock({
   const ring = tone === "rose" ? "text-rose-200" : tone === "sky" ? "text-sky-200" : tone === "neutral" ? "text-slate-300" : "text-violet-100";
 
   return (
-    <section className="surface flex flex-col items-center px-6 py-12 text-center">
-      <div className={`grid h-[72px] w-[72px] place-items-center rounded-full bg-gradient-to-br ${disc} ring-1 ring-white/10`}>
+    <section className="state-in surface flex flex-col items-center px-6 py-12 text-center">
+      <div className={`empty-float grid h-[72px] w-[72px] place-items-center rounded-full bg-gradient-to-br ${disc} ring-1 ring-white/10`}>
         <Icon size={24} className={ring} />
       </div>
       <p className="mt-5 text-[17px] font-semibold">{title}</p>
@@ -63,8 +63,8 @@ export function StateBlock({
 export function ErrorBlock({ title, body, onRetry, retryLabel, actionHref, actionLabel }: { title: string; body?: string; onRetry?: () => void; retryLabel?: string; actionHref?: string; actionLabel?: string }) {
   const { t } = useLanguage();
   return (
-    <section className="surface flex flex-col items-center px-6 py-10 text-center">
-      <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-gradient-to-br from-rose-500/22 to-[#1b1420] ring-1 ring-white/10">
+    <section className="state-in surface flex flex-col items-center px-6 py-10 text-center">
+      <div className="empty-float grid h-[72px] w-[72px] place-items-center rounded-full bg-gradient-to-br from-rose-500/22 to-[#1b1420] ring-1 ring-white/10">
         <AlertTriangle size={24} className="text-rose-200" />
       </div>
       <p className="mt-5 text-[17px] font-semibold">{title}</p>
@@ -90,7 +90,7 @@ export function RailSkeleton({ count = 6 }: { count?: number }) {
         <div className="skeleton h-3 w-24" />
         <div className="skeleton h-6 w-48" />
       </div>
-      <div className="flex gap-3 overflow-hidden pb-2">
+      <div className="shimmer-rows flex gap-3 overflow-hidden pb-2">
         {Array.from({ length: count }).map((_, index) => (
           <div key={index} className="rail-item min-w-0">
             <div className="skeleton aspect-square w-full rounded-tile" />
@@ -105,7 +105,7 @@ export function RailSkeleton({ count = 6 }: { count?: number }) {
 
 export function RowsSkeleton({ count = 6 }: { count?: number }) {
   return (
-    <div className="space-y-1" aria-hidden>
+    <div className="shimmer-rows space-y-1" aria-hidden>
       {Array.from({ length: count }).map((_, index) => (
         <div key={index} className="flex h-16 min-w-0 items-center gap-3 px-2">
           <div className="skeleton h-11 w-11 shrink-0 rounded-tile" />
@@ -122,7 +122,7 @@ export function RowsSkeleton({ count = 6 }: { count?: number }) {
 
 export function GridSkeleton({ count = 6 }: { count?: number }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
+    <div className="shimmer-rows grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
       {Array.from({ length: count }).map((_, index) => (
         <div key={index} className="flex h-16 min-w-0 items-center gap-3 rounded-card bg-surface p-3">
           <div className="skeleton h-12 w-12 shrink-0 rounded-tile" />

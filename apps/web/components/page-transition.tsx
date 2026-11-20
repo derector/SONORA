@@ -1,25 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { useMotionPreference } from "../lib/motion";
+
+// Order the primary nav follows. Forward moves (index grows) slide the new
+// page in from the right, backward moves from the left — the same ±12px
+// directional enter the landing page uses.
+const ROUTE_ORDER = [
+  "/", "/search", "/discover", "/playlists", "/favorites", "/history",
+  "/import", "/assistant", "/settings", "/profile", "/auth", "/signup", "/legal"
+];
+
+function rankOf(pathname: string): number {
+  const exact = ROUTE_ORDER.indexOf(pathname);
+  if (exact >= 0) return exact;
+  const root = `/${pathname.split("/")[1] ?? ""}`;
+  return ROUTE_ORDER.indexOf(root);
+}
 
 // Wraps the routed page only, so the shell and the player never re-animate.
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [key, setKey] = useState(pathname);
-  const [reduced, setReduced] = useState(false);
+  const reduced = useMotionPreference();
+  const [entry, setEntry] = useState({ key: pathname, cls: "" });
+  const prevRank = useRef(-1);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const apply = () => setReduced(query.matches);
-    apply();
-    query.addEventListener("change", apply);
-    return () => query.removeEventListener("change", apply);
-  }, []);
-
-  useEffect(() => { setKey(pathname); }, [pathname]);
+    const rank = rankOf(pathname);
+    const prev = prevRank.current;
+    if (rank >= 0) prevRank.current = rank;
+    let cls = "";
+    if (prev >= 0 && rank >= 0 && rank !== prev) cls = rank > prev ? "page-from-forward" : "page-from-back";
+    setEntry((current) => (current.key === pathname && current.cls === cls ? current : { key: pathname, cls }));
+  }, [pathname]);
 
   if (reduced) return <>{children}</>;
-  return <div key={key} className="page-transition">{children}</div>;
+  return <div key={entry.key} className={entry.cls ? `page-transition ${entry.cls}` : "page-transition"}>{children}</div>;
 }
