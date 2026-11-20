@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -68,6 +68,27 @@ jobs:
           path: apps/android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 30
+      - name: Publish GitHub Release with OTA asset
+        if: steps.build.outputs.variant == 'release' && github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v0.1.$GITHUB_RUN_NUMBER"
+          APK=apps/android/app/build/outputs/apk/release/app-release.apk
+          SHA256=$(sha256sum "$APK" | cut -d" " -f1)
+          cp "$APK" SONORA-latest.apk
+          cp "$APK" "SONORA-release-$TAG.apk"
+          git tag -f "$TAG"
+          git push -f origin "$TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk --clobber
+          else
+            gh release create "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk \
+              --title "SONORA Android $TAG" \
+              --notes "Автоматическая CI-сборка #$GITHUB_RUN_NUMBER (commit ${GITHUB_SHA:0:7}).\n\nSHA-256 APK: $SHA256\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).\n\nВ приложении обновление придёт пушем: Настройки → Проверить обновления."
+          fi
+          echo "Release $TAG published with SONORA-latest.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload QA-only debug APK
         if: steps.build.outputs.variant == 'debug'
         uses: actions/upload-artifact@v4

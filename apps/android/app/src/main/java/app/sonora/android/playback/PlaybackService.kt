@@ -14,16 +14,46 @@ import app.sonora.android.data.SonoraApi
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import java.io.File
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
 @UnstableApi
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val resolverExecutor: ExecutorService = Executors.newFixedThreadPool(4)
+    private val persistRunnable = object : Runnable {
+        override fun run() {
+            persistPlaybackSnapshot()
+            mainHandler.postDelayed(this, 2_000L)
+        }
+    }
+
+    /**
+     * Keep the last known queue and playhead fresh while playback continues
+     * after the Activity has left the foreground. The Activity remains the
+     * source of full Track metadata; this service only snapshots player state
+     * when its media IDs still match that persisted queue.
+     */
+    private fun persistPlaybackSnapshot() {
+        val player = mediaSession?.player ?: return
+        if (player.mediaItemCount == 0 || player.currentMediaItemIndex < 0) return
+        val saved = PlaybackStateStore.load(this) ?: return
+        val savedByMediaId = saved.tracks.associateBy { "${it.provider}:${it.id}" }
+        val queue = (0 until player.mediaItemCount).mapNotNull { index ->
+            savedByMediaId[player.getMediaItemAt(index).mediaId]
+        }
+        if (queue.size != player.mediaItemCount) return
+        PlaybackStateStore.save(
+            context = this,
+            queue = queue,
+            currentIndex = player.currentMediaItemIndex,
+            positionMs = player.currentPosition,
+            shuffleEnabled = player.shuffleModeEnabled,
+            repeatMode = player.repeatMode,
+            playWhenReady = player.playWhenReady
+        )
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -40,24 +70,27 @@ class PlaybackService : MediaSessionService() {
                 val result = SettableFuture.create<MediaSession.MediaItemsWithStartPosition>()
                 resolverExecutor.execute {
                     try {
+                        // Drop a handoff marker left by an older resumption attempt before
+                        // starting this one, so MainActivity only ever defers to a restore
+                        // that belongs to this cold start.
+                        PlaybackStateStore.clearQueueResumedByService(this@PlaybackService)
                         val saved = PlaybackStateStore.load(this@PlaybackService)
                             ?: throw IllegalStateException("No saved SONORA playback queue.")
-                        val pending = saved.tracks.map { savedTrack ->
-                            CompletableFuture.supplyAsync({
-                                val localUri = savedTrack.audioUrl?.takeIf { it.startsWith("file:") }
-                                if (localUri != null) {
-                                    val localFile = File(Uri.parse(localUri).path.orEmpty())
-                                    savedTrack.takeIf { localFile.isFile }
-                                } else {
-                                    runCatching {
-                                        SonoraApi.resolveTrack(savedTrack.provider, savedTrack.providerTrackId)
-                                    }.getOrNull()
-                                }
-                            }, resolverExecutor)
+                        // Resolve on this callback worker. Avoid nested tasks on the same
+                        // bounded executor: concurrent resumption requests could otherwise
+                        // occupy every worker while waiting for queued child tasks.
+                        val tracks = saved.tracks.mapNotNull { savedTrack ->
+                            val localUri = savedTrack.audioUrl?.takeIf { it.startsWith("file:") }
+                            val resolved = if (localUri != null) {
+                                val localFile = File(Uri.parse(localUri).path.orEmpty())
+                                savedTrack.takeIf { localFile.isFile }
+                            } else {
+                                runCatching {
+                                    SonoraApi.resolveTrack(savedTrack.provider, savedTrack.providerTrackId)
+                                }.getOrNull()
+                            }
+                            resolved?.takeIf { it.playable && !it.audioUrl.isNullOrBlank() }
                         }
-                        val tracks = pending.mapNotNull { future ->
-                            runCatching { future.get(15, TimeUnit.SECONDS) }.getOrNull()
-                        }.filter { it.playable && !it.audioUrl.isNullOrBlank() }
                         if (tracks.isEmpty()) throw IllegalStateException("No saved tracks are currently playable.")
                         val savedCurrent = saved.tracks.getOrNull(saved.currentIndex)
                         val restoredIndex = savedCurrent?.let { target ->
@@ -87,6 +120,11 @@ class PlaybackService : MediaSessionService() {
                         mainHandler.post {
                             mediaSession.player.shuffleModeEnabled = saved.shuffleEnabled
                             mediaSession.player.repeatMode = saved.repeatMode
+                            // Restore ownership: the queue is now handed to Media3, which
+                            // prepares (and plays) it. MainActivity reads and clears this
+                            // marker on the same cold start and keeps its own restore path
+                            // out of the way instead of rebuilding the queue a second time.
+                            PlaybackStateStore.markQueueResumedByService(this@PlaybackService)
                             result.set(MediaSession.MediaItemsWithStartPosition(items, startIndex, startPosition))
                         }
                     } catch (error: Exception) {
@@ -97,11 +135,14 @@ class PlaybackService : MediaSessionService() {
             }
         }
         mediaSession = MediaSession.Builder(this, player).setCallback(callback).build()
+        mainHandler.postDelayed(persistRunnable, 2_000L)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(persistRunnable)
+        persistPlaybackSnapshot()
         mediaSession?.run {
             player.release()
             release()
