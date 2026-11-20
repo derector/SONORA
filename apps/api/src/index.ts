@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
+import { registerProfileRoutes } from "./profile-routes.js";
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -1454,7 +1455,9 @@ registerImportRoutes(app);
 registerDiscoveryRoutes(app);
 
 try {
-  await app.listen({ port, host });
+  registerProfileRoutes(app, { authClient, authError, requireUser });
+
+await app.listen({ port, host });
 } catch (error) {
   app.log.error(error);
   process.exit(1);
