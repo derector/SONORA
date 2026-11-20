@@ -139,7 +139,7 @@ export default function DiscoverPage() {
         <form onSubmit={submitSearch} className="mt-7 flex max-w-2xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("Search tracks, artists or moods")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
-          <button disabled={loading} className="rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
+          <button disabled={loading} className="btn-press rounded-xl bg-violet-200 px-5 py-2 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{t("Search")}</button>
         </form>
       </section>
       {recommendations.length > 0 && <section className="mt-10" aria-labelledby="for-you-heading">

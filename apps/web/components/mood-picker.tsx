@@ -39,7 +39,7 @@ export function MoodPicker() {
           <Link
             key={mood.slug}
             href={`/search?q=${encodeURIComponent(mood.query)}`}
-            className="card-enter group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br p-4 transition-transform duration-200 hover:scale-[1.03] focus-visible:scale-[1.03]"
+            className="card-enter btn-press group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br p-4 transition-transform duration-200 hover:scale-[1.03] focus-visible:scale-[1.03]"
             style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
           >
             <span className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${mood.gradient}`} aria-hidden />
