@@ -2,7 +2,7 @@ name: SONORA Android APK
 
 on:
   push:
-    branches: [android-native, "fix/**", "integration/**"]
+    branches: [main, android-native, "fix/**", "integration/**"]
     paths:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
@@ -69,7 +69,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub Release with OTA asset
-        if: steps.build.outputs.variant == 'release' && github.event_name == 'push'
+        if: steps.build.outputs.variant == 'release' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
