@@ -2,8 +2,9 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, AudioLines, Disc3, LoaderCircle, Plus, Trash2, ChevronRight } from "lucide-react";
+import { ChevronRight, Disc3, Plus, Trash2 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
+import { GridSkeleton, StateBlock } from "../../components/ui/states";
 
 type Playlist = {
   id: string;
@@ -46,7 +47,7 @@ export default function PlaylistsPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<ApiResponse> : null)
       .then(async (result) => {
         const accessToken = result?.session?.access_token;
@@ -101,45 +102,70 @@ export default function PlaylistsPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 md:px-8">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("PLAYLISTS")}</span>
-      </header>
-      <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your personal collection")}</p>
-        <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{t("Sound, in your order.")}</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.")}</p>
+    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-6 pb-36 md:px-8">
+      <section className="panel-hero mt-6 px-6 py-8 md:px-10 md:py-11">
+        <p className="t-eyebrow">{t("Your personal collection")}</p>
+        <h1 className="t-display mt-3">{t("Sound, in your order.")}</h1>
+        <p className="t-meta mt-3 max-w-xl leading-6">{t("Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.")}</p>
       </section>
 
-      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Restoring your session…")}</div> : !token ? (
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-7">
-          <h2 className="text-xl font-semibold">{t("Sign in to see your library.")}</h2>
-          <p className="mt-2 text-sm text-slate-400">{t("Your playlists are private to your account until you choose otherwise.")}</p>
-          <Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in or create account")}</Link>
-        </section>
+      {loading ? <div className="mt-8"><GridSkeleton count={4} /></div> : !token ? (
+        <div className="mt-8">
+          <StateBlock
+            icon={Disc3}
+            title={t("Sign in to see your library.")}
+            body={t("Your playlists are private to your account until you choose otherwise.")}
+            actionHref="/auth"
+            actionLabel={t("Sign in or create account")}
+          />
+        </div>
       ) : (
         <>
-          <form onSubmit={createPlaylist} className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-6">
-            <div className="flex items-center gap-2"><Plus className="text-violet-200" size={18}/><h2 className="font-semibold">{t("Create a playlist")}</h2></div>
+          <form onSubmit={createPlaylist} className="surface mt-8 p-5 md:p-6" aria-labelledby="playlist-create-heading">
+            <h2 id="playlist-create-heading" className="flex items-center gap-2 text-[15px] font-semibold"><Plus size={17} className="text-violet-200" /> {t("Create a playlist")}</h2>
             <div className="mt-5 grid gap-3 md:grid-cols-[1fr_1.4fr_auto]">
-              <input value={title} onChange={(event) => setTitle(event.target.value)} required minLength={1} maxLength={80} placeholder={t("Playlist name")} className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
-              <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder={t("A short description (optional)")} className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
-              <button disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white disabled:opacity-50">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <Plus size={16}/>} Create</button>
+              <input value={title} onChange={(event) => setTitle(event.target.value)} required minLength={1} maxLength={80} placeholder={t("Playlist name")} className="field min-w-0" />
+              <input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={500} placeholder={t("A short description (optional)")} className="field min-w-0" />
+              <button disabled={saving} className="btn-press btn-primary">{saving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden /> : <Plus size={16} />} {t("Create")}</button>
             </div>
           </form>
-          <section className="mt-9">
-            <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Your library")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Your playlists")}</h2></div><span className="text-xs text-slate-500">{playlists.length} total</span></div>
-            {playlists.length === 0 ? <div className="rounded-3xl border border-dashed border-white/10 p-10 text-center"><Disc3 className="mx-auto text-slate-500" size={28}/><p className="mt-3 font-medium">{t("Your first playlist starts here.")}</p><p className="mt-1 text-sm text-slate-500">{t("Create one above. You can add catalog tracks as the music catalog is connected.")}</p></div> : (
+          <section className="mt-8" aria-labelledby="playlists-heading">
+            <div className="mb-4 flex items-end justify-between gap-3">
+              <div>
+                <p className="t-eyebrow">{t("Your library")}</p>
+                <h2 id="playlists-heading" className="t-h2 mt-1">{t("Your playlists")}</h2>
+              </div>
+              <span className="t-meta">{playlists.length} {t("total")}</span>
+            </div>
+            {playlists.length === 0 ? (
+              <StateBlock
+                icon={Disc3}
+                tone="neutral"
+                title={t("Your first playlist starts here.")}
+                body={t("Create one above. You can add catalog tracks as the music catalog is connected.")}
+              />
+            ) : (
               <div className="grid gap-3 sm:grid-cols-2">
-                {playlists.map((playlist) => <article key={playlist.id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"><div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-violet-300/10 text-violet-200"><Disc3 size={22}/></div><div className="min-w-0 flex-1"><h3 className="truncate font-medium">{playlist.title}</h3><p className="mt-1 truncate text-xs text-slate-500">{playlist.description || t("No description")} · {playlist.is_public ? t("Public") : t("Private")}</p></div><Link href={`/playlists/${playlist.id}`} aria-label={t("Open") + " " + playlist.title} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10"><ChevronRight size={18}/></Link><button type="button" onClick={() => void deletePlaylist(playlist.id)} aria-label={t("Delete") + " " + playlist.title} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button></article>)}
+                {playlists.map((playlist) => (
+                  <article key={playlist.id} className="card-lift surface group flex min-w-0 items-center gap-4 rounded-card p-3">
+                    <Link href={`/playlists/${playlist.id}`} aria-label={`${t("Open")} ${playlist.title}`} className="grid h-12 w-12 shrink-0 place-items-center rounded-tile bg-gradient-to-br from-accent/40 to-accent-teal/22 shadow-card">
+                      <Disc3 size={20} className="text-white/85" strokeWidth={1.6} />
+                    </Link>
+                    <Link href={`/playlists/${playlist.id}`} className="min-w-0 flex-1">
+                      <h3 className="t-row truncate group-hover:text-white">{playlist.title}</h3>
+                      <p className="t-meta mt-0.5 truncate">{playlist.description || t("No description")} · {playlist.is_public ? t("Public") : t("Private")}</p>
+                    </Link>
+                    <Link href={`/playlists/${playlist.id}`} aria-hidden tabIndex={-1} className="btn-icon hidden sm:grid"><ChevronRight size={17} /></Link>
+                    <button type="button" onClick={() => void deletePlaylist(playlist.id)} aria-label={`${t("Delete")} ${playlist.title}`} className="btn-icon hover:!text-rose-200"><Trash2 size={15} /></button>
+                  </article>
+                ))}
               </div>
             )}
           </section>
         </>
       )}
-      {notice && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{notice}</p>}
-      {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
+      {notice && <p role="status" className="mt-5 rounded-card border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{t(notice) || notice}</p>}
+      {error && <p role="alert" className="mt-5 rounded-card border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
     </main>
   );
 }

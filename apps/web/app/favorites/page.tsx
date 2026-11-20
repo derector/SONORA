@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeft, AudioLines, ExternalLink, Heart, LoaderCircle, Music2, Play, Trash2 } from "lucide-react";
+import { FileText, Heart, Link2, Trash2 } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
+import { TrackRow } from "../../components/ui/track-row";
+import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
 
 type Favorite = {
   provider_track_id: string;
@@ -21,11 +22,6 @@ type ApiResult = { items?: Favorite[]; error?: string; session?: { access_token?
 type TrackResult = { items?: PlayerTrack[]; error?: string };
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
-function duration(seconds: number | null) {
-  if (!seconds) return "Duration unavailable";
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
-
 export default function FavoritesPage() {
   const { t } = useLanguage();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
@@ -37,7 +33,7 @@ export default function FavoritesPage() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${API}/api/v1/auth/refresh`, { method: "POST", credentials: "include" })
+    fetch(`/api/auth/refresh`, { method: "POST", credentials: "include" })
       .then(async (response) => response.ok ? response.json() as Promise<ApiResult> : null)
       .then(async (result) => {
         const accessToken = result?.session?.access_token;
@@ -95,32 +91,72 @@ export default function FavoritesPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-36 md:px-8">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-4"><Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={17}/> SONORA</Link><Link href="/history" className="text-sm text-slate-400 hover:text-white">{t("Listening history")}</Link></div>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> {t("FAVORITES")}</span>
-      </header>
-      <section className="mt-10 rounded-[2rem] border border-rose-300/15 bg-gradient-to-br from-[#352033] via-[#1c1725] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-rose-200"><Heart size={13}/> {t("Your saved music")}</p>
-        <h1 className="mt-4 text-3xl font-semibold md:text-5xl">{t("Keep the good ones close.")}</h1>
-        <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">{t("Jamendo tracks you save are stored in your SONORA account with their original source and license details.")}</p>
+    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-6 pb-36 md:px-8">
+      <section className="panel-hero mt-6 px-6 py-8 md:px-10 md:py-11">
+        <p className="t-eyebrow flex items-center gap-2 text-rose-200"><Heart size={13} /> {t("Your saved music")}</p>
+        <h1 className="t-display mt-4">{t("Keep the good ones close.")}</h1>
+        <p className="t-meta mt-3 max-w-xl leading-6">{t("Tracks you save are stored in your SONORA account with their original source and license details.")}</p>
       </section>
-      {loading ? <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading your favorites…")}</div> : !token ? (
-        <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-7"><h2 className="text-xl font-semibold">{t("Sign in to see your saved tracks.")}</h2><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in or create account")}</Link></section>
+
+      {loading ? <div className="mt-8"><RowsSkeleton count={5} /></div> : !token ? (
+        <div className="mt-8">
+          <StateBlock
+            icon={Heart}
+            title={t("Sign in to see your saved tracks.")}
+            body={t("Tracks you save are stored in your SONORA account with their original source and license details.")}
+            actionHref="/auth"
+            actionLabel={t("Sign in or create account")}
+          />
+        </div>
       ) : items.length === 0 ? (
-        <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><Music2 className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">{t("Your favorites shelf is empty.")}</p><p className="mt-1 text-sm text-slate-500">{t("Save a track from Discover and it will appear here.")}</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Explore music")}</Link></section>
+        <div className="mt-8">
+          <StateBlock
+            icon={Heart}
+            tone="neutral"
+            title={t("Your favorites shelf is empty.")}
+            body={t("Save a track from Discover and it will appear here.")}
+            actionHref="/discover"
+            actionLabel={t("Explore music")}
+          />
+        </div>
       ) : (
-        <section className="mt-8 space-y-3">
-          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-rose-300">{t("Your collection")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Saved tracks")}</h2></div><span className="text-xs text-slate-500">{items.length} tracks</span></div>
-          {items.map((item) => <article key={item.provider_track_id} className="flex items-center gap-4 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
-            {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-16 w-16 rounded-xl object-cover"/> : <div className="grid h-16 w-16 place-items-center rounded-xl bg-violet-300/10"><Music2 className="text-violet-200"/></div>}
-            <div className="min-w-0 flex-1"><h3 className="truncate font-medium">{item.title}</h3><p className="mt-1 truncate text-sm text-slate-400">{item.artist_name}</p><p className="mt-1 text-xs text-slate-500">{item.album_name || "Independent release"} · {duration(item.duration_seconds)}</p><div className="mt-2 flex gap-3 text-xs text-slate-400"><a href={item.license_url} target="_blank" rel="noreferrer" className="hover:text-white">{t("License")}</a><a href={item.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-white">{t("Jamendo")} <ExternalLink size={11}/></a></div></div>
-            <button type="button" onClick={() => void startFavorite(item)} disabled={startingTrack === item.provider_track_id} aria-label={currentTrack?.id === item.provider_track_id && isPlaying ? `Pause ${item.title}` : `Play ${item.title}`} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10 disabled:opacity-40">{startingTrack === item.provider_track_id ? <LoaderCircle size={17} className="animate-spin"/> : <Play size={17} fill="currentColor"/>}</button>
-            <button type="button" onClick={() => void removeFavorite(item.provider_track_id)} aria-label={`Remove ${item.title} from favorites`} className="rounded-lg p-2 text-slate-500 transition hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={17}/></button>
-          </article>)}
+        <section className="mt-8" aria-labelledby="favorites-heading">
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <p className="t-eyebrow">{t("Your collection")}</p>
+              <h2 id="favorites-heading" className="t-h2 mt-1">{t("Saved tracks")}</h2>
+            </div>
+            <span className="t-meta">{items.length} {t("tracks")}</span>
+          </div>
+          <div className="min-w-0 space-y-0.5">
+            {items.map((item) => (
+              <TrackRow
+                key={item.provider_track_id}
+                track={{
+                  id: item.provider_track_id,
+                  title: item.title,
+                  artist: item.artist_name,
+                  artworkUrl: item.artwork_url,
+                  durationSeconds: item.duration_seconds
+                }}
+                isCurrent={currentTrack?.id === item.provider_track_id}
+                isPlaying={isPlaying}
+                busy={startingTrack === item.provider_track_id}
+                meta={<>{item.artist_name}{item.album_name ? ` · ${item.album_name}` : ""}</>}
+                onPlay={() => void startFavorite(item)}
+                trailing={
+                  <>
+                    <a href={item.license_url} target="_blank" rel="noreferrer" aria-label={t("Read license terms")} className="btn-icon hidden sm:grid"><FileText size={16} /></a>
+                    <a href={item.source_url} target="_blank" rel="noreferrer" aria-label={t("Open track page")} className="btn-icon hidden sm:grid"><Link2 size={16} /></a>
+                    <button type="button" onClick={() => void removeFavorite(item.provider_track_id)} aria-label={`${t("Remove from favorites")}: ${item.title}`} className="btn-icon hover:!text-rose-200"><Trash2 size={16} /></button>
+                  </>
+                }
+              />
+            ))}
+          </div>
         </section>
       )}
-      {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
+      {error && <div className="mt-6"><ErrorBlock title={t("Could not load your favorites.")} body={error} retryLabel={t("Try again")} onRetry={() => window.location.reload()} /></div>}
     </main>
   );
 }

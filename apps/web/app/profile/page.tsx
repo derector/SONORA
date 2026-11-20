@@ -68,9 +68,9 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl px-4 py-8 pb-16 md:px-8">
-      <Link href="/" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={16}/>{t("Back to SONORA")}</Link>
+      
       <div className="mt-8 grid gap-5 lg:grid-cols-[260px_1fr]">
-        <aside className="h-fit rounded-[2rem] border border-white/10 bg-white/[0.025] p-5">
+        <aside className="surface h-fit p-5">
           <div className="flex items-center gap-3">
             {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-12 w-12 rounded-2xl object-cover"/> : <span className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-300/15 text-lg text-violet-100">{initial}</span>}
             <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.displayName || user.username}</p><p className="truncate text-xs text-slate-500">@{user.username}</p></div>
@@ -84,10 +84,10 @@ export default function ProfilePage() {
         </aside>
 
         <section className="space-y-5">
-          <div className="rounded-[2rem] border border-white/10 bg-[#11111b]/90 p-6 sm:p-8">
+          <div className="rounded-panel border border-white/10 bg-panel/90 p-6 sm:p-8">
             <div className="flex items-center gap-3"><ShieldCheck className="text-emerald-200" size={22}/><div><h1 className="text-2xl font-semibold">{t("Your profile")}</h1><p className="mt-1 text-sm text-slate-400">{t("Manage your SONORA identity and account details.")}</p></div></div>
             <div id="profile-details" className="mt-8 flex flex-col gap-5 border-b border-white/10 pb-7 sm:flex-row sm:items-center">
-              {user.avatarUrl ? <img src={user.avatarUrl} alt={t("Profile avatar")} className="h-24 w-24 rounded-[1.75rem] border border-white/10 object-cover"/> : <div className="grid h-24 w-24 place-items-center rounded-[1.75rem] border border-white/10 bg-violet-300/10 text-3xl text-violet-100">{initial}</div>}
+              {user.avatarUrl ? <img src={user.avatarUrl} alt={t("Profile avatar")} className="h-24 w-24 rounded-panel border border-white/10 object-cover"/> : <div className="grid h-24 w-24 place-items-center rounded-panel border border-white/10 bg-violet-300/10 text-3xl text-violet-100">{initial}</div>}
               <div className="flex-1"><h2 className="font-medium">{t("Profile photo")}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{t("JPG, PNG or WebP. Maximum size: 2 MB.")}</p><label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-medium hover:bg-white/10">{uploading ? <LoaderCircle className="animate-spin" size={15}/> : <Camera size={15}/>} {uploading ? t("Uploading…") : t("Change avatar")}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading} onChange={changeAvatar}/></label></div>
             </div>
             <form onSubmit={save} className="mt-7 space-y-5">
@@ -100,7 +100,7 @@ export default function ProfilePage() {
             {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
           </div>
 
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.025] p-6 sm:p-8">
+          <div className="surface p-6 sm:p-8">
             <h2 className="font-semibold">{t("Account security")}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-400">{t("Your session is restored from a secure HttpOnly cookie. Access tokens are refreshed automatically while you use SONORA and when you return to the site.")}</p>
             <div className="mt-4 flex items-center gap-2 text-xs text-emerald-200"><span className="h-2 w-2 rounded-full bg-emerald-300"/>{t("Account session active")}</div>
