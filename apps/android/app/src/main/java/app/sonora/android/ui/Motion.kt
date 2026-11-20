@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlin.math.abs
 
 // ── Brand tokens for the motion layer ───────────────────────────────────────────────
 val Violet = Color(0xFFA78BFA)
@@ -358,6 +359,75 @@ fun SeekBar(
                 .background(Color(0xFFF5F6FA))
         )
     }
+}
+
+/** Gradient brand tile used behind the splash/empty states, matching the icon artwork. */
+/**
+ * Swipe-down-to-dismiss, for the mini player.
+ *
+ * The view follows the finger in translationY while its alpha falls off with the same
+ * drag, so the gesture reads as "grabbed, not fading". A vertical pull past 40% of the
+ * height releases the view: it accelerates off-screen, [onDismiss] fires, and the offset
+ * resets for whatever content is drawn next. Anything shorter springs back to rest. A
+ * plain tap is never claimed: only movement past the touch slop steals the gesture from
+ * the row's own clickable, so the mini player still opens the full screen on tap.
+ */
+@Composable
+fun Modifier.swipeDownToDismiss(
+    enabled: Boolean = true,
+    onDismiss: () -> Unit
+): Modifier {
+    val motion = rememberMotionEnabled()
+    // The gesture body itself never suspends: `awaitEachGesture` is a refined suspend
+    // scope where Animatable calls are not allowed. Live drag goes into plain state and
+    // follows the finger through snap(); the release springs back via animateFloatAsState
+    // with a spring spec armed only while settling.
+    var dragPx by remember { mutableFloatStateOf(0f) }
+    var settling by remember { mutableStateOf(false) }
+    var heightPx by remember { mutableFloatStateOf(0f) }
+    val callback by rememberUpdatedState(onDismiss)
+    val shown by animateFloatAsState(
+        targetValue = dragPx,
+        animationSpec = if (settling && motion) spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMedium) else snap(),
+        label = "swipe-dismiss"
+    )
+    LaunchedEffect(shown, settling) {
+        if (settling && shown < 0.5f) settling = false
+    }
+    return this
+        .graphicsLayer {
+            val h = heightPx.coerceAtLeast(1f)
+            translationY = shown
+            alpha = (1f - 1.5f * (shown / h)).coerceIn(0.35f, 1f)
+        }
+        .onSizeChanged { heightPx = it.height.toFloat() }
+        .pointerInput(enabled, motion) {
+            awaitEachGesture {
+                if (!enabled) return@awaitEachGesture
+                val down = awaitFirstDown(requireUnconsumed = false)
+                var claimed = false
+                var dy = 0f
+                while (true) {
+                    val event = awaitPointerEvent()
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    dy = change.position.y - down.position.y
+                    if (!claimed && abs(dy) > viewConfiguration.touchSlop) claimed = true
+                    if (claimed && change.pressed) {
+                        dragPx = dy.coerceAtLeast(0f)
+                        change.consume()
+                    }
+                    if (!change.pressed) break
+                }
+                if (claimed) {
+                    val threshold = heightPx * 0.4f
+                    settling = true
+                    if (dragPx > threshold && heightPx > 0f) {
+                        callback()
+                    }
+                    dragPx = 0f
+                }
+            }
+        }
 }
 
 /** Gradient brand tile used behind the splash/empty states, matching the icon artwork. */

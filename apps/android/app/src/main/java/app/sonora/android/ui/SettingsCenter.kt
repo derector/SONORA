@@ -194,33 +194,21 @@ fun SettingsCenter(
                         when (current) {
                             "playback" -> {
                                 ToggleRow(
-                                    0, Icons.Default.PlayCircleFilled, "Играть без пауз",
-                                    "Когда очередь дойдёт до конца, SONORA подставит следующие треки из подборки.",
+                                    0, Icons.Default.PlayCircleFilled, "Повторять очередь",
+                                    "После последнего трека воспроизведение начнётся с начала очереди.",
                                     nonStop
                                 ) {
                                     nonStop = it
                                     SonoraPrefs.setBool(context, SonoraPrefs.NON_STOP, it)
                                     onNonStopChanged(it)
                                 }
-                                QualityRow(1, "Качество по Wi-Fi", qualityWifi) {
-                                    qualityWifi = it
-                                    SonoraPrefs.setInt(context, SonoraPrefs.QUALITY_WIFI, it)
-                                    onQualityChanged(SonoraPrefs.qualityKbps(context, cellular = false))
-                                }
-                                QualityRow(2, "Качество в мобильной сети", qualityCellular) {
-                                    qualityCellular = it
-                                    SonoraPrefs.setInt(context, SonoraPrefs.QUALITY_CELLULAR, it)
-                                    onQualityChanged(SonoraPrefs.qualityKbps(context, cellular = true))
-                                }
-                                NoteRow(
-                                    "Экономия трафика ограничивает оба значения 96 кбит/с — она выше этого выбора."
-                                )
+                                NoteRow("Качество аудио пока определяется доступным файлом. Выбор битрейта появится, когда сервер предоставит реальные варианты потока.")
                             }
 
                             "offline" -> {
                                 ToggleRow(
                                     0, Icons.Default.CloudOff, "Экономить трафик",
-                                    "Стримы в 96 кбит/с, обложки в уменьшенном размере, загрузки только по Wi-Fi.",
+                                    "Новые загрузки ждут нетарифицируемую сеть. Битрейт потоков пока не меняется.",
                                     saver
                                 ) {
                                     saver = it
@@ -230,7 +218,7 @@ fun SettingsCenter(
                                 ToggleRow(
                                     1, Icons.Default.Download, "Скачивать через мобильные сети",
                                     if (cellularDownloads) "Загрузки разрешены в любой сети."
-                                    else "Очередь загрузок ждёт Wi-Fi — трафик не тратится.",
+                                    else "Новые загрузки ждут нетарифицируемую сеть.",
                                     cellularDownloads
                                 ) {
                                     cellularDownloads = it
@@ -420,7 +408,7 @@ private fun RootPage(
     )
     ValueRow(
         1, Icons.Default.PlayCircleFilled, "Воспроизведение",
-        if (nonStop) "Без пауз" else "По очереди",
+        if (nonStop) "Повтор очереди" else "Без повтора",
         "Порядок очереди и качество звука",
         onClick = { onOpen("playback") }
     )

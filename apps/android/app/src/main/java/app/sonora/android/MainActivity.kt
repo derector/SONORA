@@ -11,8 +11,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +44,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -68,6 +75,18 @@ import app.sonora.android.ota.OtaSession
 import app.sonora.android.ota.OtaUpdate
 import app.sonora.android.ota.ReleaseInfo
 import app.sonora.android.ota.UpdateSheet
+import app.sonora.android.ui.EaseOutBrand
+import app.sonora.android.ui.MotionSettings
+import app.sonora.android.ui.NavTab
+import app.sonora.android.ui.NavTabs
+import app.sonora.android.ui.PlayPauseIcon
+import app.sonora.android.ui.ProfileCenter
+import app.sonora.android.ui.SettingsCenter
+import app.sonora.android.ui.SonoraBottomBar
+import app.sonora.android.ui.SonoraPrefs
+import app.sonora.android.ui.popOn
+import app.sonora.android.ui.staggerEnter
+import app.sonora.android.ui.swipeDownToDismiss
 
 private val Ink = Color(0xFF080910)
 private val Panel = Color(0xFF141522)
@@ -132,6 +151,44 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    // Mini player: a swipe-down hides the bar until the track changes or playback restarts.
+    var miniDismissed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(current?.let { "${it.provider}:${it.id}" }, isPlaying) { if (isPlaying) miniDismissed = false }
+    // Optimistic favourites set for the heart on the mini player; backed by the
+    // provider favourites API, rolled back when a call fails.
+    val likedIds = remember { mutableStateListOf<String>() }
+    var likeTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(authStep) {
+        likedIds.clear()
+        if (authStep == "signed") {
+            try {
+                likedIds.addAll(withContext(Dispatchers.IO) {
+                    SonoraApi.getProviderFavorites().map { "${it.provider}:${it.id}" }
+                })
+            } catch (_: Exception) { }
+        }
+    }
+    // Tab transitions slide in the direction of travel; selectTab computes it before
+    // changing `tab`, so the AnimatedContent spec reads a settled value.
+    var tabSwipeDirection by remember { mutableIntStateOf(1) }
+    fun selectTab(next: String) {
+        val order = NavTabs.map { it.key } + "Плеер"
+        val from = order.indexOf(tab).takeIf { it >= 0 } ?: 0
+        val to = order.indexOf(next).takeIf { it >= 0 } ?: from
+        if (to != from) tabSwipeDirection = if (to > from) 1 else -1
+        tab = next
+    }
+    fun signOut() {
+        scope.launch {
+            busy = true
+            runCatching { withContext(Dispatchers.IO) { SonoraApi.logout() } }
+            email = SonoraApi.email()
+            authStep = "welcome"
+            likedIds.clear()
+            message = "Вы вышли из аккаунта"
+            busy = false
+        }
+    }
 
     // Update-flow state: the badge in Настройки, the open sheet, the install explainer.
     // It lives outside the composable (OtaSession) because the download, the notification
@@ -384,6 +441,32 @@ private fun SonoraApp() {
 
     fun play(track: Track) = startTrack(track)
 
+    fun toggleLike(track: Track) {
+        if (authStep != "signed") {
+            Toast.makeText(context, "Войдите, чтобы сохранять избранное", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val key = "${track.provider}:${track.id}"
+        val wasLiked = likedIds.remove(key)
+        if (!wasLiked) likedIds.add(key)
+        likeTick++
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (wasLiked) SonoraApi.removeProviderFavorite(track)
+                    else SonoraApi.addProviderFavorite(track)
+                }.isSuccess
+            }
+            if (!ok) {
+                if (wasLiked) {
+                    if (!likedIds.contains(key)) likedIds.add(key)
+                } else likedIds.remove(key)
+                likeTick++
+                Toast.makeText(context, "Не удалось сохранить избранное. Попробуйте снова", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     fun playOffline(track: OfflineTrack) {
         val localTrack = Track(
             id = track.id, providerTrackId = track.id, provider = track.provider,
@@ -402,18 +485,55 @@ private fun SonoraApp() {
             containerColor = Ink,
             bottomBar = {
                 Column {
-                    current?.let { MiniPlayer(it, onClick = { tab = "Плеер" }, onPlay = { if (isPlaying) controller?.pause() else controller?.play() }, playing = controller?.isPlaying == true) }
-                    NavigationBar(containerColor = Color(0xFF11121D), contentColor = Lime, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        listOf("Главная" to Icons.Default.Home, "Поиск" to Icons.Default.Search, "Медиатека" to Icons.Default.LibraryMusic, "Загрузки" to Icons.Default.Download, "Настройки" to Icons.Default.Settings, "Профиль" to Icons.Default.Person).forEach { (name, icon) ->
-                            NavigationBarItem(selected = tab == name, onClick = { tab = name }, icon = { Icon(icon, null) }, label = { Text(name, fontSize = 10.sp) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime, indicatorColor = Color(0xFF33294E), unselectedIconColor = Muted, unselectedTextColor = Muted))
+                    // The mini player slides up when playback starts and can be swiped
+                    // down to dismiss; tapping it opens the full player again.
+                    AnimatedVisibility(
+                        visible = current != null && !miniDismissed,
+                        enter = slideInVertically(animationSpec = tween(MotionSettings.duration(260), easing = EaseOutBrand)) { it } +
+                            fadeIn(animationSpec = tween(MotionSettings.duration(200))),
+                        exit = fadeOut(animationSpec = tween(0)),
+                        label = "mini-player"
+                    ) {
+                        val track = current
+                        if (track != null) {
+                            MiniPlayer(
+                                track = track,
+                                playing = controller?.isPlaying == true,
+                                liked = likedIds.contains("${track.provider}:${track.id}"),
+                                likeTick = likeTick,
+                                onClick = { selectTab("Плеер") },
+                                onPlay = { if (isPlaying) controller?.pause() else controller?.play() },
+                                onLike = { toggleLike(track) },
+                                onDismiss = { miniDismissed = true }
+                            )
                         }
                     }
+                    SonoraBottomBar(
+                        tabs = NavTabs,
+                        selectedKey = tab,
+                        onSelect = { selectTab(it) }
+                    )
                 }
             }
         ) { padding ->
-            AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
+            AnimatedContent(
+                tab,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                transitionSpec = {
+                    if (MotionSettings.enabled) {
+                        val dir = tabSwipeDirection
+                        (slideInHorizontally(animationSpec = tween(220, easing = EaseOutBrand)) { w -> dir * w / 5 } +
+                            fadeIn(animationSpec = tween(220))) togetherWith
+                            (slideOutHorizontally(animationSpec = tween(220, easing = EaseOutBrand)) { w -> -dir * w / 5 } +
+                                fadeOut(animationSpec = tween(160)))
+                    } else {
+                        fadeIn(animationSpec = tween(0)) togetherWith fadeOut(animationSpec = tween(0))
+                    }
+                },
+                label = "tab"
+            ) { screen ->
                 when (screen) {
-                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { tab = "Плеер" }, { tab = "Поиск" })
+                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") })
                     "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
                         val term = query.trim()
                         if (term.isBlank()) {
@@ -432,7 +552,7 @@ private fun SonoraApp() {
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
-                        openProfile = { tab = "Профиль" },
+                        openProfile = { selectTab("Профиль") },
                         play = ::play
                     )
                     "Загрузки" -> DownloadsScreen(onPlay = ::playOffline, onDelete = { item ->
@@ -441,15 +561,37 @@ private fun SonoraApp() {
                             OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
-                    "Настройки" -> SettingsScreen(
+                    "Настройки" -> SettingsCenter(
                         update = ota.release,
                         checking = ota.checking,
                         lastCheckedAt = OtaUpdate.lastCheckedAt(context),
                         notificationsAllowed = OtaNotifications.canPost(context),
+                        signedIn = authStep == "signed",
+                        email = email,
                         onCheck = { OtaSession.checkNow(context) },
-                        onOpenUpdate = { OtaSession.openSheet(context) }
+                        onOpenUpdate = { OtaSession.openSheet(context) },
+                        onOpenProfile = { selectTab("Профиль") },
+                        onSignOut = { signOut() },
+                        // Live effects: SettingsCenter stores the switch, these callbacks
+                        // change behaviour while the app is running.
+                        onNonStopChanged = { enabled ->
+                            controller?.repeatMode =
+                                if (enabled) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+                        },
+                        onQualityChanged = { _ ->
+                            SonoraApi.qualityKbps = SonoraPrefs.qualityKbps(context, cellular = false)
+                        }
                     )
-                    "Профиль" -> ProfileScreen(authStep, authMode, { authMode = it }, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
+                    // Auth gate: the account surface is only shown once a session exists;
+                    // before that the sign-in form stays as the entry point.
+                    "Профиль" -> if (authStep == "signed") {
+                        ProfileCenter(
+                            email = email,
+                            onLogout = { signOut() },
+                            onOpenLibrary = { selectTab("Медиатека") },
+                            play = ::play
+                        )
+                    } else ProfileScreen(authStep, authMode, { authMode = it }, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
                         onRegister = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.requestOtp(email, username, displayName, true) }; authStep = "verify"; message = "Код отправлен на почту" } catch (e: Exception) { message = e.message ?: "Ошибка регистрации" }; busy = false }
                         },
@@ -515,98 +657,6 @@ private fun SonoraApp() {
     }
 }
 
-/**
- * The settings surface of the app. The update row is the manual counterpart of the
- * background check: the same code path, an immediate answer, and a badge whenever a newer
- * release is known — including the case where notifications are switched off and no
- * notification could have been posted at all.
- */
-@Composable
-private fun SettingsScreen(
-    update: ReleaseInfo?,
-    checking: Boolean,
-    lastCheckedAt: Long,
-    notificationsAllowed: Boolean,
-    onCheck: () -> Unit,
-    onOpenUpdate: () -> Unit
-) {
-    Column(Modifier.fillMaxSize().background(Ink).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Настройки", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("Версия", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(BuildConfig.VERSION_NAME, color = Muted, fontSize = 12.sp)
-            }
-            Icon(Icons.Default.Info, contentDescription = null, tint = Muted)
-        }
-        Text("Обновления", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(34.dp).clip(CircleShape)
-                        .background(if (update != null) Color(0xFF33294E) else Color(0xFF1D1F2E)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = if (update != null) Lime else Muted, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (update != null) "Доступно обновление ${'$'}{update.versionLabel}" else "Обновления SONORA",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        when {
-                            checking -> "Проверяем…"
-                            update != null -> "${'$'}{update.apkSizeLabel} · установка внутри приложения"
-                            lastCheckedAt == 0L -> "Проверка ещё не выполнялась"
-                            else -> "Последняя проверка: " + java.text.SimpleDateFormat(
-                                "dd.MM HH:mm", java.util.Locale.getDefault()
-                            ).format(java.util.Date(lastCheckedAt))
-                        },
-                        color = Muted,
-                        fontSize = 12.sp
-                    )
-                }
-                if (checking) CircularProgressIndicator(Modifier.size(18.dp), color = Lime, strokeWidth = 2.dp)
-                else if (update != null) Badge(containerColor = Lime) { Text("NEW", color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Black) }
-            }
-            if (update != null) {
-                Button(
-                    onClick = onOpenUpdate,
-                    colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Открыть обновление") }
-            }
-            OutlinedButton(onClick = onCheck, enabled = !checking, modifier = Modifier.fillMaxWidth()) {
-                Text(if (update == null) "Проверить обновления" else "Проверить ещё раз")
-            }
-            if (!notificationsAllowed) {
-                Text(
-                    "Уведомления выключены, поэтому о новом релизе расскажет только эта строка.",
-                    color = Muted,
-                    fontSize = 11.sp
-                )
-            }
-        }
-        Text(
-            "SONORA сама ищет новые релизы примерно раз в 12 часов по Wi-Fi и предлагает " +
-                "обновиться прямо здесь — без сайта и без сторонних сервисов.",
-            color = Muted,
-            fontSize = 12.sp,
-            lineHeight = 17.sp
-        )
-    }
-}
 
 @Composable
 private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
@@ -667,7 +717,7 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
             }
         }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(tracks, key = { it.provider + ":" + it.id }) { track -> TrackRow(track, { play(track) }, openPlayer) }
+            itemsIndexed(tracks, key = { _, track -> track.provider + ":" + track.id }) { index, track -> TrackRow(track, index, { play(track) }, openPlayer) }
         }
     }
 }
@@ -689,12 +739,16 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(tracks, key = { it.provider + ":" + it.id }) { TrackRow(it, { play(it) }, {}) } }
+        LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            itemsIndexed(items = tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
+                TrackRow(track, index, { play(track) }, {})
+            }
+        }
     }
 }
 
 @Composable
-private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
+private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () -> Unit) {
     val context = LocalContext.current
     val workManager = remember(context) { WorkManager.getInstance(context) }
     val workName = "offline-" + track.provider + "-" + track.id
@@ -711,7 +765,11 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
 
     val enqueueDownload = {
         val request = OneTimeWorkRequestBuilder<TrackDownloadWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(
+                if (SonoraPrefs.bool(context, SonoraPrefs.DOWNLOAD_ON_CELLULAR, false) &&
+                    !SonoraPrefs.bool(context, SonoraPrefs.DATA_SAVER, false)) NetworkType.CONNECTED
+                else NetworkType.UNMETERED
+            ).build())
             .setInputData(workDataOf(
                 "url" to track.downloadUrl,
                 "id" to track.id,
@@ -733,7 +791,11 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     // delivered (for example a cleartext stream URL rejected by the manifest policy) are
     // labelled and tinted as unavailable instead of offering a playback attempt.
     val available = track.playable && !track.audioUrl.isNullOrBlank()
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().staggerEnter(index)
+            .clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -770,14 +832,43 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
 }
 
 @Composable
-private fun MiniPlayer(track: Track, onClick: () -> Unit, onPlay: () -> Unit, playing: Boolean) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 5.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFF171827)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun MiniPlayer(
+    track: Track,
+    playing: Boolean,
+    liked: Boolean,
+    likeTick: Int,
+    onClick: () -> Unit,
+    onPlay: () -> Unit,
+    onLike: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 5.dp)
+            // Declared before the clickable in the chain, so a vertical pull steals the
+            // gesture and dismisses; a plain tap still opens the full player.
+            .swipeDownToDismiss(onDismiss = onDismiss)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF171827))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         AsyncImage(track.artworkUrl, null, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
             Text(track.title, color = Color.White, maxLines = 1, fontWeight = FontWeight.SemiBold)
             Text(track.artist, color = Muted, maxLines = 1, fontSize = 11.sp)
         }
-        IconButton(onClick = onPlay) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = Lime) }
+        IconButton(onClick = onLike) {
+            Icon(
+                if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                if (liked) "Убрать из избранного" else "В избранное",
+                tint = if (liked) app.sonora.android.ui.Violet else Muted,
+                modifier = Modifier.size(22.dp).popOn(likeTick)
+            )
+        }
+        IconButton(onClick = onPlay) { PlayPauseIcon(playing = playing, tint = Lime) }
     }
 }
 
@@ -980,8 +1071,8 @@ private fun FullPlayer(
                 controller?.shuffleModeEnabled = shuffle
             }) { Icon(Icons.Default.Shuffle, "Перемешать", tint = if (shuffle) Lime else Muted) }
             IconButton(onClick = previous) { Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(38.dp)) }
-            FilledIconButton(onClick = { if (playing) pause() else resume() }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.size(68.dp)) { Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, modifier = Modifier.size(34.dp)) }
-            IconButton(onClick = next) { Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(38.dp)) }
+            FilledIconButton(onClick = { if (playing) pause() else resume() }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Lime, contentColor = Ink), modifier = Modifier.size(68.dp)) { PlayPauseIcon(playing = playing, size = 34.dp, tint = Ink) }
+           IconButton(onClick = next) { Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(38.dp)) }
             IconButton(onClick = {
                 repeat = if (repeat == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
                 controller?.repeatMode = repeat
