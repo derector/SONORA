@@ -1,11 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, AudioLines, Check, ExternalLink, Music2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AudioLines, Check, ExternalLink, Music2, Snowflake } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 
 export default function SettingsPage() {
   const { language, setLanguage, t } = useLanguage();
+  const [seasonalEffects, setSeasonalEffects] = useState(true);
+
+  useEffect(() => {
+    try { setSeasonalEffects(window.localStorage.getItem("sonora-seasonal-effects") !== "off"); } catch {}
+  }, []);
+
+  function toggleSeasonalEffects() {
+    setSeasonalEffects((current) => {
+      const next = !current;
+      try { window.localStorage.setItem("sonora-seasonal-effects", next ? "on" : "off"); } catch {}
+      return next;
+    });
+  }
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-8 md:px-8">
       
@@ -73,6 +87,20 @@ export default function SettingsPage() {
             </button>
           </div>
           <p className="mt-4 text-xs text-slate-500">{t("Your language choice is saved on this device.")}</p>
+        </div>
+        <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+          <div className="flex items-center gap-2">
+            <Snowflake size={18} className="text-violet-200" />
+            <h2 className="text-base font-semibold">{t("Seasonal effects")}</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{t("Snow, rain and falling leaves follow the calendar. Nothing animates when your device asks for reduced motion.")}</p>
+          <button type="button" role="switch" aria-checked={seasonalEffects} onClick={toggleSeasonalEffects} className="mt-5 flex w-full items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm transition hover:bg-white/5">
+            <span className="font-medium">{seasonalEffects ? t("On") : t("Off")}</span>
+            <span className={`relative h-6 w-11 rounded-full transition ${seasonalEffects ? "bg-violet-300/70" : "bg-white/15"}`}>
+              <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${seasonalEffects ? "left-[22px]" : "left-0.5"}`} />
+            </span>
+          </button>
+          <p className="mt-3 text-xs text-slate-500">{t("This choice is saved on this device only.")}</p>
         </div>
       </section>
     </main>
