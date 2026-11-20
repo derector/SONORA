@@ -87,7 +87,7 @@ export default function PlaylistDetailPage() {
         ? (data.tracks ?? []).filter((item) => item.provider.toLowerCase() === "audius" && item.playable === true)
         : (data.items ?? []);
       setResults(matches);
-      if (!matches.length) setNotice(searchProvider === "audius" ? "No playable Audius matches were found." : "No licensed Jamendo matches were found.");
+      if (!matches.length) setNotice(t("No playable matches were found."));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Music search is unavailable.");
     } finally {
@@ -143,7 +143,7 @@ export default function PlaylistDetailPage() {
         return data.items[0];
       };
       const current = await loadSavedTrack(track);
-      if (!current) throw new Error("This track is no longer available.");
+      if (!current) throw new Error(t("This track is no longer available."));
       const queueTracks: PlayerTrack[] = [];
       for (const item of queue) {
         const loaded = await loadSavedTrack(item);
@@ -171,11 +171,11 @@ export default function PlaylistDetailPage() {
             <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your playlist")}</p>
             <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{playlist.title}</h1>
             <p className="mt-3 text-sm text-slate-300">{playlist.description || t("Your music, collected in one place.")}</p>
-            <p className="mt-5 text-xs text-slate-500">{saved.length} {t("tracks")} · {t("Jamendo and Audius catalogs")}</p>
+            <p className="mt-5 text-xs text-slate-500">{saved.length} {t("tracks")} · {t("Licensed catalog tracks")}</p>
           </section>
           <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-5 md:p-6">
             <h2 className="flex items-center gap-2 font-semibold"><Search size={17} className="text-violet-200"/> {t("Find tracks to add")}</h2>
-            <div className="mt-4 flex gap-2"><button type="button" onClick={() => { setSearchProvider("jamendo"); setResults([]); }} aria-pressed={searchProvider === "jamendo"} className={searchProvider === "jamendo" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Jamendo</button><button type="button" onClick={() => { setSearchProvider("audius"); setResults([]); }} aria-pressed={searchProvider === "audius"} className={searchProvider === "audius" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>Audius</button></div>
+            <div className="mt-4 flex gap-2"><button type="button" onClick={() => { setSearchProvider("jamendo"); setResults([]); }} aria-pressed={searchProvider === "jamendo"} className={searchProvider === "jamendo" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>{t("Collections")}</button><button type="button" onClick={() => { setSearchProvider("audius"); setResults([]); }} aria-pressed={searchProvider === "audius"} className={searchProvider === "audius" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>{t("Creator uploads")}</button></div>
             <form onSubmit={searchTracks} className="mt-4 flex gap-2">
               <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder={t("Search by track or artist")} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
               <button disabled={searching || query.trim().length < 2} className="inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{searching ? <LoaderCircle className="animate-spin" size={16}/> : <Search size={16}/>} {t("Search")}</button>
@@ -183,7 +183,7 @@ export default function PlaylistDetailPage() {
             {results.length > 0 && <div className="mt-4 divide-y divide-white/[0.06]">
               {results.map((track) => <div key={track.id} className="flex items-center gap-3 py-3">
                 {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-11 w-11 rounded-lg object-cover"/> : <div className="grid h-11 w-11 place-items-center rounded-lg bg-violet-300/10"><Music2 size={18}/></div>}
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist} · {track.provider}</p></div>
+                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist}{track.durationSeconds ? " · " + timeLabel(track.durationSeconds) : ""}</p></div>
                 <button type="button" onClick={() => void addTrack(track)} disabled={savingId === track.id || saved.some((item) => item.provider === track.provider.toLowerCase() && item.provider_track_id === (track.providerTrackId ?? track.id.replace(/^audius:/, "")))} className="rounded-lg border border-violet-200/20 p-2 text-violet-200 hover:bg-violet-200/10 disabled:opacity-40" aria-label={t("Add track")} >{savingId === track.id ? <LoaderCircle size={16} className="animate-spin"/> : <Plus size={16}/>}</button>
               </div>)}
             </div>}
@@ -194,7 +194,7 @@ export default function PlaylistDetailPage() {
               <div className="mt-4 space-y-2">
                 {saved.map((track) => <article key={track.provider + track.provider_track_id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
                   {track.artwork_url ? <img src={track.artwork_url} alt="" className="h-12 w-12 rounded-xl object-cover"/> : <div className="grid h-12 w-12 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist_name} · {track.provider} · {track.duration_seconds ? timeLabel(track.duration_seconds) : ""}</p></div>
+                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist_name}{track.album_name ? " · " + track.album_name : ""} · {track.duration_seconds ? timeLabel(track.duration_seconds) : ""}</p></div>
                   <a href={track.source_url} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
                   <button type="button" onClick={() => void playSaved(track, saved)} aria-label={t("Play track")} className="rounded-lg p-2 text-violet-200 hover:bg-violet-200/10"><Play size={17} fill="currentColor"/></button>
                   <button type="button" onClick={() => void removeTrack(track)} aria-label={t("Remove track")} className="rounded-lg p-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button>

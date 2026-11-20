@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1,
   SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
@@ -29,6 +30,8 @@ type PlayerContextValue = {
 };
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+const PLAYER_STATE_KEY = "sonora-player-state";
+const PLAYER_STATE_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export function usePlayer() {
   const value = useContext(PlayerContext);
@@ -41,6 +44,15 @@ function timeLabel(value: number) {
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
 }
 
+// Attribution has exactly one visible home in the interface: the "About track"
+// row of the full player. Creative Commons URLs are shortened to their
+// recognizable code instead of being dumped on the user.
+function licenseLabel(licenseUrl: string) {
+  if (/publicdomain\/zero/i.test(licenseUrl)) return "CC0";
+  const match = /licenses\/([a-z-]+)\/([0-9.]+)/i.exec(licenseUrl);
+  return match ? `CC ${match[1].toUpperCase()} ${match[2]}` : "";
+}
+
 function mediaErrorMessage(code: number | undefined, t: (value: string) => string) {
   switch (code) {
     case 1: return t("Playback was interrupted. Press play to try again.");
@@ -51,12 +63,121 @@ function mediaErrorMessage(code: number | undefined, t: (value: string) => strin
   }
 }
 
+type JamendoItem = {
+  id?: string;
+  title?: string;
+  artist?: string;
+  album?: string | null;
+  durationSeconds?: number;
+  artworkUrl?: string | null;
+  audioUrl?: string;
+  licenseUrl?: string;
+  sourceUrl?: string;
+  available?: boolean;
+};
+type JamendoResolution =
+  | { status: "fresh"; item: JamendoItem }
+  | { status: "unavailable" }
+  | { status: "unknown" };
+
+function extraField(track: PlayerTrack, key: string) {
+  const value = (track as PlayerTrack & Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+// Catalog, search and history payloads use different id shapes ("jamendo:123",
+// a bare numeric id, or a share URL), so the numeric provider id is resolved
+// across all of them before the stream is refreshed.
+function jamendoIdOf(track: PlayerTrack) {
+  for (const value of [track.id, extraField(track, "providerTrackId"), track.sourceUrl, track.audioUrl]) {
+    if (!value) continue;
+    const prefixed = /^jamendo:(\d{1,24})$/i.exec(value)?.[1];
+    if (prefixed) return prefixed;
+    if (/^\d{1,24}$/.test(value)) return value;
+    const path = /(?:jamendo\.com\/(?:track|album)\/|download\/track\/)(\d{1,24})/i.exec(value)?.[1];
+    if (path) return path;
+  }
+  return "";
+}
+
+function isJamendoTrack(track: PlayerTrack) {
+  const provider = extraField(track, "provider").toLowerCase();
+  if (provider && provider !== "jamendo") return false;
+  if (/storage\.jamendo\.com/i.test(track.audioUrl || "")) return true;
+  return (provider === "jamendo" || /jamendo\.com/i.test(track.sourceUrl || "")) && jamendoIdOf(track).length > 0;
+}
+
+// Provider streams are short-lived signed URLs. Ask the API for a fresh one and
+// treat a confirmed miss as a real availability failure, not a playback error.
+async function resolveJamendoTrack(track: PlayerTrack): Promise<JamendoResolution> {
+  const jid = jamendoIdOf(track);
+  if (!jid || !API) return { status: "unknown" };
+  try {
+    const response = await fetch(`${API}/api/v1/providers/jamendo/tracks?id=${encodeURIComponent(jid)}`, { cache: "no-store" });
+    if (response.status === 404) return { status: "unavailable" };
+    if (!response.ok) return { status: "unknown" };
+    const data = await response.json() as { items?: JamendoItem[] };
+    const item = data.items?.[0];
+    // An empty payload means the catalog no longer serves this track at all.
+    if (!item || item.available === false) return { status: "unavailable" };
+    if (!item.audioUrl) return { status: "unknown" };
+    return { status: "fresh", item };
+  } catch {
+    // An API outage is not evidence that the track disappeared.
+    return { status: "unknown" };
+  }
+}
+
+// The fresh payload carries the signed stream and current metadata; the title
+// and artist already shown on screen stay untouched.
+function mergeJamendoItem(track: PlayerTrack, item: JamendoItem): PlayerTrack {
+  return {
+    ...track,
+    audioUrl: item.audioUrl || track.audioUrl,
+    album: item.album ?? track.album,
+    durationSeconds: item.durationSeconds || track.durationSeconds,
+    artworkUrl: item.artworkUrl ?? track.artworkUrl,
+    licenseUrl: item.licenseUrl || track.licenseUrl,
+    sourceUrl: item.sourceUrl || track.sourceUrl
+  };
+}
+
+function replaceTrack(items: PlayerTrack[], replacement: PlayerTrack, index: number) {
+  return items.map((item, itemIndex) => item.id === replacement.id || itemIndex === index ? replacement : item);
+}
+
+type StoredPlayerState = {
+  track: PlayerTrack;
+  queue: PlayerTrack[];
+  queueIndex: number;
+  currentTime: number;
+  savedAt: number;
+};
+
+function isPlayerTrack(value: unknown): value is PlayerTrack {
+  if (!value || typeof value !== "object") return false;
+  const track = value as Partial<PlayerTrack>;
+  return typeof track.id === "string" && typeof track.title === "string" && typeof track.audioUrl === "string";
+}
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
   const fallbackAttemptsRef = useRef<Set<string>>(new Set());
+  // Streams already re-resolved once this session, and tracks the source
+  // confirmed as gone. Both guards keep the failure chain from looping.
+  const refreshedRef = useRef<Set<string>>(new Set());
+  const skippedRef = useRef<Set<string>>(new Set());
+  const seekRef = useRef(0);
+  const queueRef = useRef<PlayerTrack[]>([]);
+  const queueIndexRef = useRef(0);
+  const lastStateSaveRef = useRef(0);
+  const persistAllowedRef = useRef(true);
+  const awaitingRestoreRef = useRef(false);
+  const restoreRef = useRef<{ track: PlayerTrack | null; time: number }>({ track: null, time: 0 });
+  const wasSignedInRef = useRef(false);
   const tokenRef = useRef("");
-  const { accessToken } = useAuth();
+  const { accessToken, isAuthenticated } = useAuth();
   const [currentTrack, setCurrentTrack] = useState<PlayerTrack | null>(null);
   const [queue, setQueue] = useState<PlayerTrack[]>([]);
   const [queueIndex, setQueueIndex] = useState(0);
@@ -70,6 +191,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
@@ -102,25 +224,48 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch { /* Listening history must never interrupt playback. */ }
   }
 
-  async function startTrack(track: PlayerTrack, index: number) {
+  // `skipResolve` is used by the stream-refresh retry, which already holds a
+  // freshly signed URL and must not ask the provider a second time.
+  // `resumeFrom` is the position a restored session jumps back to once the
+  // fresh stream reports its metadata.
+  async function startTrack(track: PlayerTrack, index: number, skipResolve = false, resumeFrom = 0) {
     const audio = audioRef.current;
     if (!audio) return;
-    if (!track.audioUrl || !/^https?:\/\//i.test(track.audioUrl)) {
+    let playable = track;
+    // Provider streams are signed and expire, so a Jamendo track is always
+    // re-resolved to a fresh URL just before it is handed to the element.
+    if (!skipResolve && isJamendoTrack(track)) {
+      const resolution = await resolveJamendoTrack(track);
+      if (resolution.status === "unavailable") {
+        await handleUnavailableTrack(track, index);
+        return;
+      }
+      if (resolution.status === "fresh") {
+        playable = mergeJamendoItem(track, resolution.item);
+        setQueue((items) => replaceTrack(items, playable, index));
+      }
+    }
+    if (!playable.audioUrl || !/^https?:\/\//i.test(playable.audioUrl)) {
       setPlaybackError(t("This result has no playable audio stream. Open the provider page for details."));
       setIsPlaying(false);
       setIsLoading(false);
       return;
     }
-    currentRef.current = track;
-    setCurrentTrack(track);
+    currentRef.current = playable;
+    setCurrentTrack(playable);
     setQueueIndex(index);
     setCurrentTime(0);
-    setDuration(track.durationSeconds || 0);
+    // A freshly started track owns its position from here on.
+    awaitingRestoreRef.current = false;
+    restoreRef.current = { track: playable, time: 0 };
+    seekRef.current = resumeFrom;
+    skippedRef.current.delete(playable.id);
+    setDuration(playable.durationSeconds || 0);
     setBuffered(0);
     setPlaybackError("");
     setIsLoading(true);
     audio.pause();
-    audio.src = track.audioUrl;
+    audio.src = playable.audioUrl;
     audio.load();
     try {
       await audio.play();
@@ -137,11 +282,32 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // A track the source no longer serves is reported honestly and the queue
+  // moves on once. The skipped set stops a chain of dead tracks from looping.
+  async function handleUnavailableTrack(track: PlayerTrack, index: number) {
+    const audio = audioRef.current;
+    if (audio) audio.pause();
+    skippedRef.current.add(track.id);
+    setCurrentTrack(track);
+    setQueueIndex(index);
+    setIsPlaying(false);
+    setIsLoading(false);
+    setPlaybackError(t("Original source became unavailable for this track."));
+    const nextIndex = index + 1;
+    const next = queueRef.current[nextIndex];
+    if (next && !skippedRef.current.has(next.id)) playAt(nextIndex, false);
+  }
+
+  useEffect(() => { queueRef.current = queue; }, [queue]);
+  useEffect(() => { queueIndexRef.current = queueIndex; }, [queueIndex]);
+
   function playTrack(track: PlayerTrack, nextQueue?: PlayerTrack[]) {
     const audio = audioRef.current;
     if (!audio) return;
     if (currentRef.current?.id === track.id) {
       if (audio.paused) {
+        // The visible track may still be the paused one from a previous visit.
+        if (awaitingRestoreRef.current) { resumeRestored(); return; }
         setPlaybackError("");
         setIsLoading(true);
         void audio.play().catch((error: unknown) => {
@@ -159,11 +325,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const selectedQueue = nextQueue?.length ? nextQueue : [track];
     const index = Math.max(0, selectedQueue.findIndex((item) => item.id === track.id));
     setQueue(selectedQueue);
+    queueRef.current = selectedQueue;
+    queueIndexRef.current = index;
     void startTrack(track, index);
   }
 
   function playAt(index: number, recordSkip = true) {
-    const track = queue[index];
+    // Read the mirror, not the state closure: an async fallback chain can be
+    // several renders behind the queue that is actually on screen.
+    const track = queueRef.current[index];
     const audio = audioRef.current;
     if (!track || !audio) return;
     if (recordSkip && currentRef.current && audio.currentTime > 0) {
@@ -199,6 +369,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const audio = audioRef.current;
     if (!audio || !currentRef.current) return;
     if (audio.paused) {
+      // A restored session is paused on purpose; its first resume goes through
+      // the normal start path so the stream URL is re-resolved first.
+      if (awaitingRestoreRef.current) { resumeRestored(); return; }
       setPlaybackError("");
       setIsLoading(true);
       void audio.play().catch((error: unknown) => {
@@ -210,19 +383,118 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } else audio.pause();
   }
 
+  // Only refs are read here, so the audio listeners and the pagehide handler
+  // can persist the session without re-binding on every render.
+  function persistState(force = false) {
+    const audio = audioRef.current;
+    const track = currentRef.current;
+    if (!audio || !track || !persistAllowedRef.current) return;
+    const now = Date.now();
+    if (!force && now - lastStateSaveRef.current < 5000) return;
+    lastStateSaveRef.current = now;
+    try {
+      const state: StoredPlayerState = {
+        track,
+        queue: queueRef.current,
+        queueIndex: queueIndexRef.current,
+        currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+        savedAt: now
+      };
+      localStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(state));
+    } catch { /* Private mode or a full quota must not break playback. */ }
+  }
+
+  function resumeRestored() {
+    const track = restoreRef.current.track ?? currentRef.current;
+    if (!track) return;
+    awaitingRestoreRef.current = false;
+    void startTrack(track, queueIndexRef.current, false, restoreRef.current.time);
+  }
+
+  useEffect(() => {
+    async function restore() {
+      const audio = audioRef.current;
+      if (!audio) return;
+      let raw: string | null = null;
+      try { raw = localStorage.getItem(PLAYER_STATE_KEY); } catch { return; }
+      if (!raw) return;
+      let state: StoredPlayerState | null = null;
+      try { state = JSON.parse(raw) as StoredPlayerState; } catch { state = null; }
+      if (!state || !isPlayerTrack(state.track) || typeof state.savedAt !== "number"
+        || Date.now() - state.savedAt > PLAYER_STATE_TTL) {
+        try { localStorage.removeItem(PLAYER_STATE_KEY); } catch {}
+        return;
+      }
+      const savedQueue = Array.isArray(state.queue) ? state.queue.filter(isPlayerTrack) : [];
+      const nextQueue = savedQueue.length ? savedQueue : [state.track];
+      const index = Math.min(Math.max(0, Number(state.queueIndex) || 0), nextQueue.length - 1);
+      const time = Math.max(0, Number(state.currentTime) || 0);
+      queueRef.current = nextQueue;
+      queueIndexRef.current = index;
+      restoreRef.current = { track: state.track, time };
+      awaitingRestoreRef.current = true;
+      currentRef.current = state.track;
+      // Metadata only: the browser blocks autoplay, so the restored track is
+      // presented paused and the URL is refreshed on the first Play press.
+      if (/^https?:\/\//i.test(state.track.audioUrl)) {
+        audio.src = state.track.audioUrl;
+        audio.load();
+      }
+      setQueue(nextQueue);
+      setQueueIndex(index);
+      setCurrentTrack(state.track);
+      setCurrentTime(time);
+      setDuration(state.track.durationSeconds || 0);
+    }
+    void restore();
+  }, []);
+
+  useEffect(() => {
+    const onHide = () => persistState(true);
+    const onVisibility = () => { if (document.visibilityState === "hidden") persistState(true); };
+    window.addEventListener("pagehide", onHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  // A signed-out device must not keep another account's listening position.
+  useEffect(() => {
+    if (wasSignedInRef.current && !isAuthenticated) {
+      persistAllowedRef.current = false;
+      awaitingRestoreRef.current = false;
+      restoreRef.current = { track: null, time: 0 };
+      try { localStorage.removeItem(PLAYER_STATE_KEY); } catch {}
+    }
+    if (isAuthenticated) persistAllowedRef.current = true;
+    wasSignedInRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const onPlay = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); const track = currentRef.current; if (track) void recordEvent(track, "play", audio.currentTime); };
     const onPlaying = () => { setIsPlaying(true); setIsLoading(false); setPlaybackError(""); };
-    const onPause = () => { setIsPlaying(false); setIsLoading(false); };
+    const onPause = () => { setIsPlaying(false); setIsLoading(false); persistState(true); };
     const onWaiting = () => { if (!audio.paused) setIsLoading(true); };
     const onCanPlay = () => setIsLoading(false);
-    const onTime = () => setCurrentTime(audio.currentTime || 0);
+    const onTime = () => {
+      setCurrentTime(audio.currentTime || 0);
+      if (!audio.paused) persistState();
+    };
     const onDuration = () => {
       const mediaDuration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 0;
       const metadataDuration = currentRef.current?.durationSeconds || 0;
       setDuration(mediaDuration || metadataDuration);
+      // A restored session jumps back to its saved position as soon as the
+      // fresh stream exposes real metadata, while staying paused.
+      const pending = seekRef.current;
+      if (pending > 0 && mediaDuration > 1 && pending < mediaDuration - 1) {
+        seekRef.current = 0;
+        try { audio.currentTime = pending; setCurrentTime(pending); } catch { /* Keep the stream start. */ }
+      }
     };
     const onProgress = () => {
       try {
@@ -240,13 +512,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       else if (repeatMode === "all" && queue.length) playAt(0, false);
       else setIsPlaying(false);
     };
-    const onError = () => {
-      setIsLoading(false); setIsPlaying(false);
-      const failedTrack = currentRef.current;
-      if (!failedTrack || fallbackAttemptsRef.current.has(failedTrack.id) || !API) {
-        setPlaybackError(mediaErrorMessage(audio.error?.code, t));
-        return;
-      }
+    const searchFallback = (failedTrack: PlayerTrack) => {
       fallbackAttemptsRef.current.add(failedTrack.id);
       const query = [failedTrack.title, failedTrack.artist].filter(Boolean).join(" ");
       void fetch(`${API}/api/v1/search/music?${new URLSearchParams({ q: query, type: "tracks", limit: "20" }).toString()}`)
@@ -280,11 +546,64 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             artworkUrl: candidate.artworkUrl ?? failedTrack.artworkUrl,
             audioUrl: candidate.audioUrl, licenseUrl: candidate.licenseUrl ?? "", sourceUrl: candidate.sourceUrl ?? ""
           };
-          setQueue((items) => items.map((item, index) => index === queueIndex ? resolved : item));
+          queueRef.current = replaceTrack(queueRef.current, resolved, queueIndex);
+          setQueue(queueRef.current);
           setPlaybackError(t("Original source unavailable. Playing a matching track from another playable catalog."));
           void startTrack(resolved, queueIndex);
         })
         .catch(() => setPlaybackError(mediaErrorMessage(audio.error?.code, t)));
+    };
+    const onError = () => {
+      setIsLoading(false); setIsPlaying(false);
+      const failedTrack = currentRef.current;
+      if (!failedTrack || !API) {
+        setPlaybackError(mediaErrorMessage(audio.error?.code, t));
+        return;
+      }
+      // A restored URL is often expired before the user ever presses Play.
+      // Refresh it quietly and stay paused instead of starting audio.
+      if (awaitingRestoreRef.current) {
+        void resolveJamendoTrack(failedTrack).then((resolution) => {
+          if (resolution.status === "unavailable") {
+            awaitingRestoreRef.current = false;
+            setPlaybackError(t("Original source became unavailable for this track."));
+            return;
+          }
+          if (resolution.status !== "fresh") return;
+          const fresh = mergeJamendoItem(failedTrack, resolution.item);
+          currentRef.current = fresh;
+          restoreRef.current = { track: fresh, time: restoreRef.current.time };
+          queueRef.current = replaceTrack(queueRef.current, fresh, queueIndexRef.current);
+          setQueue(queueRef.current);
+          setCurrentTrack(fresh);
+          audio.src = fresh.audioUrl;
+          audio.load();
+        });
+        return;
+      }
+      // Signed provider URLs expire long before the recording does, so the very
+      // same track is re-resolved once before an equivalent is searched for in
+      // another catalog.
+      if (isJamendoTrack(failedTrack) && !refreshedRef.current.has(failedTrack.id)) {
+        refreshedRef.current.add(failedTrack.id);
+        void resolveJamendoTrack(failedTrack).then((resolution) => {
+          if (resolution.status === "unavailable") { void handleUnavailableTrack(failedTrack, queueIndexRef.current); return; }
+          if (resolution.status === "fresh") {
+            const fresh = mergeJamendoItem(failedTrack, resolution.item);
+            queueRef.current = replaceTrack(queueRef.current, fresh, queueIndexRef.current);
+            setQueue(queueRef.current);
+            void startTrack(fresh, queueIndexRef.current, true);
+            return;
+          }
+          if (!fallbackAttemptsRef.current.has(failedTrack.id)) searchFallback(failedTrack);
+        });
+        return;
+      }
+      if (fallbackAttemptsRef.current.has(failedTrack.id)) {
+        setPlaybackError(mediaErrorMessage(audio.error?.code, t));
+        return;
+      }
+      searchFallback(failedTrack);
     };
     audio.addEventListener("play", onPlay);
     audio.addEventListener("playing", onPlaying);
@@ -438,7 +757,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>
                   {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
-                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("Source")}</a></div>
+                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
+                {aboutOpen && <div className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
+                  <dl className="mt-3 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 max-w-[65%] truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("License")}</dt><dd className="text-slate-300">{licenseLabel(currentTrack.licenseUrl) || t("Licensed catalog")}</dd></div>
+                  </dl>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {currentTrack.sourceUrl && <a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323]">{t("Open source page")}</a>}
+                    {currentTrack.licenseUrl && <a href={currentTrack.licenseUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 hover:text-white">{t("Read license terms")}</a>}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-slate-500">{t("SONORA plays licensed catalogs. Rights and attribution always stay with the recording.")}</p>
+                  <Link href="/legal" className="mt-2 inline-block text-[11px] text-violet-200 hover:text-white">{t("Licensing and attribution")}</Link>
+                </div>}
                 <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
                 <div className="mt-7 flex items-center justify-between">
                   <button type="button" onClick={()=>setShuffle(v=>!v)} aria-label={t("Shuffle")} className={shuffle?"text-violet-200":"text-slate-500"}><Shuffle size={21}/></button>

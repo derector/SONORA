@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock3, Headphones, ListMusic, LoaderCircle, Music2, Play, SkipForward } from "lucide-react";
+import { CheckCircle2, Clock3, ExternalLink, Headphones, ListMusic, LoaderCircle, Music2, Play, SkipForward } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 
@@ -108,13 +108,13 @@ export default function HistoryPage() {
         <section className="mt-8 rounded-3xl border border-dashed border-white/10 p-10 text-center"><ListMusic className="mx-auto text-slate-500" size={30}/><p className="mt-3 font-medium">{t("Your listening history is empty.")}</p><p className="mt-1 text-sm text-slate-500">{t("Play a track in Discover and it will appear here.")}</p><Link href="/discover" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Explore music")}</Link></section>
       ) : (
         <section className="mt-8 space-y-3">
-          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-sky-300">{t("Your activity")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Listening events")}</h2></div><span className="text-xs text-slate-500">{items.length} events</span></div>
+          <div className="mb-4 flex items-end justify-between"><div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-sky-300">{t("Your activity")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Listening events")}</h2></div><span className="text-xs text-slate-500">{items.length} {t("events")}</span></div>
           {items.map((item) => <article key={item.id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
             {item.artwork_url ? <img src={item.artwork_url} alt="" className="h-14 w-14 rounded-xl object-cover"/> : <div className="grid h-14 w-14 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
-            <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{item.title}</h3><p className="mt-1 truncate text-xs text-slate-400">{item.artist_name} · {item.album_name || "Independent release"}</p><p className="mt-1 text-[11px] text-slate-500">{dateLabel(item.occurred_at)} · {timeLabel(item.listened_ms)} listened</p></div>
+            <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-medium">{item.title}</h3><p className="mt-1 truncate text-xs text-slate-400">{item.artist_name} · {item.album_name || t("Independent release")}</p><p className="mt-1 text-[11px] text-slate-500">{dateLabel(item.occurred_at)} · {timeLabel(item.listened_ms)} {t("listened")}</p></div>
             <span className="hidden items-center gap-1 text-[11px] text-slate-400 sm:inline-flex">{item.event_type === "complete" ? <CheckCircle2 size={13}/> : item.event_type === "skip" ? <SkipForward size={13}/> : <Headphones size={13}/>} {t(eventLabel(item.event_type))}</span>
             <button type="button" onClick={() => void startHistoryTrack(item)} disabled={startingTrack === item.provider_track_id} className="rounded-lg p-2 text-violet-200 transition hover:bg-violet-300/10 disabled:opacity-40" aria-label={t("Play") + " " + item.title}>{startingTrack === item.provider_track_id ? <LoaderCircle size={16} className="animate-spin"/> : <Play size={16} fill="currentColor"/>}</button>
-            <a href={item.source_url} target="_blank" rel="noreferrer" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white" aria-label={t("Open Jamendo source")}><Music2 size={16}/></a>
+            <a href={item.source_url} target="_blank" rel="noreferrer" className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white" aria-label={t("Open track page")}><ExternalLink size={16}/></a>
           </article>)}
         </section>
       )}

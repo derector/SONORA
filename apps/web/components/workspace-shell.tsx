@@ -15,13 +15,14 @@ const links = [
   { href: "/favorites", label: "Liked tracks", icon: Heart },
   { href: "/history", label: "Listening history", icon: Clock3 },
   { href: "/import", label: "Import tracks", icon: FileUp },
+  { href: "/assistant", label: "Assistant", icon: Sparkles },
   { href: "/settings", label: "Settings", icon: Settings }
 ];
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, loading } = useAuth();
-  const { language, setLanguage, t } = useLanguage();
+  const { t } = useLanguage();
   const { currentTrack } = usePlayer();
 
   if (pathname === "/auth" || pathname.startsWith("/auth/")) return <>{children}</>;
@@ -34,7 +35,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       <aside className="sonora-sidebar sticky top-3 hidden h-[calc(100vh-24px)] w-[244px] shrink-0 flex-col rounded-[28px] border border-white/[0.08] bg-[#10111a]/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl md:flex">
         <Link href="/" className="mb-9 flex items-center gap-3 rounded-2xl px-2 py-3">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-300/25 to-cyan-300/10 text-violet-100 ring-1 ring-white/10"><AudioLines size={21}/></span>
-          <span><span className="block text-[15px] font-bold tracking-[.24em]">SONORA</span><span className="mt-1 block text-[9px] uppercase tracking-[.22em] text-slate-500">Music universe</span></span>
+          <span><span className="block text-[15px] font-bold tracking-[.24em]">SONORA</span><span className="mt-1 block text-[9px] uppercase tracking-[.22em] text-slate-500">{t("Music universe")}</span></span>
         </Link>
         <p className="mb-3 px-3 text-[9px] font-semibold uppercase tracking-[.25em] text-slate-600">{t("Workspace")}</p>
         <nav className="space-y-1">
@@ -53,12 +54,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/[0.07] pt-3">
           <Link href={profileHref} className="flex min-w-0 items-center gap-2 rounded-xl p-2 text-xs text-slate-300 hover:bg-white/5">
             {user?.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover"/> : <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-200/15 text-violet-100"><UserRound size={15}/></span>}
-            <span className="min-w-0"><span className="block truncate font-medium">{loading ? t("Restoring your session…") : user?.displayName || user?.username || t("Sign in")}</span><span className="block text-[10px] text-slate-600">{user ? "SONORA account" : "Account"}</span></span>
+            <span className="min-w-0"><span className="block truncate font-medium">{loading ? t("Restoring your session…") : user?.displayName || user?.username || t("Sign in")}</span><span className="block text-[10px] text-slate-600">{user ? t("SONORA account") : t("Account")}</span></span>
           </Link>
-          <div className="flex shrink-0 rounded-full border border-white/10 bg-black/20 p-0.5" aria-label={t("Language")}>
-            <button type="button" onClick={() => setLanguage("en")} aria-pressed={language === "en"} className={`rounded-full px-2 py-1 text-[9px] ${language === "en" ? "bg-violet-200 text-[#171323]" : "text-slate-500"}`}>EN</button>
-            <button type="button" onClick={() => setLanguage("ru")} aria-pressed={language === "ru"} className={`rounded-full px-2 py-1 text-[9px] ${language === "ru" ? "bg-violet-200 text-[#171323]" : "text-slate-500"}`}>RU</button>
-          </div>
         </div>
       </aside>
 
@@ -87,10 +84,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-[22px] border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[94px]" : "bottom-3"}`} aria-label={t("Workspace")}>
+      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-6 gap-1 rounded-[22px] border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[94px]" : "bottom-3"}`} aria-label={t("Workspace")}>
         {[
           { href: "/", label: "Discover", icon: Compass },
           { href: "/search", label: "Search", icon: Search },
+          { href: "/assistant", label: "Assistant", icon: Sparkles },
           { href: "/playlists", label: "Library", icon: Library },
           { href: "/favorites", label: "Liked tracks", icon: Heart },
           { href: profileHref, label: "Your profile", icon: UserRound }
