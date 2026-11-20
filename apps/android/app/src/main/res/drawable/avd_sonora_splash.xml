@@ -1,0 +1,4 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_sonora_splash">
+    <target android:name="logo" android:animation="@animator/sonora_logo_pulse" />
+</animated-vector>

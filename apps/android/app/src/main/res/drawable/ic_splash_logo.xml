@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cold-start splash artwork (windowSplashScreenAnimatedIcon).
+  Two animated groups:
+    bars     - the equalizer mark, grown by avd_splash_logo (scale spring-like overshoot)
+    wordmark - the SONORA lettering, faded in under the bars
+  Pivot points are set on the groups so the scale animation breathes from the mark centre.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="192dp"
+    android:height="192dp"
+    android:viewportWidth="192"
+    android:viewportHeight="192">
+
+    <group
+        android:name="bars"
+        android:pivotX="96"
+        android:pivotY="78"
+        android:scaleX="0.2"
+        android:scaleY="0.2">
+
+        <path
+            android:pathData="M63,66 L63,90"
+            android:strokeWidth="12"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="57" android:startY="78"
+                    android:endX="135" android:endY="78"
+                    android:startColor="#A78BFA"
+                    android:centerColor="#60A5FA"
+                    android:endColor="#2DD4BF" />
+            </aapt:attr>
+        </path>
+
+        <path
+            android:pathData="M85,50 L85,106"
+            android:strokeWidth="12"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="57" android:startY="78"
+                    android:endX="135" android:endY="78"
+                    android:startColor="#A78BFA"
+                    android:centerColor="#60A5FA"
+                    android:endColor="#2DD4BF" />
+            </aapt:attr>
+        </path>
+
+        <path
+            android:pathData="M107,58 L107,98"
+            android:strokeWidth="12"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="57" android:startY="78"
+                    android:endX="135" android:endY="78"
+                    android:startColor="#A78BFA"
+                    android:centerColor="#60A5FA"
+                    android:endColor="#2DD4BF" />
+            </aapt:attr>
+        </path>
+
+        <path
+            android:pathData="M129,44 L129,112"
+            android:strokeWidth="12"
+            android:strokeLineCap="round">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="57" android:startY="78"
+                    android:endX="135" android:endY="78"
+                    android:startColor="#A78BFA"
+                    android:centerColor="#60A5FA"
+                    android:endColor="#2DD4BF" />
+            </aapt:attr>
+        </path>
+    </group>
+
+    <group android:name="wordmark">
+        <!-- S -->
+        <path android:pathData="M46,126 L34,126 L34,135 L46,135 L46,144 L34,144"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <!-- O -->
+        <path android:pathData="M56,126 L69,126 L69,144 L56,144 Z"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <!-- N -->
+        <path android:pathData="M79,144 L79,126 L92,144 L92,126"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <!-- O -->
+        <path android:pathData="M102,126 L115,126 L115,144 L102,144 Z"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <!-- R -->
+        <path android:pathData="M125,144 L125,126 L136,126 L136,135 L125,135 M130,135 L137,144"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+        <!-- A -->
+        <path android:pathData="M146,144 L153,126 L160,144 M149,138 L157,138"
+            android:strokeColor="#F5F6FA" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>

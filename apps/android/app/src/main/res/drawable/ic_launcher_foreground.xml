@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SONORA launcher mark, matching the landing-page brand tile: four rounded equalizer
+  bars swept by the violet → blue → teal gradient. Each bar is a round-capped stroke,
+  which keeps the rounded ends exact at every density and lets one shared linear
+  gradient (x 25 → 83 in this 108 viewport) flow across all four bars.
+  Safe zone of an adaptive icon is the centre 66x66; the artwork spans x 25..83,
+  y 28..80, so nothing is cut by the launcher mask.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M30,46 L30,62"
+        android:strokeWidth="10"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="25" android:startY="54"
+                android:endX="83" android:endY="54"
+                android:startColor="#A78BFA"
+                android:centerColor="#60A5FA"
+                android:endColor="#2DD4BF" />
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M46,34 L46,74"
+        android:strokeWidth="10"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="25" android:startY="54"
+                android:endX="83" android:endY="54"
+                android:startColor="#A78BFA"
+                android:centerColor="#60A5FA"
+                android:endColor="#2DD4BF" />
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M62,42 L62,66"
+        android:strokeWidth="10"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="25" android:startY="54"
+                android:endX="83" android:endY="54"
+                android:startColor="#A78BFA"
+                android:centerColor="#60A5FA"
+                android:endColor="#2DD4BF" />
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M78,28 L78,80"
+        android:strokeWidth="10"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="25" android:startY="54"
+                android:endX="83" android:endY="54"
+                android:startColor="#A78BFA"
+                android:centerColor="#60A5FA"
+                android:endColor="#2DD4BF" />
+        </aapt:attr>
+    </path>
+</vector>

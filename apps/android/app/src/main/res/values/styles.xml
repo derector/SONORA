@@ -1,0 +1,35 @@
+<resources>
+    <!--
+      App theme. windowBackground stays the dark splash wash on purpose: after the system
+      splash hands over, the window still shows the same pixels the app then paints, so a
+      cold start never exposes a white surface, whatever the first frame costs.
+    -->
+    <style name="Theme.Sonora" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#0A0A0F</item>
+        <item name="android:navigationBarColor">#0A0A0F</item>
+        <item name="android:windowBackground">@drawable/splash_background</item>
+        <item name="android:colorAccent">#A78BFA</item>
+        <item name="android:windowAnimationStyle">@style/Animation.Sonora.Tabs</item>
+    </style>
+
+    <!-- androidx.core:core-splashscreen contract: dark background, branded animated icon,
+         and the real theme applied on handoff. -->
+    <style name="Theme.Sonora.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0A0A0F</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/avd_splash_logo</item>
+        <item name="windowSplashScreenAnimationDuration">450</item>
+        <item name="postSplashScreenTheme">@style/Theme.Sonora</item>
+    </style>
+
+    <!-- Screen-level animation: short horizontal slide used by activity/tab handoffs.
+         Values are also honoured by the system animation-scale setting, so a device with
+         animations off simply cuts. -->
+    <style name="Animation.Sonora.Tabs" parent="@android:style/Animation.Activity">
+        <item name="android:activityOpenEnterAnimation">@anim/slide_in_right</item>
+        <item name="android:activityOpenExitAnimation">@anim/slide_out_left</item>
+        <item name="android:activityCloseEnterAnimation">@anim/slide_in_left</item>
+        <item name="android:activityCloseExitAnimation">@anim/slide_out_right</item>
+    </style>
+</resources>
