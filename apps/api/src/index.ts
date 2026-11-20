@@ -3,12 +3,10 @@ import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_PUBLISHABLE_KEY;
 
 await app.register(cookie);
 await app.register(cors, {
@@ -38,31 +36,11 @@ const writeRateLimit = {
   config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 120, timeWindow: "1 minute" } }
 };
 
-function authClient(accessToken?: string): SupabaseClient {
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Supabase Auth is not configured on the API service");
-  }
-
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: accessToken
-      ? { headers: { Authorization: `Bearer ${accessToken}` } }
-      : undefined
-  });
-}
-
 function validEmail(value: unknown): value is string {
   return typeof value === "string" && value.length <= 254 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-function cleanText(value: unknown, min: number, max: number): value is string {
-  return typeof value === "string" && value.trim().length >= min && value.trim().length <= max;
-}
-
-function authError(statusCode: number, message: string) {
-  return { statusCode, error: message };
-}
 // Verifies a provider stream URL with a tiny ranged request. Signed provider
 // URLs can expire or point at removed tracks; players must report the truth
 // instead of starting a stream that cannot load (never fake playback).
@@ -79,8 +57,6 @@ async function probeStream(audioUrl: unknown): Promise<boolean> {
     return false;
   }
 }
-// Long Audius uploads are frequently multi-hour playlist dumps, not songs.
-const PLAYABLE_MAX_DURATION_SECONDS = 2700;
 
 app.get("/health", async () => ({
   status: "ok",
@@ -109,6 +85,10 @@ app.get("/api/v1", async () => ({
     "/api/v1/providers/audius/tracks",
     "/api/v1/recommendations",
     "/api/v1/assistant",
+    "/api/v1/import/link",
+    "/api/v1/import/file",
+    "/api/v1/import/jobs",
+    "/api/v1/import/jobs/:id",
     "/api/v1/playlists",
     "/api/v1/playlists/:playlistId",
     "/api/v1/playlists/:playlistId/tracks",
@@ -468,28 +448,6 @@ app.get<{ Querystring: { q?: string; limit?: string } }>("/api/v1/catalog/search
     return reply.code(503).send(authError(503, "Search is temporarily unavailable."));
   }
 });
-
-async function requireUser(request: import("fastify").FastifyRequest, reply: import("fastify").FastifyReply) {
-  const authorization = request.headers.authorization;
-  const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!token) {
-    await reply.code(401).send(authError(401, "Authentication required."));
-    return null;
-  }
-  try {
-    const client = authClient(token);
-    const { data, error } = await client.auth.getUser(token);
-    if (error || !data.user) {
-      await reply.code(401).send(authError(401, "Session is invalid or expired."));
-      return null;
-    }
-    return { client, user: data.user };
-  } catch (error) {
-    request.log.error({ err: error }, "User authentication unavailable");
-    await reply.code(503).send(authError(503, "Authentication service is temporarily unavailable."));
-    return null;
-  }
-}
 
 app.get("/api/v1/playlists", async (request, reply) => {
   const auth = await requireUser(request, reply);
@@ -1262,47 +1220,11 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 // Personalized recommendations built from real listening behavior: favorites,
 // play/complete/skip events and measured listening time. Ranking is the
 // deterministic, network-free core shared with unit tests.
-import { rankRecommendations, type RecommendationTrack, type TasteSignal } from "./recommendation-core.js";
-
-type JamendoCandidate = RecommendationTrack & {
-  album: string | null; artworkUrl: string | null; audioUrl: string;
-  licenseUrl: string; sourceUrl: string; providerTrackId: string;
-  provider: string; playable: boolean;
-};
-async function jamendoCandidates(query: string, count: number, order = "relevance"): Promise<JamendoCandidate[]> {
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") return [];
-  try {
-    const params = new URLSearchParams({
-      client_id: clientId, format: "json", limit: String(count), order,
-      include: "licenses musicinfo", type: "single albumtrack", audioformat: "mp32"
-    });
-    if (query) params.set("search", query);
-    else params.set("featured", "1");
-    const response = await fetch(`https://api.jamendo.com/v3.0/tracks/?${params.toString()}`, {
-      headers: { Accept: "application/json" }, signal: AbortSignal.timeout(10000)
-    });
-    if (!response.ok) return [];
-    const payload = await response.json() as { results?: Array<{
-      id: string; name: string; duration: number; artist_name: string; album_name?: string;
-      image?: string; album_image?: string; audio?: string; license_ccurl?: string; shareurl?: string;
-      musicinfo?: { tags?: Array<{ name: string }> };
-    }> };
-    return (payload.results ?? []).flatMap((track) => {
-      if (!track.id || !track.audio) return [];
-      return [{
-        id: `jamendo:${track.id}`, providerTrackId: track.id, title: track.name,
-        artist: track.artist_name, album: track.album_name ?? null,
-        durationSeconds: track.duration, genres: (track.musicinfo?.tags ?? []).map((tag) => tag.name).slice(0, 5),
-        artworkUrl: track.album_image ?? track.image ?? null, audioUrl: track.audio,
-        licenseUrl: track.license_ccurl ?? "", sourceUrl: track.shareurl ?? `https://www.jamendo.com/track/${track.id}`,
-        provider: "Jamendo", playable: true
-      }];
-    });
-  } catch {
-    return [];
-  }
-}
+import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
+// Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
+// module so the import service and the core routes use identical access.
+import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, type JamendoCandidate } from "./catalog.js";
+import { registerImportRoutes } from "./import-routes.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
   const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));
@@ -1519,6 +1441,9 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
     intent, tracks: candidates.slice(0, 15), playlist
   };
 });
+
+// Server-side music import from other platforms (public links + export files).
+registerImportRoutes(app);
 
 try {
   await app.listen({ port, host });
