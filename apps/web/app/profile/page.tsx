@@ -1,112 +1,127 @@
 "use client";
 
-import { ChangeEvent, FormEvent, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Camera, CheckCircle2, LoaderCircle, LogOut, Music2, Settings, ShieldCheck, UserRound } from "lucide-react";
+import { Music2, Settings } from "lucide-react";
 import { useAuth } from "../../components/auth-provider";
 import { useLanguage } from "../../components/language-provider";
+import { Camera, CoverDialog, EditProfileDialog, Pencil, ProfileHero, ProfileTabs, Share2, Trash2, type ProfileTab } from "../../components/profile-identity";
+import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
+import { Reveal } from "../../components/ui/reveal";
+import { imagePayload, profileRequest, type ProfileChanges, type ProfileUser } from "../../lib/profile";
+
+const Favorites = dynamic(() => import("../../components/profile-library").then((module) => module.FavoritesPane), { loading: () => <RowsSkeleton /> });
+const Playlists = dynamic(() => import("../../components/profile-library").then((module) => module.PlaylistsPane), { loading: () => <RowsSkeleton /> });
+const History = dynamic(() => import("../../components/profile-library").then((module) => module.HistoryPane), { loading: () => <RowsSkeleton /> });
+const Collection = dynamic(() => import("../../components/profile-library").then((module) => module.CollectionPane), { loading: () => <RowsSkeleton /> });
 
 export default function ProfilePage() {
   const router = useRouter();
   const { t } = useLanguage();
-  const { user, loading, isAuthenticated, updateProfile, uploadAvatar, logout } = useAuth();
-  const [displayName, setDisplayName] = useState("");
-  const [username, setUsername] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState("");
+  const { user, accessToken, loading: authLoading, isAuthenticated, updateProfile, refreshSession } = useAuth();
+  const [profile, setProfile] = useState<ProfileUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [extended, setExtended] = useState(false);
+  const [tab, setTab] = useState<ProfileTab>("overview");
+  const [dialog, setDialog] = useState<"edit" | "cover" | "avatar" | null>(null);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (user) {
-      setDisplayName(user.displayName || "");
-      setUsername(user.username || "");
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (!loading && !isAuthenticated) router.replace("/auth");
-  }, [loading, isAuthenticated, router]);
-
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true); setError(""); setMessage("");
+  const [notice, setNotice] = useState("");
+  const loadProfile = useCallback(async () => {
+    if (!accessToken) return;
+    setLoading(true); setError("");
     try {
-      await updateProfile({ displayName, username });
-      setMessage(t("Profile changes saved."));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not save your profile."));
-    } finally { setSaving(false); }
-  }
+      const result = await profileRequest<{ user: ProfileUser }>("/profile", accessToken);
+      setProfile(result.user);
+      // Never claim an extended PATCH succeeded when the deployed GET is still
+      // the base contract (the merge at fb07d8b lost that API handler).
+      setExtended(Object.prototype.hasOwnProperty.call(result.user, "bio"));
+    } catch { setError("Could not load your profile. Try again."); }
+    finally { setLoading(false); }
+  }, [accessToken]);
+  useEffect(() => { if (!authLoading && !isAuthenticated) router.replace("/auth"); }, [authLoading, isAuthenticated, router]);
+  useEffect(() => { void loadProfile(); }, [loadProfile]);
 
-  async function changeAvatar(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setUploading(true); setError(""); setMessage("");
+  async function save(changes: ProfileChanges) {
+    setBusy(true); setError(""); setNotice("");
     try {
-      await uploadAvatar(file);
-      setMessage(t("Profile photo updated."));
+      const result = extended
+        ? (await profileRequest<{ user: ProfileUser }>("/profile", accessToken, { method: "PATCH", body: JSON.stringify(changes) })).user
+        : await updateProfile({ displayName: changes.displayName, username: changes.username });
+      setProfile((current) => ({ ...current, ...result }));
+      if (extended) { await refreshSession(); await loadProfile(); }
+      setDialog(null); setNotice("Profile changes saved.");
+    } catch { setError("Could not save your profile."); }
+    finally { setBusy(false); }
+  }
+  async function imageAction(kind: "avatar" | "cover", file?: File) {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      // 2 MB keeps base64 inside the current API's 3 MB request body limit.
+      const payload = file ? await imagePayload(file, 2) : undefined;
+      const result = await profileRequest<{ user: ProfileUser }>(`/profile/${kind}`, accessToken, { method: file ? "POST" : "DELETE", ...(payload ? { body: JSON.stringify(payload) } : {}) });
+      setProfile((current) => ({ ...current, ...result.user }));
+      if (kind === "avatar") await refreshSession();
+      setDialog(null); setNotice(file ? "Image updated." : "Image removed.");
+    } catch { setError("Could not update this image. Use JPG, PNG or WebP up to 2 MB. Profile storage may be unavailable."); }
+    finally { setBusy(false); }
+  }
+  async function preset(id: string) {
+    if (!extended) return;
+    setBusy(true); setError("");
+    try {
+      await profileRequest("/profile", accessToken, { method: "PATCH", body: JSON.stringify({ accent: id }) });
+      if (profile?.coverUrl) await profileRequest("/profile/cover", accessToken, { method: "DELETE" });
+      await loadProfile(); setDialog(null); setNotice("Profile changes saved.");
+    } catch { setError("Could not save your profile."); }
+    finally { setBusy(false); }
+  }
+  async function share() {
+    if (!profile?.username) return;
+    const url = new URL(`/u/${encodeURIComponent(profile.username)}`, window.location.origin).href;
+    setNotice(""); setError("");
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(url); setNotice("Profile link copied."); }
+      else if (navigator.share) await navigator.share({ title: profile.displayName, url });
+      else { window.prompt(t("Copy profile link"), url); }
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not upload this image."));
-    } finally {
-      setUploading(false);
-      event.target.value = "";
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (navigator.share) { try { await navigator.share({ title: profile.displayName, url }); } catch { setError("Could not share your profile."); } }
+      else setError("Could not share your profile.");
     }
   }
+  if (authLoading || !isAuthenticated || !user || loading) return <main className="mx-auto min-h-screen max-w-6xl px-4 py-8 pb-36 md:px-8" aria-label={t("Loading profile…")}><div className="shimmer h-48 rounded-panel" /><div className="shimmer -mt-10 ml-5 h-24 w-24 rounded-full" /><div className="shimmer mt-5 h-7 w-64" /><div className="mt-8"><RowsSkeleton count={4} /></div></main>;
+  if (!profile) return <main className="mx-auto max-w-6xl px-4 py-8"><ErrorBlock title={t(error || "Could not load your profile. Try again.")} onRetry={() => void loadProfile()} /></main>;
 
-  async function signOut() {
-    await logout();
-    router.replace("/");
-  }
+  return <main className="mx-auto min-h-screen w-full max-w-6xl px-4 py-6 pb-36 md:px-8">
+    <ProfileHero profile={profile} avatarAction={<button type="button" className="btn-icon absolute bottom-0 right-0 !bg-[#252333] !text-white" onClick={() => setDialog("avatar")} aria-label={t("Change avatar")}><Camera size={16} /></button>} actions={<>
+      <button type="button" className="btn-ghost" onClick={() => setDialog("cover")}><Camera size={16} />{t("Change cover")}</button>
+      <button type="button" className="btn-ghost" onClick={() => setDialog("edit")}><Pencil size={16} />{t("Edit profile")}</button>
+      <button type="button" className="btn-icon" onClick={() => void share()} aria-label={t("Share profile")}><Share2 size={18} /></button>
+      <Link href="/settings" className="btn-icon" aria-label={t("Settings")}><Settings size={18} /></Link>
+    </>} />
+    {notice && <p role="status" className="toast-in mt-4 rounded-card border border-emerald-300/15 bg-emerald-300/5 p-3 text-sm text-emerald-200">{t(notice)}</p>}
+    {error && <p role="alert" className="mt-4 rounded-card border border-rose-300/15 bg-rose-300/5 p-3 text-sm text-rose-200">{t(error)}</p>}
+    <ProfileTabs active={tab} onChange={setTab} />
+    <section id="profile-panel" role="tabpanel" aria-labelledby={`profile-tab-${tab}`} className="mt-5 min-w-0">
+      <Reveal key={tab} className="profile-pane">
+        {tab === "favorites" ? <Favorites /> : tab === "playlists" ? <Playlists /> : tab === "history" ? <History /> : tab === "albums" || tab === "artists" ? <Collection key={tab} kind={tab} /> : <StateBlock icon={Music2} title={t("Your listening space")} body={t("This section is not available yet. Your saved music and listening history are ready in the adjacent tabs.")} actionHref="/discover" actionLabel={t("Explore music")} />}
+      </Reveal>
+    </section>
+    {dialog === "edit" && <EditProfileDialog profile={profile} extended={extended} busy={busy} error={error ? t(error) : ""} onClose={() => setDialog(null)} onSave={save} />}
+    {dialog === "cover" && <CoverDialog profile={profile} extended={extended} busy={busy} onClose={() => setDialog(null)} onUpload={(file) => void imageAction("cover", file)} onDelete={() => void imageAction("cover")} onPreset={(id) => void preset(id)} />}
+    {dialog === "avatar" && <AvatarDialog hasAvatar={Boolean(profile.avatarUrl)} busy={busy} onClose={() => setDialog(null)} onUpload={(file) => void imageAction("avatar", file)} onDelete={() => void imageAction("avatar")} />}
+  </main>;
+}
 
-  if (loading || !isAuthenticated || !user) {
-    return <main className="flex min-h-screen items-center justify-center px-4 text-sm text-slate-400"><LoaderCircle className="mr-3 animate-spin" size={18}/>{t("Restoring your session…")}</main>;
-  }
-
-  const initial = (user.displayName || user.username || user.email).slice(0, 1).toUpperCase();
-
-  return (
-    <main className="mx-auto min-h-screen max-w-4xl px-4 py-8 pb-16 md:px-8">
-      
-      <div className="mt-8 grid gap-5 lg:grid-cols-[260px_1fr]">
-        <aside className="surface h-fit p-5">
-          <div className="flex items-center gap-3">
-            {user.avatarUrl ? <img src={user.avatarUrl} alt="" className="h-12 w-12 rounded-2xl object-cover"/> : <span className="grid h-12 w-12 place-items-center rounded-2xl bg-violet-300/15 text-lg text-violet-100">{initial}</span>}
-            <div className="min-w-0"><p className="truncate text-sm font-semibold">{user.displayName || user.username}</p><p className="truncate text-xs text-slate-500">@{user.username}</p></div>
-          </div>
-          <nav className="mt-6 space-y-2 text-sm">
-            <a href="#profile-details" className="flex items-center gap-3 rounded-xl bg-violet-300/10 px-3 py-3 text-violet-100"><UserRound size={17}/>{t("Profile details")}</a>
-            <Link href="/settings" className="flex items-center gap-3 rounded-xl px-3 py-3 text-slate-300 hover:bg-white/5"><Settings size={17}/>{t("Settings")}</Link>
-            <Link href="/playlists" className="flex items-center gap-3 rounded-xl px-3 py-3 text-slate-300 hover:bg-white/5"><Music2 size={17}/>{t("Your library")}</Link>
-          </nav>
-          <button onClick={signOut} className="mt-6 flex w-full items-center gap-3 rounded-xl border border-white/10 px-3 py-3 text-left text-sm text-slate-300 hover:bg-white/5"><LogOut size={17}/>{t("Sign out")}</button>
-        </aside>
-
-        <section className="space-y-5">
-          <div className="rounded-panel border border-white/10 bg-panel/90 p-6 sm:p-8">
-            <div className="flex items-center gap-3"><ShieldCheck className="text-emerald-200" size={22}/><div><h1 className="text-2xl font-semibold">{t("Your profile")}</h1><p className="mt-1 text-sm text-slate-400">{t("Manage your SONORA identity and account details.")}</p></div></div>
-            <div id="profile-details" className="mt-8 flex flex-col gap-5 border-b border-white/10 pb-7 sm:flex-row sm:items-center">
-              {user.avatarUrl ? <img src={user.avatarUrl} alt={t("Profile avatar")} className="h-24 w-24 rounded-panel border border-white/10 object-cover"/> : <div className="grid h-24 w-24 place-items-center rounded-panel border border-white/10 bg-violet-300/10 text-3xl text-violet-100">{initial}</div>}
-              <div className="flex-1"><h2 className="font-medium">{t("Profile photo")}</h2><p className="mt-1 text-xs leading-5 text-slate-500">{t("JPG, PNG or WebP. Maximum size: 2 MB.")}</p><label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-medium hover:bg-white/10">{uploading ? <LoaderCircle className="animate-spin" size={15}/> : <Camera size={15}/>} {uploading ? t("Uploading…") : t("Change avatar")}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={uploading} onChange={changeAvatar}/></label></div>
-            </div>
-            <form onSubmit={save} className="mt-7 space-y-5">
-              <label className="block text-xs text-slate-400">{t("Display name")}<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} minLength={1} maxLength={48} required className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none focus:border-violet-300/60"/></label>
-              <label className="block text-xs text-slate-400">{t("Username")}<div className="mt-2 flex items-center rounded-xl border border-white/10 bg-black/20 px-4"><span className="text-slate-500">@</span><input value={username} onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0,24))} minLength={3} maxLength={24} required className="w-full bg-transparent py-3 pl-2 text-sm text-white outline-none"/></div></label>
-              <label className="block text-xs text-slate-400">{t("Email address")}<input value={user.email} disabled className="mt-2 w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-500"/></label>
-              <button disabled={saving || (displayName === user.displayName && username === user.username)} className="inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] hover:bg-white disabled:cursor-not-allowed disabled:opacity-40">{saving ? <LoaderCircle className="animate-spin" size={16}/> : <CheckCircle2 size={16}/>} {saving ? t("Saving…") : t("Save profile")}</button>
-            </form>
-            {message && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{message}</p>}
-            {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
-          </div>
-
-          <div className="surface p-6 sm:p-8">
-            <h2 className="font-semibold">{t("Account security")}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-400">{t("Your session is restored from a secure HttpOnly cookie. Access tokens are refreshed automatically while you use SONORA and when you return to the site.")}</p>
-            <div className="mt-4 flex items-center gap-2 text-xs text-emerald-200"><span className="h-2 w-2 rounded-full bg-emerald-300"/>{t("Account session active")}</div>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
+import { ProfileDialog } from "../../components/profile-identity";
+function AvatarDialog({ hasAvatar, busy, onClose, onUpload, onDelete }: { hasAvatar: boolean; busy: boolean; onClose: () => void; onUpload: (file: File) => void; onDelete: () => void }) {
+  const { t } = useLanguage();
+  return <ProfileDialog title={t("Profile photo")} onClose={onClose}>
+    <label className="btn-ghost flex w-full cursor-pointer justify-center"><Camera size={16} />{busy ? t("Uploading…") : t("Change avatar")}<input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.target.value = ""; }} /></label>
+    <p className="t-meta mt-3">{t("JPG, PNG or WebP. Maximum size: 2 MB.")}</p>
+    {hasAvatar && <button type="button" disabled={busy} className="btn-ghost mt-4 w-full !text-rose-200" onClick={onDelete}><Trash2 size={16} />{t("Remove avatar")}</button>}
+  </ProfileDialog>;
 }

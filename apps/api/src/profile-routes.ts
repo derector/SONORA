@@ -469,6 +469,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       await reply.code(404).send(authError(404, "No such profile."));
       return null;
     }
+    // The same gate must cover nested playlists/followers endpoints, not just
+    // GET /users/:username. Missing/unknown visibility fails closed.
+    if (data.visibility !== "public" && await viewerId(request) !== String(data.id)) {
+      await reply.code(403).send(authError(403, "This profile is private."));
+      return null;
+    }
     return data as Record<string, unknown> & { id: string; username: string; visibility: string };
   }
 

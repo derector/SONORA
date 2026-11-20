@@ -21,6 +21,7 @@ jobs:
       - run: npm run test:import --workspace @sonora/api
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run test:profile-access --workspace @sonora/api
 
   android-validate:
     runs-on: ubuntu-latest
