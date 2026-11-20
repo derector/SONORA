@@ -210,6 +210,38 @@ private fun SonoraApp() {
         val player = controller ?: return@LaunchedEffect
         val saved = withContext(Dispatchers.IO) { PlaybackStateStore.load(context) }
             ?: return@LaunchedEffect
+        // ── Restore ownership ──────────────────────────────────────────────────────
+        // PlaybackService.onPlaybackResumption and this effect both know how to rebuild
+        // the persisted queue, so on a cold start they could run at the same time and
+        // prepare the queue twice (playhead reset, duplicated history events).
+        //
+        // Decision: the service owns restoration whenever it has already done it, and
+        // that case is detected conservatively, without restructuring anything:
+        //   1. the one-shot handoff marker the service writes right before it hands the
+        //      resumed items to Media3 (read here and cleared, so it can never be reused
+        //      by a later restore), and
+        //   2. an already populated controller timeline, which additionally makes this
+        //      path idempotent across activity recreation (rotation, relaunch on top of
+        //      a still-playing service).
+        //
+        // When either signal is present MainActivity only mirrors the restored queue into
+        // its UI state and returns; it never re-issues setMediaItems/prepare/play.
+        // Otherwise MainActivity owns the restore below, exactly as before.
+        val restoredByService = withContext(Dispatchers.IO) {
+            PlaybackStateStore.consumeQueueResumedByService(context)
+        } || player.mediaItemCount > 0
+        if (restoredByService) {
+            // Mirror exactly what Media3 restored, joined with the persisted metadata.
+            // Rebuilding from saved.tracks would disagree with the player whenever the
+            // service dropped an unresolvable item, and the periodic state save below
+            // would then write that mismatch back to disk.
+            val savedByMediaId = saved.tracks.associateBy { "${it.provider}:${it.id}" }
+            val resumedQueue = (0 until player.mediaItemCount)
+                .mapNotNull { savedByMediaId[player.getMediaItemAt(it).mediaId] }
+            activeQueue = resumedQueue.ifEmpty { saved.tracks }
+            current = player.currentMediaItem?.mediaId?.let(savedByMediaId::get) ?: activeQueue.firstOrNull()
+            return@LaunchedEffect
+        }
         val resolved = withContext(Dispatchers.IO) {
             saved.tracks.mapNotNull { savedTrack ->
                 if (savedTrack.audioUrl?.startsWith("file:") == true) {
