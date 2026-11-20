@@ -270,3 +270,61 @@
 .logo-mark:hover .logo-eq i:nth-child(1) { animation-delay: -120ms; }
 .logo-mark:hover .logo-eq i:nth-child(2) { animation-delay: -380ms; }
 .logo-mark:hover .logo-eq i:nth-child(3) { animation-delay: -250ms; }
+
+/* 7 — Skeletons. .shimmer is the canonical unified class; .skeleton (used by
+   every loader in components/ui/states.tsx) keeps the same wave, and loader
+   rows pick the wave up with a per-row delay. */
+.shimmer {
+  border-radius: var(--r-tile);
+  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-3) 50%, var(--surface-1) 60%);
+  background-size: 220% 100%;
+  animation: skeleton-wave 1.5s var(--ease-soft) infinite;
+}
+.shimmer-rows > *:nth-child(2) .skeleton, .shimmer-rows > *:nth-child(2) .shimmer { animation-delay: 120ms; }
+.shimmer-rows > *:nth-child(3) .skeleton, .shimmer-rows > *:nth-child(3) .shimmer { animation-delay: 240ms; }
+.shimmer-rows > *:nth-child(4) .skeleton, .shimmer-rows > *:nth-child(4) .shimmer { animation-delay: 360ms; }
+.shimmer-rows > *:nth-child(5) .skeleton, .shimmer-rows > *:nth-child(5) .shimmer { animation-delay: 480ms; }
+.shimmer-rows > *:nth-child(n+6) .skeleton, .shimmer-rows > *:nth-child(n+6) .shimmer { animation-delay: 600ms; }
+
+/* 8 — Assistant, search and empty states. */
+.msg-in { animation: msg-in 380ms var(--ease-d1) both; }
+@keyframes msg-in { from { opacity: 0; transform: translate3d(0, 10px, 0); } }
+.chip-pop { animation: chip-pop 300ms var(--ease-spring) backwards; }
+@keyframes chip-pop {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.pop-stagger > *:nth-child(2).chip-pop { animation-delay: 60ms; }
+.pop-stagger > *:nth-child(3).chip-pop { animation-delay: 120ms; }
+.pop-stagger > *:nth-child(n+4).chip-pop { animation-delay: 180ms; }
+.empty-float { animation: float-idle 3s ease-in-out infinite; }
+@keyframes float-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* 9 — Micro-interactions: one press scale for every button, hover lift for
+   icon links, dialog/overlay backdrop fade (existing dialogs pick .state-in
+   and .overlay-fade up in section 5). */
+.btn-press:active, .btn-primary:active, .btn-ghost:active, .btn-icon:active { transform: scale(.96); transition-duration: 90ms; }
+.btn-icon:hover, .icon-lift:hover { transform: translateY(-1px); }
+
+/* 10 — Consolidated reduced-motion kill switch for the motion system.
+   globals.css already clamps all durations; this forces every state that
+   *starts* hidden (reveals, staggers) to its final pose immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .rv, .rv-x, .rv-flat, .rv-mask {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    transition: none !important;
+  }
+  .rv-stagger > *, .rv-stagger-x > * { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .route-progress { display: none !important; }
+  .page-transition, .player-enter, .queue-panel, .overlay-fade, .state-in, .toast-in, .msg-in, .chip-pop { animation: none !important; }
+  .player-thumb.is-playing, .cover-breathe.is-breathing > *, .eq-bars i, .logo-mark:hover .logo-eq i, .empty-float, .mood-shimmer::after { animation: none !important; }
+  .track-card:hover, .mood-tile:hover, .chip[aria-pressed="true"], .chip.is-active { transform: none !important; }
+  .track-card:hover .artwork::after { animation: none !important; }
+  .nav-pill { transition: none !important; }
+  .seek-bar:hover { height: 4px; }
+}
