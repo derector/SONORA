@@ -377,7 +377,10 @@ const ru: Record<string, string> = {
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>("en");
+  // SONORA is Russian-first: without a stored choice the interface opens in
+  // Russian. A saved preference (en or ru) always wins, so existing English
+  // users keep their setting.
+  const [language, setLanguageState] = useState<Language>("ru");
   useEffect(() => {
     const saved = window.localStorage.getItem("sonora-language");
     if (saved === "ru" || saved === "en") setLanguageState(saved);
