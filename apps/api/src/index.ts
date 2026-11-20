@@ -81,6 +81,8 @@ app.get("/api/v1", async () => ({
     "/api/v1/catalog/tracks",
     "/api/v1/catalog/search",
     "/api/v1/search/music",
+    "/api/v1/discovery/search",
+    "/api/v1/discovery/resolve",
     "/api/v1/providers/jamendo/tracks",
     "/api/v1/providers/audius/tracks",
     "/api/v1/recommendations",
@@ -1226,6 +1228,8 @@ import { rankRecommendations, type TasteSignal } from "./recommendation-core.js"
 // module so the import service and the core routes use identical access.
 import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
+// Universal Music Discovery & Import Engine: adapters, grouping, resolve.
+import { registerDiscoveryRoutes } from "./discovery.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
   const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));
@@ -1446,6 +1450,8 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
 
 // Server-side music import from other platforms (public links + export files).
 registerImportRoutes(app);
+// Multi-source discovery (GET /discovery/search, POST /discovery/resolve).
+registerDiscoveryRoutes(app);
 
 try {
   await app.listen({ port, host });

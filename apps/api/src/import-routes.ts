@@ -12,6 +12,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authError, requireUser } from "./auth-helpers.js";
 import { audiusCandidates, jamendoCandidates, type JamendoCandidate } from "./catalog.js";
+// Universal Discovery Engine: third licensed stage (Archive/Openverse/ccMixter).
+import { licensedCandidate, runDiscoveryOpenPool } from "./discovery.js";
 import {
   parseGenericList, parseSourceUrl, parseSpotifyExportJson, scoreMatch,
   type ImportListItem, type ImportSourceKind, type ParsedSource
@@ -84,6 +86,7 @@ type ResolvedMatch = { candidate: JamendoCandidate | null; status: "matched" | "
 type MatchState = {
   jamendo: Map<string, JamendoCandidate[]>;
   audius: Map<string, JamendoCandidate[]>;
+  extra: Map<string, JamendoCandidate[]>;
   searches: number;
 };
 
@@ -115,6 +118,22 @@ async function matchAgainstCatalog(item: ImportListItem, state: MatchState, log:
       state.audius.set(query, pool);
     }
     for (const candidate of pool) {
+      const score = scoreMatch(candidate, item);
+      if (score > bestScore) { bestScore = score; best = candidate; }
+    }
+    if (best && bestScore >= MATCH_THRESHOLD) return { candidate: best, status: "matched" };
+    // Discovery engine stage: Internet Archive / Openverse / ccMixter open audio.
+    let extraPool = state.extra.get(query);
+    if (extraPool === undefined) {
+      if (state.searches >= MAX_UPSTREAM_SEARCHES) return { candidate: null, status: "not_found" };
+      state.searches += 1;
+      const results = await runDiscoveryOpenPool(query, 8);
+      extraPool = results
+        .map((result) => licensedCandidate(result))
+        .filter((candidate): candidate is JamendoCandidate => candidate !== null);
+      state.extra.set(query, extraPool);
+    }
+    for (const candidate of extraPool) {
       const score = scoreMatch(candidate, item);
       if (score > bestScore) { bestScore = score; best = candidate; }
     }
@@ -169,7 +188,7 @@ async function executeImport(
     return;
   }
 
-  const state: MatchState = { jamendo: new Map(), audius: new Map(), searches: 0 };
+  const state: MatchState = { jamendo: new Map(), audius: new Map(), extra: new Map(), searches: 0 };
   const itemRows: Array<Record<string, unknown>> = [];
   const matchedTracks: JamendoCandidate[] = [];
   const matchedKeys = new Set<string>();
