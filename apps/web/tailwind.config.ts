@@ -23,7 +23,8 @@ const config: Config = {
       borderRadius: {
         tile: "12px",
         card: "16px",
-        panel: "20px"
+        panel: "20px",
+        pill: "999px"
       },
       spacing: {
         "sp-1": "4px",

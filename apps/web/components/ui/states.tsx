@@ -3,6 +3,7 @@
 import type { ComponentType } from "react";
 import Link from "next/link";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { useLanguage } from "../language-provider";
 
 // Shared "nothing here yet / something broke" blocks: a gradient illustration
 // disc with a 24px stroke icon, a message and one clear CTA. Icons are inline
@@ -59,7 +60,8 @@ export function StateBlock({
   );
 }
 
-export function ErrorBlock({ title, body, onRetry, retryLabel }: { title: string; body?: string; onRetry?: () => void; retryLabel: string }) {
+export function ErrorBlock({ title, body, onRetry, retryLabel, actionHref, actionLabel }: { title: string; body?: string; onRetry?: () => void; retryLabel?: string; actionHref?: string; actionLabel?: string }) {
+  const { t } = useLanguage();
   return (
     <section className="surface flex flex-col items-center px-6 py-10 text-center">
       <div className="grid h-[72px] w-[72px] place-items-center rounded-full bg-gradient-to-br from-rose-500/22 to-[#1b1420] ring-1 ring-white/10">
@@ -67,9 +69,14 @@ export function ErrorBlock({ title, body, onRetry, retryLabel }: { title: string
       </div>
       <p className="mt-5 text-[17px] font-semibold">{title}</p>
       {body ? <p className="t-meta mt-2 max-w-md">{body}</p> : null}
-      {onRetry ? (
-        <button type="button" onClick={onRetry} className="btn-press btn-ghost mt-6">{retryLabel}</button>
-      ) : null}
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="btn-press btn-primary">{retryLabel || t("Try again")}</button>
+        ) : null}
+        {actionHref ? (
+          <Link href={actionHref} className={`btn-press ${onRetry ? "btn-ghost" : "btn-primary"}`}>{actionLabel}</Link>
+        ) : null}
+      </div>
     </section>
   );
 }

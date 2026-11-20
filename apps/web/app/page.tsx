@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, AudioLines, Compass, Headphones, LoaderCircle, Music2, Pause, Play, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, AudioLines, Search, Sparkles } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../components/player-provider";
 import { MoodPicker } from "../components/mood-picker";
+import { Rail } from "../components/ui/rail";
+import { TrackCard } from "../components/ui/track-card";
+import { ErrorBlock, RailSkeleton } from "../components/ui/states";
 
 type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean };
 type CatalogResponse = { items?: CatalogTrack[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-
-function duration(seconds: number) {
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 export default function Home() {
   const { t } = useLanguage();
@@ -73,50 +72,72 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1440px] px-4 py-5 md:px-8">
-      <section className="min-w-0 flex-1 pb-32">
+    <main className="mx-auto flex min-h-screen w-full max-w-[1440px] px-4 py-6 pb-36 md:px-8">
+      <section className="min-w-0 flex-1 pb-safe">
 
-        <div className="relative mt-8 overflow-hidden rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 shadow-glow md:p-12">
-          <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-fuchsia-500/15 blur-3xl"/>
+        <div className="panel-hero relative mt-6 overflow-hidden px-6 py-8 md:px-12 md:py-14">
+          <div className="absolute -right-16 -top-24 h-72 w-72 rounded-full bg-fuchsia-500/12 blur-3xl" />
           <div className="relative max-w-2xl">
-            <p className="mb-5 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.28em] text-violet-200"><Sparkles size={14}/> {t("A new way to feel music")}</p>
-            <h1 className="text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl">{t("Find your")}<br/><span className="bg-gradient-to-r from-violet-200 via-fuchsia-200 to-sky-200 bg-clip-text text-transparent">{t("own frequency.")}</span></h1>
-            <p className="mt-5 max-w-lg text-sm leading-6 text-slate-300 md:text-base">{t("Discover independent music, play every track from one unified catalog, and build a soundtrack that feels like yours.")}</p>
+            <p className="t-eyebrow flex items-center gap-2 text-violet-200"><Sparkles size={13} /> {t("A new way to feel music")}</p>
+            <h1 className="t-display mt-4">{t("Find your")}<br /><span className="bg-gradient-to-r from-violet-200 via-fuchsia-200 to-teal-200 bg-clip-text text-transparent">{t("own frequency.")}</span></h1>
+            <p className="t-meta mt-4 max-w-lg leading-6">{t("Discover independent music, play every track from one unified catalog, and build a soundtrack that feels like yours.")}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a href="/discover" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323] transition hover:bg-white">{t("Explore your sound")} <ArrowUpRight size={16}/></a>
-              <a href="/search" className="btn-press inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/10"><Search size={16}/> {t("Search music")}</a>
+              <a href="/discover" className="btn-press btn-primary">{t("Explore your sound")} <ArrowUpRight size={16} /></a>
+              <a href="/search" className="btn-press btn-ghost"><Search size={16} /> {t("Search music")}</a>
             </div>
           </div>
-          <div className="absolute bottom-8 right-10 hidden h-48 w-48 rotate-[-12deg] items-center justify-center rounded-[2.5rem] border border-white/15 bg-white/[0.04] shadow-2xl backdrop-blur-xl lg:flex">
-            <div className="absolute inset-4 rounded-full border border-violet-200/20"/>
-            <div className="absolute inset-8 rounded-full border border-fuchsia-200/20"/>
-            <div className="absolute inset-12 rounded-full bg-gradient-to-br from-violet-300/30 to-fuchsia-400/10"/>
-            <AudioLines size={54} strokeWidth={1} className="text-violet-100"/>
+          <div className="absolute bottom-8 right-10 hidden h-48 w-48 rotate-[-12deg] items-center justify-center rounded-panel border border-white/15 bg-white/[0.04] shadow-float backdrop-blur-xl lg:flex">
+            <div className="absolute inset-4 rounded-full border border-violet-200/20" />
+            <div className="absolute inset-8 rounded-full border border-fuchsia-200/20" />
+            <div className="absolute inset-12 rounded-full bg-gradient-to-br from-violet-300/30 to-teal-400/10" />
+            <AudioLines size={54} strokeWidth={1} className="text-violet-100" />
           </div>
         </div>
 
-        <MoodPicker/>
+        <MoodPicker />
 
-        <section className="mt-12">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-            <div><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Catalog")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Music to explore")}</h2><p className="mt-1 text-xs text-slate-500">{t("Live selections from the licensed catalogs")}</p></div>
-            <a href="/discover" className="btn-press inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white">{t("View full catalog")} <ArrowUpRight size={13}/></a>
+        {catalogLoading ? <div className="mt-2"><RailSkeleton count={6} /></div> : tracks.length === 0 ? (
+          <div className="mt-8">
+            <ErrorBlock
+              title={catalogError || t("No tracks are available right now.")}
+              body={t("Live selections from the licensed catalogs")}
+              actionHref="/discover"
+              actionLabel={t("Open Discover")}
+            />
           </div>
-          {catalogLoading ? <div className="flex min-h-40 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading the catalog…")}</div> : tracks.length === 0 ? <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-8 text-sm text-slate-400">{catalogError || t("No tracks are available right now.")} <a href="/discover" className="ml-2 text-violet-200 hover:text-white">{t("Open Discover")}</a></div> : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {tracks.map((track, index) => <article key={track.id} className="card-enter group flex min-w-0 items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3 transition hover:-translate-y-0.5 hover:bg-white/[0.05]" style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}>
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-violet-300/10">{track.artworkUrl ? <img src={track.artworkUrl} alt="" loading="lazy" className="h-full w-full object-cover"/> : <div className="grid h-full place-items-center"><Music2 className="text-violet-200"/></div>}</div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-400">{track.artist}</p><p className="mt-1 truncate text-[10px] text-slate-500">{track.album || t("Independent release")} · {duration(track.durationSeconds)}</p></div>
-                <button type="button" onClick={() => startTrack(track)} disabled={!track.audioUrl || track.playable === false} aria-label={currentTrack?.id === track.id && isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-200 text-[#171323] transition hover:scale-105 disabled:opacity-40">{currentTrack?.id === track.id && isPlaying ? <Pause size={16} fill="currentColor"/> : <Play size={16} fill="currentColor"/>}</button>
-              </article>)}
-            </div>
-          )}
-        </section>
+        ) : (
+          <Rail
+            eyebrow={t("Catalog")}
+            title={t("Music to explore")}
+            titleId="home-catalog-heading"
+            subtitle={t("Live selections from the licensed catalogs")}
+            viewAllHref="/discover"
+          >
+            {playableTracks.map((track, index) => (
+              <div key={track.id} className="rail-item card-enter" style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+                <TrackCard
+                  title={track.title}
+                  artist={track.artist}
+                  artworkUrl={track.artworkUrl}
+                  isCurrent={currentTrack?.id === track.id}
+                  isPlaying={isPlaying}
+                  onPlay={() => startTrack(track)}
+                  disabled={!track.audioUrl || track.playable === false}
+                />
+              </div>
+            ))}
+          </Rail>
+        )}
 
-        <section className="mt-12 rounded-3xl border border-white/[0.07] bg-white/[0.025] p-6 md:p-8">
-          <div className="flex items-center gap-3"><Headphones className="text-violet-200"/><div><h2 className="font-semibold">{t("A listening space, not just a feed.")}</h2><p className="mt-1 text-xs text-slate-400">{t("One catalog, one player. Licensing and attribution stay attached to every track.")}</p></div><a href="/legal" className="ml-auto hidden shrink-0 items-center gap-1 text-xs text-slate-400 hover:text-white sm:inline-flex">{t("Licensing and attribution")} <ArrowUpRight size={13}/></a></div>
+        <section className="surface mt-10 flex items-center gap-3 p-5 md:p-6">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-tile bg-accent-soft text-violet-200"><AudioLines size={19} /></span>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold leading-snug">{t("A listening space, not just a feed.")}</h2>
+            <p className="t-meta mt-0.5">{t("One catalog, one player. Licensing and attribution stay attached to every track.")}</p>
+          </div>
+          <a href="/legal" className="btn-press ml-auto hidden shrink-0 items-center gap-1 text-sm text-muted hover:text-white sm:inline-flex">{t("Licensing and attribution")} <ArrowUpRight size={13} /></a>
         </section>
-        <footer className="mt-12 border-t border-white/[0.07] pt-5 text-xs text-slate-500">{t("SONORA · Independent music · Music rights first")}</footer>
+        <footer className="mt-10 border-t border-white/[0.06] pt-5 text-[13px] text-muted">{t("SONORA · Independent music · Music rights first")}</footer>
       </section>
     </main>
   );

@@ -29,9 +29,9 @@ export function MoodPicker() {
     <section className="mt-12" aria-labelledby="mood-picker-heading">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-300">{t("Made for the moment")}</p>
-          <h2 id="mood-picker-heading" className="mt-2 text-2xl font-semibold">{t("Pick a mood")}</h2>
-          <p className="mt-1 text-xs text-slate-500">{t("Each mood opens the catalog with a ready-made search.")}</p>
+          <p className="t-eyebrow text-violet-200">{t("Made for the moment")}</p>
+          <h2 id="mood-picker-heading" className="t-h2 mt-1">{t("Pick a mood")}</h2>
+          <p className="t-meta mt-1">{t("Each mood opens the catalog with a ready-made search.")}</p>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -39,7 +39,7 @@ export function MoodPicker() {
           <Link
             key={mood.slug}
             href={`/search?q=${encodeURIComponent(mood.query)}`}
-            className="card-enter btn-press group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br p-4 transition-transform duration-200 hover:scale-[1.03] focus-visible:scale-[1.03]"
+            className="card-enter btn-press card-lift group relative flex min-w-0 flex-col justify-end overflow-hidden rounded-card border border-white/[0.07] bg-gradient-to-br p-4"
             style={{ animationDelay: `${Math.min(index * 25, 300)}ms` }}
           >
             <span className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${mood.gradient}`} aria-hidden />
@@ -51,8 +51,8 @@ export function MoodPicker() {
               onError={(event) => event.currentTarget.remove()}
               className="absolute inset-0 h-full w-full object-cover opacity-45 mix-blend-screen transition duration-300 group-hover:opacity-65"
             />
-            <span className="relative block truncate text-sm font-semibold text-white">{t(mood.label)}</span>
-            <span className="relative mt-0.5 block truncate text-[11px] text-slate-300/85">{t(mood.caption)}</span>
+            <span className="relative block truncate text-[15px] font-semibold text-white">{t(mood.label)}</span>
+            <span className="relative mt-0.5 block truncate text-xs text-white/65">{t(mood.caption)}</span>
           </Link>
         ))}
       </div>
