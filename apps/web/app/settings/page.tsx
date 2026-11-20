@@ -38,7 +38,7 @@ export default function SettingsPage() {
             <Music2 size={18} className="text-violet-200" />
             <h2 className="text-base font-semibold">{t("Music sources")}</h2>
           </div>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{t("SONORA currently searches playable open catalogs such as Jamendo and Audius. Other services are shown only when an official playback integration is available.")}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-400">{t("SONORA plays one unified catalog built from licensed music sources. Other services appear only when an official playback integration is available.")}</p>
           <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -69,9 +69,9 @@ export default function SettingsPage() {
             </a>
           </div>
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-slate-400">
-            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Jamendo · {t("playable")}</span>
-            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">Audius · {t("playable when streamable")}</span>
-            <span className="rounded-full border border-white/10 px-3 py-1.5">MusicBrainz · {t("metadata only")}</span>
+            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">{t("Licensed catalogs")} · {t("playable")}</span>
+            <span className="rounded-full border border-emerald-300/15 bg-emerald-300/5 px-3 py-1.5 text-emerald-200">{t("Creator uploads")} · {t("playable when streamable")}</span>
+            <span className="rounded-full border border-white/10 px-3 py-1.5">{t("Catalog records")} · {t("metadata only")}</span>
             <span className="rounded-full border border-amber-300/15 bg-amber-300/5 px-3 py-1.5 text-amber-200">VK · {t("external service only")}</span>
           </div>
         </div>

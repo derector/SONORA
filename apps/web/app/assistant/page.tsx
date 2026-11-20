@@ -125,7 +125,7 @@ export default function AssistantPage() {
             <p className="text-sm text-slate-400">{t("Start with one of these:")}</p>
             <div className="flex flex-wrap gap-2">
               {SUGGESTIONS.map((suggestion) => (
-                <button key={suggestion} type="button" onClick={() => setDraft(suggestion)} className="btn-press rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300 transition hover:bg-white/[0.07] hover:text-white">{suggestion}</button>
+                <button key={suggestion} type="button" onClick={() => setDraft(suggestion)} className="btn-press rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-300 transition hover:bg-white/[0.07] hover:text-white">{t(suggestion)}</button>
               ))}
             </div>
           </div>

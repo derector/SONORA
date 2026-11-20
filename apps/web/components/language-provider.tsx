@@ -10,8 +10,8 @@ const ru: Record<string, string> = {
   "Workspace":"Рабочее пространство","Discover":"Обзор","Search":"Поиск","Your library":"Медиатека","Liked tracks":"Любимые треки","Listening history":"История прослушивания","Playlists":"Плейлисты","Your sound, evolving.":"Твой звук меняется.","Personalized discovery is coming as your listening story grows.":"Персональные рекомендации появятся, когда накопится история прослушивания.",
   "Tuesday, your next favorite is waiting.":"Твоя следующая любимая композиция уже ждёт.","Sign in":"Войти","Preview experience":"Предварительная версия","A new way to feel music":"Новый способ почувствовать музыку","Find your":"Найди свою","own frequency.":"частоту.","A calmer space for discovering sounds, collecting moments, and building a soundtrack that feels like yours.":"Пространство для поиска музыки, ярких моментов и создания собственного саундтрека.","Explore your sound":"Открыть музыку","Curated starting points":"Подборки для настроения","Made for the moment":"Под настроение","View all":"Смотреть всё","Editorial mood":"Редакционная подборка","A listening space, not just a feed.":"Музыкальное пространство, а не просто лента.","The foundation is being built. Playback will be enabled only through licensed sources.":"Платформа развивается. Воспроизведение доступно только из разрешённых источников.","SONORA · Early foundation · Music rights first":"SONORA · Ранняя версия · Права на музыку прежде всего",
   "Back to SONORA":"Назад в SONORA","Your music identity":"Твоя музыкальная учётная запись","You’re in.":"Ты вошёл!","Signing out…":"Выходим…","Sign out":"Выйти","Check your inbox.":"Проверь почту.","Enter the eight-digit code sent to":"Введи восьмизначный код, отправленный на","Verification code":"Код подтверждения","Verify and continue":"Подтвердить и продолжить","Change email or request another code":"Изменить почту или запросить новый код","Create your account.":"Создай аккаунт.","Welcome back.":"С возвращением.","Sign in securely with a one-time code sent to your email.":"Безопасный вход по одноразовому коду из письма.","Create account":"Создать аккаунт","I already have an account":"У меня уже есть аккаунт","Account access":"Доступ к аккаунту","Browse catalog":"Каталог","Library":"Медиатека","Music universe":"Музыкальная вселенная","Your listening space":"Твоё музыкальное пространство","SONORA account":"Аккаунт SONORA","Account":"Аккаунт","Display name":"Отображаемое имя","How should we call you?":"Как к тебе обращаться?","Username":"Имя пользователя","Email address":"Электронная почта","Send email code":"Отправить код","Protected by Supabase Auth. Your refresh session is stored in a secure HttpOnly cookie.":"Защита Supabase Auth. Сессия хранится в защищённой HttpOnly-cookie.",
-  "Discover independent music":"Открывай независимую музыку","Find your next frequency.":"Найди свою следующую частоту.","Explore independent tracks from Jamendo. Every result carries its creator, source and Creative Commons license details. Playback is offered only where the track and provider terms permit it.":"Исследуй независимую музыку Jamendo. У каждого трека указаны автор, источник и лицензия Creative Commons. Воспроизведение доступно в рамках условий площадки и лицензии.","Tracks to explore":"Музыка для открытия","Powered by Jamendo":"На платформе Jamendo","Loading the catalog…":"Загружаем каталог…","Catalog connection is not ready.":"Каталог пока недоступен.","The provider API key must be configured server-side. No demo tracks are substituted.":"Нужно настроить API-ключ провайдера на сервере. Демонстрационные треки не подставляются.","No tracks found. Try another search.":"Ничего не найдено. Попробуй другой запрос.","Independent release":"Независимый релиз","Play track":"Слушать","Pause":"Пауза","Play":"Воспроизвести","CC license":"Лицензия CC","License":"Лицензия","Artist:":"Исполнитель:","Source:":"Источник:","License terms apply.":"Действуют условия лицензии.","SONORA · Independent music discovery · Rights and attribution stay attached to every track":"SONORA · Открытие независимой музыки · Права и атрибуция сохраняются у каждого трека",
-  "Your saved music":"Твоя сохранённая музыка","Keep the good ones close.":"Сохраняй любимое рядом.","Jamendo tracks you save are stored in your SONORA account with their original source and license details.":"Сохранённые треки Jamendo хранятся в аккаунте SONORA вместе с исходными ссылками и сведениями о лицензии.","Loading your favorites…":"Загружаем избранное…","Sign in to see your saved tracks.":"Войди, чтобы увидеть сохранённые треки.","Sign in or create account":"Войти или создать аккаунт","Your favorites shelf is empty.":"Здесь пока пусто.","Save a track from Discover and it will appear here.":"Сохрани трек в разделе «Обзор», и он появится здесь.","Explore music":"Открыть музыку","Your collection":"Твоя коллекция","Saved tracks":"Сохранённые треки",
+  "Discover independent music":"Открывай независимую музыку","Find your next frequency.":"Найди свою следующую частоту.","Tracks to explore":"Музыка для открытия","Loading the catalog…":"Загружаем каталог…","Catalog connection is not ready.":"Каталог пока недоступен.","The provider API key must be configured server-side. No demo tracks are substituted.":"Нужно настроить API-ключ провайдера на сервере. Демонстрационные треки не подставляются.","No tracks found. Try another search.":"Ничего не найдено. Попробуй другой запрос.","Independent release":"Независимый релиз","Play track":"Слушать","Pause":"Пауза","Play":"Воспроизвести","CC license":"Лицензия CC","License":"Лицензия","Artist:":"Исполнитель:","Source:":"Источник:","License terms apply.":"Действуют условия лицензии.","SONORA · Independent music discovery · Rights and attribution stay attached to every track":"SONORA · Открытие независимой музыки · Права и атрибуция сохраняются у каждого трека",
+  "Your saved music":"Твоя сохранённая музыка","Keep the good ones close.":"Сохраняй любимое рядом.","Loading your favorites…":"Загружаем избранное…","Sign in to see your saved tracks.":"Войди, чтобы увидеть сохранённые треки.","Sign in or create account":"Войти или создать аккаунт","Your favorites shelf is empty.":"Здесь пока пусто.","Save a track from Discover and it will appear here.":"Сохрани трек в разделе «Обзор», и он появится здесь.","Explore music":"Открыть музыку","Your collection":"Твоя коллекция","Saved tracks":"Сохранённые треки",
   "Your listening trail":"Твоя музыкальная история","Recently heard.":"Недавно прослушано.","Real playback events from your SONORA sessions. Plays, completed tracks and skips are recorded separately.":"Здесь реальные события воспроизведения SONORA. Запуски, завершения и пропуски записываются отдельно.","Loading listening history…":"Загружаем историю…","Sign in to see your history.":"Войди, чтобы увидеть историю.","Your listening history is empty.":"История пока пуста.","Play a track in Discover and it will appear here.":"Включи трек в разделе «Обзор», и он появится здесь.","Your activity":"Твоя активность","Listening events":"События прослушивания","Finished":"Дослушано","Skipped":"Пропущено","Played":"Воспроизведено",
   "Your personal collection":"Твоя личная коллекция","Sound, in your order.":"Музыка в твоём порядке.","Create and manage your own playlists. They are stored in your SONORA account, not just in this browser.":"Создавай плейлисты и управляй ими. Они хранятся в аккаунте SONORA, а не только в браузере.","Restoring your session…":"Восстанавливаем сессию…","Sign in to see your library.":"Войди, чтобы открыть медиатеку.","Your playlists are private to your account until you choose otherwise.":"Твои плейлисты приватны, пока ты не решишь иначе.","Create a playlist":"Создать плейлист","Playlist name":"Название плейлиста","A short description (optional)":"Краткое описание (необязательно)","Create":"Создать","Your playlists":"Твои плейлисты","Your first playlist starts here.":"Начни с первого плейлиста.","Create one above. You can add catalog tracks as the music catalog is connected.":"Создай его выше. Добавление треков станет доступно через каталог.","No description":"Без описания","Public":"Публичный","Private":"Приватный","Playlist created.":"Плейлист создан.","Playlist deleted.":"Плейлист удалён.","Delete":"Удалить",
   "Previous track":"Предыдущий трек","Next track":"Следующий трек","Toggle queue":"Открыть очередь","Close queue":"Закрыть очередь","Up next ·":"Далее ·","Seek through track":"Перемотка трека","Volume":"Громкость","Original":"Оригинал","Speed up":"Ускорить","Slowed":"Замедлить","Playback version":"Версия воспроизведения",
@@ -34,7 +34,6 @@ const ru: Record<string, string> = {
   "Imported": "Импортировано",
   "Open source": "Открыть источник",
   "How importing works": "Как работает импорт",
-  "Export a playlist as CSV from the source service, or paste lines in Artist - Track title format. Plain playlist URLs alone do not expose protected track metadata. SONORA imports matches from its own licensed Jamendo catalog; it does not download audio from Spotify, Apple Music or other services.": "Экспортируй плейлист в CSV из исходного сервиса или вставь строки в формате Исполнитель - Название. Одна ссылка на плейлист не раскрывает защищённые метаданные. SONORA ищет совпадения в собственном лицензированном каталоге Jamendo и не скачивает аудио из Spotify, Apple Music и других сервисов.",
   "Paste a playlist CSV or track list first.": "Сначала вставь CSV плейлиста или список треков.",
   "Import is limited to 100 tracks per batch.": "За один раз можно импортировать не более 100 треков.",
   "Search failed.": "Ошибка поиска.",
@@ -59,17 +58,12 @@ const ru: Record<string, string> = {
   "Import": "Импорт",
   "IMPORT": "ИМПОРТ",
   "Open catalog": "Открытый каталог",
-  "Jamendo": "Jamendo",
   "FAVORITES": "ИЗБРАННОЕ",
   "HISTORY": "ИСТОРИЯ",
   "PLAYLISTS": "ПЛЕЙЛИСТЫ",
   "Search tracks, artists or moods": "Поиск треков, исполнителей или настроения",
   "Remove from favorites": "Убрать из избранного",
   "Add to favorites": "Добавить в избранное",
-  "Open Jamendo source": "Открыть источник Jamendo",
-  
-  
-  
   "Remove": "Убрать",
   "Warm electronic · 42 tracks": "Тёплая электроника · 42 трека",
   "Indie & alternative · 36 tracks": "Инди и альтернатива · 36 треков",
@@ -108,7 +102,6 @@ const ru: Record<string, string> = {
   "Sign in to open this playlist.": "Войди, чтобы открыть этот плейлист.",
   "Your playlist": "Твой плейлист",
   "Your music, collected in one place.": "Вся твоя музыка в одном месте.",
-  "Licensed Jamendo catalog": "Лицензированный каталог Jamendo",
   "Find tracks to add": "Найти треки для добавления",
   "Search by track or artist": "Поиск по треку или исполнителю",
   "Add track": "Добавить трек",
@@ -133,8 +126,149 @@ const ru: Record<string, string> = {
   "matches": "совпадений",
   "Metadata only": "Только информация",
   "Recording matches": "Найденные записи",
-  "MusicBrainz identifies recordings and releases. It does not provide audio playback.": "MusicBrainz помогает находить записи и релизы, но не предоставляет воспроизведение аудио.",
-  "SONORA · Federated discovery · Every playable result remains attributed to its source": "SONORA · Поиск по каталогам · У каждого трека сохраняется ссылка на источник",
+  "SONORA · Federated discovery · Every playable result remains attributed to its source": "SONORA · Поиск по каталогам · У каждого трека сохраняется ссылка на источник"
+  "Seasonal effects": "Сезонные эффекты"
+  "Snow, rain and falling leaves follow the calendar. Nothing animates when your device asks for reduced motion.": "Снег, дождь и падающие листья следуют календарю. Анимация исчезает, если система просит уменьшить движение."
+  "On": "Включено"
+  "Off": "Выключено"
+  "This choice is saved on this device only.": "Этот выбор сохраняется только на этом устройстве."
+  "Made for the moment": "Под настроение момента"
+  "Pick a mood": "Выбери настроение"
+  "Each mood opens the catalog with a ready-made search.": "Каждое настроение открывает каталог с готовым запросом."
+  "Focus": "Фокус"
+  "Lo-fi and steady": "Лоу-фай и ровный ритм"
+  "Energy": "Энергия"
+  "Bright and fast": "Ярко и быстро"
+  "Relax": "Спокойствие"
+  "Wide and quiet": "Просторно и тихо"
+  "Party": "Вечеринка"
+  "Loud and warm": "Громко и тепло"
+  "Sleep": "Сон"
+  "Low and slow": "Низко и медленно"
+  "Discovery": "Новые находки"
+  "New to you": "То, чего ты ещё не слышал"
+  "Ask SONORA": "Спроси SONORA"
+  "What should we play?": "Что нам включить?"
+  "Describe a mood, an activity or an artist you like. Answers come with playable tracks from the licensed catalog.": "Опиши настроение, занятие или любимого артиста. В ответ придут играющие треки из лицензионного каталога."
+  "Signed-in conversations can build playlists. Guest answers stay limited to the public catalog.": "Беседы с авторизацией умеют собирать плейлисты. Гостевые ответы ограничены открытым каталогом."
+  "Start with one of these:": "Начни с одной из этих фраз:"
+  "Make something for late-night focus": "Собери что-нибудь для ночной работы"
+  "Find calm piano": "Найди спокойное пианино"
+  "Something upbeat for the drive": "Что-нибудь бодрое для дороги"
+  "Listening…": "Слушаю…"
+  "The assistant could not answer right now. Try again in a moment.": "Ассистент пока не смог ответить. Попробуй через минуту."
+  "No results this time. Try asking for a mood instead.": "Сейчас без результатов. Попробуй описать настроение."
+  "Connection failed. The assistant could not be reached.": "Нет соединения. Ассистент недоступен."
+  "Open the playlist": "Открыть плейлист"
+  "Describe a mood, an artist or a plan for the evening": "Опиши настроение, артиста или планы на вечер"
+  "Message": "Сообщение"
+  "Send": "Отправить"
+  "Assistant": "Ассистент"
+  "For you": "Для тебя"
+  "Picked from your listening": "По твоим прослушиваниям"
+  "Independent release": "Независимый релиз"
+  "Licensed playback": "Лицензионное воспроизведение"
+  "Licensing and attribution": "Лицензии и атрибуция"
+  "Artist:": "Артист:"
+  "License terms apply.": "Действуют условия лицензии."
+  "About track": "О треке"
+  "Album": "Альбом"
+  "Open source page": "Открыть страницу источника"
+  "Read license terms": "Читать условия лицензии"
+  "SONORA plays licensed catalogs. Rights and attribution always stay with the recording.": "SONORA играет лицензионные каталоги. Права и атрибуция всегда остаются у записи."
+  "Original source became unavailable for this track.": "Оригинальный источник этого трека стал недоступен."
+  "Licensed catalog": "Лицензионный каталог"
+  "Catalog": "Каталог"
+  "Live selections from the licensed catalogs": "Живые подборки из лицензионных каталогов"
+  "Discover independent music, play every track from one unified catalog, and build a soundtrack that feels like yours.": "Открывай независимую музыку, играй любой трек из единого каталога и собирай саундтрек, который звучит как твой."
+  "One catalog, one player. Licensing and attribution stay attached to every track.": "Один каталог, один плеер. Лицензия и атрибуция остаются с каждым треком."
+  "Explore independent releases from licensed catalogs. Every track plays in full, with creator attribution and license terms preserved.": "Открывай независимые релизы из лицензионного каталога. Каждый трек играет целиком — с указанием автора и условиями лицензии."
+  "Collections": "Подборки"
+  "Creator uploads": "Загрузки авторов"
+  "Public tracks shared directly by their creators": "Открытые треки, которые публикуют сами авторы"
+  "No tracks are available right now.": "Сейчас нет доступных треков."
+  "View full catalog": "Открыть весь каталог"
+  "Catalog search": "Поиск по каталогу"
+  "Search the catalog.": "Ищи по каталогу."
+  "Search tracks, artists and recordings in one place. Every playable result keeps its attribution and license information.": "Треки, артисты и записи в одном месте. Каждый играющий результат сохраняет атрибуцию и лицензию."
+  "Recording artist": "Артист записи"
+  "followers": "подписников"
+  "Catalog records identify recordings and releases. They do not provide audio playback.": "Каталожные записи описывают релизы, но не дают аудио для воспроизведения."
+  "SONORA · One catalog · Every playable result keeps its attribution and license information": "SONORA · Единый каталог · Каждый играющий результат сохраняет атрибуцию и лицензию"
+  "SONORA · Independent music discovery · Rights and attribution stay attached to every track": "SONORA · Поиск независимой музыки · Права и атрибуция остаются с каждым треком"
+  "Licensed catalog tracks": "Треки из лицензионного каталога"
+  "No playable matches were found.": "Играющих совпадений не найдено."
+  "This track is no longer available.": "Этот трек больше недоступен."
+  "SONORA account": "Аккаунт SONORA"
+  "Account": "Аккаунт"
+  "Music universe": "Музыкальная вселенная"
+  "Create": "Создать"
+  "total": "всего"
+  "tracks": "треков"
+  "events": "событий"
+  "listened": "прослушано"
+  "Open track page": "Открыть страницу трека"
+  "Remove from favorites": "Убрать из любимого"
+  "Tracks you save are stored in your SONORA account with their original source and license details.": "Сохранённые треки лежат в твоём аккаунте SONORA вместе с источником и условиями лицензии."
+  "Licensed catalogs": "Лицензионные каталоги"
+  "Catalog records": "Каталожные записи"
+  "playable": "играют"
+  "playable when streamable": "играют, если есть поток"
+  "metadata only": "только метаданные"
+  "SONORA plays one unified catalog built from licensed music sources. Other services appear only when an official playback integration is available.": "SONORA играет единый каталог, собранный из лицензионных музыкальных источников. Другие сервисы показаны только там, где есть официальная интеграция воспроизведения."
+  "SONORA matches imported titles inside its own licensed catalogs; it never downloads audio from other services.": "SONORA сопоставляет импортированные треки внутри собственных лицензионных каталогов и никогда не скачивает аудио из других сервисов."
+  "Unknown artist": "Неизвестный артист"
+  "The provider API key must be configured server-side. No demo tracks are substituted.": "Ключ источника должен быть настроен на сервере. Демо-треки не подставляются."
+  "Sign in": "Войти"
+  "Play": "Играть"
+  "Pause": "Пауза"
+  "Play track": "Играть трек"
+  "Search": "Поиск"
+  "Search music": "Искать музыку"
+  "Browse catalog": "Каталог"
+  "Results": "Результаты"
+  "results": "результатов"
+  "Loading the catalog…": "Загружаем каталог…"
+  "Open Discover": "Открыть «Обзор»"
+  "Music to explore": "Музыка для изучения"
+  "Explore your sound": "Исследуй своё звучание"
+  "A new way to feel music": "Новый способ чувствовать музыку"
+  "Find your": "Найди свою"
+  "own frequency.": "следующую частоту."
+  "Your sound, evolving.": "Твоё звучание растёт."
+  "Personalized discovery is coming as your listening story grows.": "Персональные подборки появятся, когда вырастет твоя история прослушиваний.",
+
+  "Latest uploads": "Новые загрузки"
+  "Trending this week": "Популярное на неделе"
+  "Open catalogs": "Открытые каталоги"
+  "Export a playlist as CSV from the source service, or paste lines in Artist - Track title format. Plain playlist URLs alone do not expose protected track metadata. SONORA matches imported titles inside its own licensed catalogs; it never downloads audio from other services.": "Экспортируй плейлист в CSV из сервиса-источника или вставь строки в формате Артист - Название трека. Одна ссылка на плейлист не раскрывает защищённые данные. SONORA сопоставляет импортированные треки внутри собственных лицензионных каталогов и никогда не скачивает аудио из других сервисов."
+  "SONORA · Independent music · Music rights first": "SONORA · Независимая музыка · Права на музыку прежде всего"
+  "Music sources": "Музыкальные источники"
+  "Moozza official website": "Официальный сайт Moozza"
+  "Open Moozza in Google Play": "Открыть Moozza в Google Play"
+  "Open VK Music": "Открыть VK Музыку"
+  "Open VK ID developer setup": "Настроить VK ID для разработчиков"
+  "VK ID sign-in alone does not grant access to the private VK Music catalog or audio streams. SONORA will not ask for your VK password or use unofficial private endpoints.": "Сам по себе вход через VK ID не даёт доступ к закрытому каталогу VK Музыки и аудиопотокам. SONORA не запросит твой пароль VK и не использует неофициальные приватные эндпоинты."
+  "Official catalog playback is not available through the public VK API.": "Официальное воспроизведение каталога недоступно через публичный VK API."
+  "Moozza can access your VK music inside its own Android app. It does not currently expose a documented public API or account-linking flow for SONORA, so this opens Moozza separately and does not sync its library or stream into the SONORA player.": "Moozza открывает твою VK-музыку внутри собственного Android-приложения. Публичного API или сценария привязки аккаунта для SONORA у него пока нет, поэтому ссылка открывает Moozza отдельно и не синхронизирует медиатеку и не играет в плеере SONORA."
+  "external service only": "только внешний сервис"
+  "Original source unavailable. Playing a matching track from another playable catalog.": "Оригинальный источник недоступен. Играем похожий трек из другого лицензионного каталога."
+  "Licensing and attribution stay with every recording.": "Лицензия и атрибуция остаются у каждой записи."
+  "Back": "Назад"
+  "Music rights stay attached to every track.": "Права на музыку остаются привязанными к каждому треку."
+  "SONORA plays one unified catalog built from licensed music sources. Each recording keeps its creator, license deed and source page, and playback follows the terms attached to it.": "SONORA играет единый каталог, собранный из лицензионных музыкальных источников. Каждая запись сохраняет автора, текст лицензии и страницу источника, а воспроизведение следует её условиям."
+  "Where to find attribution": "Где искать атрибуцию"
+  "Open the full player and use": "Открой полный плеер и используй"
+  "It shows the album, the license applied to that recording, a direct link to the source page and the license deed itself. License and attribution links are also available on saved tracks and playlist rows.": "Там показаны альбом, лицензия записи, прямая ссылка на страницу источника и сам текст лицензии. Ссылки лицензии и атрибуции также есть у сохранённых треков и в строках плейлистов."
+  "About track": "О треке"
+  "Catalogs and terms": "Каталоги и условия"
+  "Tracks come from independent, licensed catalogs. Most are released under Creative Commons deeds; the deed shown for a track is authoritative, and it may require credit, forbid commercial use or both. SONORA does not relicense recordings and does not remove or rewrite the terms attached to them.": "Треки приходят из независимых лицензионных каталогов. Большинство опубликованы по лицензиям Creative Commons; приоритет имеет текст, указанный для конкретного трека — он может требовать указания автора, запрещать коммерческое использование или и то и другое. SONORA не перевыдаёт лицензии и не переписывает её условия."
+  "If a recording is withdrawn at its source, SONORA reports that honestly instead of substituting another take, and the queue moves on.": "Если запись отозвана у источника, SONORA честно сообщает об этом вместо подмены другой версии, и очередь идёт дальше."
+  "Imports, external apps and data": "Импорт, внешние приложения и данные"
+  "Import matches titles you already own inside SONORA's licensed catalogs. SONORA never downloads audio from other services and never streams protected files it is not allowed to serve. Playback history and favorites are stored in your SONORA account; your language and seasonal effects choices stay on this device.": "Импорт сопоставляет треки, которые у тебя уже есть, внутри лицензионных каталогов SONORA. SONORA не скачивает аудио из других сервисов и не транслирует защищённые файлы, которые не может отдавать. История воспроизведения и избранное хранятся в аккаунте SONORA; выбор языка и сезонных эффектов остаётся на этом устройстве."
+  "Rights holders": "Правообладателям"
+  "If you hold rights to a recording and believe it is presented without a valid deed, contact the source that published it and use the license or report link on that source page. SONORA honors withdrawals received from its catalogs.": "Если ты обладаешь правами на запись и считаешь, что она опубликована без действующей лицензии, обратись к источнику, который её разместил, и используй ссылку лицензии или жалобы на его странице. SONORA исполняет отзывы, полученные из своих каталогов."
+
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
