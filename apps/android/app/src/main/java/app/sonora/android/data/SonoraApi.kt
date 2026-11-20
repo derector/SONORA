@@ -154,6 +154,31 @@ object SonoraApi {
         return parseTracks(request(path).optJSONArray("items"))
     }
 
+    /**
+     * Unified catalog feed for the Discover screen. Every source is requested with its
+     * own ranking and the answers are interleaved by rank (first of each source, then
+     * second of each source, ...), so no single source dominates and the UI never has
+     * to offer or name a provider. Source names stay purely internal routing detail.
+     * A source that fails is skipped; when all of them fail the first failure is
+     * rethrown so the existing retry affordance keeps working unchanged.
+     */
+    fun discoverCatalog(): List<Track> {
+        val feeds = listOf("Audius", "Jamendo").map { source -> runCatching { discover(source) } }
+        val ranked = feeds.mapNotNull { feed -> feed.getOrNull()?.takeIf { it.isNotEmpty() } }
+        if (ranked.isEmpty()) {
+            throw feeds.firstNotNullOfOrNull { it.exceptionOrNull() }
+                ?: IOException("Каталог временно недоступен")
+        }
+        val merged = LinkedHashMap<String, Track>()
+        for (rank in 0 until ranked.maxOf { it.size }) {
+            for (feed in ranked) {
+                val track = feed.getOrNull(rank) ?: continue
+                merged.putIfAbsent("${track.provider}:${track.id}", track)
+            }
+        }
+        return merged.values.toList()
+    }
+
     // Jamendo provider favorites are stored separately from UUID-based catalog tracks.
     fun getProviderFavorites(): List<Track> {
         val items = request("/api/v1/provider-favorites", authenticated = true).optJSONArray("items")

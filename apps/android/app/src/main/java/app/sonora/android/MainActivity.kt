@@ -81,7 +81,6 @@ private fun SonoraApp() {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableStateOf("Главная") }
-    var provider by remember { mutableStateOf("Audius") }
     var tracks by remember { mutableStateOf<List<Track>>(emptyList()) }
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
@@ -118,10 +117,15 @@ private fun SonoraApp() {
         playbackNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    fun loadTracks(source: String, done: (List<Track>) -> Unit) {
+    // One unified catalogue: the API merges every source and keeps each one's ranking,
+    // so the screen neither selects nor shows where a track came from.
+    fun loadCatalog(done: (List<Track>) -> Unit) {
         scope.launch {
             busy = true
-            try { done(withContext(Dispatchers.IO) { SonoraApi.discover(source) }); message = "" }
+            try {
+                done(withContext(Dispatchers.IO) { SonoraApi.discoverCatalog() })
+                message = ""
+            }
             catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
             finally { busy = false }
         }
@@ -139,7 +143,7 @@ private fun SonoraApp() {
                 MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
             }
         } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
-        loadTracks("Audius") { tracks = it }
+        loadCatalog { tracks = it }
     }
 
     DisposableEffect(controller, tracks, activeQueue, authStep) {
@@ -362,7 +366,7 @@ private fun SonoraApp() {
         ) { padding ->
             AnimatedContent(tab, modifier = Modifier.padding(padding), transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "tab") { screen ->
                 when (screen) {
-                    "Главная" -> DiscoverScreen(tracks, provider, busy, message, { source -> provider = source; loadTracks(source) { tracks = it } }, ::play, { tab = "Плеер" }, { tab = "Поиск" })
+                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { tab = "Плеер" }, { tab = "Поиск" })
                     "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
                         val term = query.trim()
                         if (term.isBlank()) {
@@ -418,7 +422,7 @@ private fun SonoraApp() {
 }
 
 @Composable
-private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean, message: String, choose: (String) -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
+private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -447,16 +451,11 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
                     Text("Открыть поиск", color = Color(0xFF171323), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD8CCFF)).clickable(onClick = openSearch).padding(horizontal = 15.dp, vertical = 9.dp))
                     Spacer(Modifier.width(10.dp))
-                    Text("Audius  ·  Jamendo", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
+                    Text("Единый каталог", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
                 }
             }
         }
-        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Audius", "Jamendo").forEach { source ->
-                FilterChip(selected = provider == source, onClick = { choose(source) }, label = { Text(source) }, colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Lime, selectedLabelColor = Ink))
-            }
-        }
-        Text("Подборка для тебя", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+        Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
         if (!busy && tracks.isEmpty() && message.isBlank()) {
@@ -464,18 +463,14 @@ private fun DiscoverScreen(tracks: List<Track>, provider: String, busy: Boolean,
                 Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    if (provider == "Jamendo") "Jamendo пока не вернул доступных треков" else "Пока нет доступных треков",
-                    color = Color.White,
-                    fontWeight = FontWeight.SemiBold
-                )
+                Text("Пока нет доступных треков", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(
                     "Проверьте подключение и попробуйте обновить каталог.",
                     color = Muted,
                     modifier = Modifier.padding(top = 6.dp, bottom = 14.dp)
                 )
                 Button(
-                    onClick = { choose(provider) },
+                    onClick = refresh,
                     colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null)
@@ -546,17 +541,24 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         enqueueDownload()
     }
+    // The provider field stays internal (routing, resolve, download eligibility); a row
+    // only ever shows title, artist, artwork and duration. Tracks whose source cannot be
+    // delivered (for example a cleartext stream URL rejected by the manifest policy) are
+    // labelled and tinted as unavailable instead of offering a playback attempt.
+    val available = track.playable && !track.audioUrl.isNullOrBlank()
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${track.artist}  ·  ${track.provider}", color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (isDownloading) {
                 Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
             } else if (workState == WorkInfo.State.FAILED) {
                 Text("Не удалось скачать. Нажми повторить.", color = Color(0xFFFF9A8D), fontSize = 10.sp)
             } else if (isDownloaded) {
                 Text("Сохранено офлайн", color = Lime, fontSize = 10.sp)
+            } else if (!available) {
+                Text("Недоступно для воспроизведения", color = Muted, fontSize = 10.sp)
             }
         }
         if (track.provider == "Jamendo" && track.downloadUrl != null) {
@@ -574,7 +576,9 @@ private fun TrackRow(track: Track, onPlay: () -> Unit, open: () -> Unit) {
                 }
             }
         }
-        IconButton(onClick = onPlay) { Icon(Icons.Default.PlayCircleFilled, null, tint = Lime, modifier = Modifier.size(30.dp)) }
+        IconButton(onClick = onPlay) {
+            Icon(Icons.Default.PlayCircleFilled, null, tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
+        }
     }
 }
 
@@ -850,8 +854,8 @@ private fun LibraryScreen(
                         Text(if (favorites.any { it.providerTrackId == currentJamendoTrack.providerTrackId }) "Уже в избранном" else "Добавить текущий трек в избранное")
                     }
                 }
-                Text("Избранное Jamendo", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                if (favorites.isEmpty() && !busy) Text("Пока нет избранных треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                Text("Избранное", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                if (favorites.isEmpty() && !busy) Text("Пока нет избранных треков.", color = Muted, modifier = Modifier.padding(top = 8.dp))
                 favorites.forEach { favorite ->
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(8.dp),
@@ -881,7 +885,7 @@ private fun LibraryScreen(
                 Spacer(Modifier.height(14.dp))
                 Text("Недавно слушали", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 if (recentHistory.isEmpty() && !busy) {
-                    Text("История появится после прослушивания треков Jamendo.", color = Muted, modifier = Modifier.padding(top = 8.dp))
+                    Text("История появится после прослушивания треков.", color = Muted, modifier = Modifier.padding(top = 8.dp))
                 }
                 recentHistory.take(8).forEach { recent ->
                     Row(
