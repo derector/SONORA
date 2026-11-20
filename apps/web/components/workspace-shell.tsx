@@ -59,7 +59,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className={`min-w-0 flex-1 ${currentTrack ? "pb-44" : "pb-24"} md:pb-10`}>
+      <div className={`min-w-0 flex-1 ${currentTrack ? "pb-safe" : "pb-24 md:pb-10"}`}>
         <header className="sonora-topbar sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[#080910]/85 px-4 py-3 backdrop-blur-xl md:px-7">
           <Link href="/" className="flex items-center gap-2.5 md:hidden">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-violet-300/25 to-cyan-300/10 text-violet-100"><AudioLines size={19}/></span>

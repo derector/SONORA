@@ -7,6 +7,7 @@ import {
   SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
 } from "lucide-react";
 import { useLanguage } from "./language-provider";
+import { Artwork } from "./ui/artwork";
 import { useAuth } from "./auth-provider";
 
 export type PlayerTrack = {
@@ -697,53 +698,51 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       <audio ref={audioRef} preload="metadata" playsInline />
       {currentTrack && (
         <>
-          <div className="fixed inset-x-3 bottom-3 z-50 mx-auto max-w-[1440px] overflow-hidden rounded-[24px] border border-white/10 bg-[#11121d]/96 px-3 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 shadow-[0_18px_60px_rgba(0,0,0,.55)] backdrop-blur-2xl md:px-6">
-            <div className="mx-auto max-w-[1440px]">
-              <div className="mb-1.5 flex items-center gap-2 text-[10px] tabular-nums text-slate-500">
-                <span>{timeLabel(currentTime)}</span>
-                <div className="relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-white/20" style={{ width: `${duration ? Math.min(100, buffered / duration * 100) : 0}%` }}/>
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>
-                  <input aria-label={t("Seek through track")} type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} disabled={!duration} onChange={(event) => {
-                    const next = Number(event.target.value);
-                    if (audioRef.current && Number.isFinite(next)) { audioRef.current.currentTime = next; setCurrentTime(next); }
-                  }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"/>
-                </div>
-                <span>{timeLabel(duration)}</span>
-              </div>
-              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <button type="button" onClick={() => setExpanded(true)} aria-label={t("Open full player")} className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:bg-white/[0.04] sm:flex-none sm:w-[28%]">
-                  <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-violet-300/10">
-                    <div className="grid h-full w-full place-items-center text-violet-200"><ListMusic size={19}/></div>
-                    {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt="" loading="lazy" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
-                  </div>
-                  <div className="min-w-0"><p className="truncate text-xs font-semibold sm:text-sm">{currentTrack.title}</p><p className="truncate text-[11px] text-slate-400">{currentTrack.artist}</p></div>
-                </button>
-                <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-                  <button type="button" onClick={() => setShuffle((v) => !v)} aria-label={t("Shuffle")} aria-pressed={shuffle} className={`hidden rounded-lg p-2 sm:block ${shuffle ? "text-violet-200" : "text-slate-500 hover:text-white"}`}><Shuffle size={17}/></button>
-                  <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="rounded-lg p-2 text-slate-300 hover:bg-white/10"><SkipBack size={18}/></button>
-                  <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="grid h-10 w-10 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/30">
-                    {isLoading ? <LoaderCircle size={18} className="animate-spin"/> : isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" className="ml-0.5"/>}
-                  </button>
-                  <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="rounded-lg p-2 text-slate-300 hover:bg-white/10"><SkipForward size={18}/></button>
-                  <button type="button" onClick={() => setRepeatMode((m) => m === "off" ? "all" : m === "all" ? "one" : "off")} aria-label={t("Repeat")} aria-pressed={repeatMode !== "off"} className={`hidden rounded-lg p-2 sm:block ${repeatMode !== "off" ? "text-violet-200" : "text-slate-500 hover:text-white"}`}>{repeatMode === "one" ? <Repeat1 size={17}/> : <Repeat size={17}/>}</button>
-                </div>
-                <div className="hidden shrink-0 items-center gap-2 md:flex">
-                  <button type="button" onClick={() => setMuted((v) => !v)} aria-label={muted ? t("Unmute") : t("Mute")} className="rounded-lg p-2 text-slate-400 hover:text-white">{muted || volume === 0 ? <VolumeX size={17}/> : <Volume2 size={17}/>}</button>
-                  <input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} onChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} className="w-20 accent-violet-300"/>
-                </div>
-                <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} aria-pressed={queueOpen} className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-white/10"><ListMusic size={19}/></button>
-              </div>
-              {playbackError && <p role="status" className="mt-2 flex items-start gap-2 rounded-lg border border-rose-300/15 bg-rose-300/5 px-3 py-2 text-[11px] leading-4 text-rose-200"><AlertCircle size={14} className="mt-0.5 shrink-0"/>{playbackError}</p>}
-              {queueOpen && <div className="mt-3 max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-black/40 p-2">
-                <div className="mb-2 flex items-center justify-between px-2 text-xs text-slate-400"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")}><X size={14}/></button></div>
-                {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full min-w-0 items-center gap-3 rounded-lg px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}>
-                  <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-md bg-white/5"><span className="grid h-full w-full place-items-center"><ListMusic size={13}/></span>{item.artworkUrl && <img src={item.artworkUrl} alt="" onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}</span>
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-24 truncate text-slate-500">{item.artist}</span>
+          {/* Sticky mini-player: fixed 68px bar with the header's backdrop blur.
+              Progress is a slim 2px violet->teal line on the top edge, driven by
+              the same clock as the hover-revealed time labels (group). Error and
+              queue float above the bar so it never grows past 68px. */}
+          <div className="group fixed inset-x-3 bottom-3 z-50 mx-auto flex h-[var(--miniplayer-h)] max-w-[1440px] items-center gap-2 rounded-card border border-white/10 bg-[#11121d]/90 px-3 shadow-float backdrop-blur-xl sm:gap-3 md:px-4">
+            <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden bg-white/10">
+              <div className="absolute inset-y-0 left-0 bg-white/15" style={{ width: `${duration ? Math.min(100, buffered / duration * 100) : 0}%` }}/>
+              <div className="progress-accent absolute inset-y-0 left-0" style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>
+            </div>
+            <input aria-label={t("Seek through track")} type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} disabled={!duration} onChange={(event) => {
+              const next = Number(event.target.value);
+              if (audioRef.current && Number.isFinite(next)) { audioRef.current.currentTime = next; setCurrentTime(next); }
+            }} className="absolute inset-x-0 top-0 h-3 w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"/>
+            <div className="pointer-events-none absolute inset-x-3 bottom-full mb-1 flex justify-between text-[11px] tabular-nums text-muted opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <span>{timeLabel(currentTime)}</span><span>{timeLabel(duration)}</span>
+            </div>
+            {(playbackError || queueOpen) && <div className="pointer-events-none absolute inset-x-3 bottom-full mb-7 flex flex-col gap-2">
+              {playbackError && <p role="status" className="pointer-events-auto flex items-start gap-2 rounded-card border border-rose-300/15 bg-[#11121d]/95 px-3 py-2 text-[11px] leading-4 text-rose-200 shadow-float backdrop-blur-xl"><AlertCircle size={14} className="mt-0.5 shrink-0"/>{playbackError}</p>}
+              {queueOpen && <div className="pointer-events-auto mx-auto max-h-64 w-full max-w-xl overflow-y-auto rounded-card border border-white/10 bg-[#11121d]/95 p-2 shadow-float backdrop-blur-xl">
+                <div className="mb-2 flex items-center justify-between px-2 text-xs text-muted"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")} className="btn-icon !h-8 !w-8"><X size={14}/></button></div>
+                {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full min-w-0 items-center gap-3 rounded-tile px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}>
+                  <Artwork src={item.artworkUrl} iconSize={13} className="h-8 w-8 shrink-0"/>
+                  <span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-24 truncate text-muted">{item.artist}</span>
                   {index === queueIndex && isPlaying && <span className="text-violet-200">♫</span>}
                 </button>)}
               </div>}
+            </div>}
+            <button type="button" onClick={() => setExpanded(true)} aria-label={t("Open full player")} className="flex min-w-0 flex-1 items-center gap-3 rounded-card px-1 py-1 text-left transition hover:bg-white/[0.04] sm:w-[28%] sm:flex-none">
+              <Artwork src={currentTrack.artworkUrl} iconSize={19} className="h-12 w-12 shrink-0"/>
+              <span className="min-w-0"><span className="block truncate text-sm font-medium">{currentTrack.title}</span><span className="block truncate text-xs text-muted">{currentTrack.artist}</span></span>
+            </button>
+            <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+              <button type="button" onClick={() => setShuffle((v) => !v)} aria-label={t("Shuffle")} aria-pressed={shuffle} className={`btn-icon hidden sm:grid ${shuffle ? "is-active" : ""}`}><Shuffle size={17}/></button>
+              <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="btn-icon"><SkipBack size={18}/></button>
+              <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="btn-press grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/30">
+                {isLoading ? <LoaderCircle size={18} className="animate-spin"/> : isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" className="ml-0.5"/>}
+              </button>
+              <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="btn-icon"><SkipForward size={18}/></button>
+              <button type="button" onClick={() => setRepeatMode((m) => m === "off" ? "all" : m === "all" ? "one" : "off")} aria-label={t("Repeat")} aria-pressed={repeatMode !== "off"} className={`btn-icon hidden sm:grid ${repeatMode !== "off" ? "is-active" : ""}`}>{repeatMode === "one" ? <Repeat1 size={17}/> : <Repeat size={17}/>}</button>
             </div>
+            <div className="hidden shrink-0 items-center gap-2 md:flex">
+              <button type="button" onClick={() => setMuted((v) => !v)} aria-label={muted ? t("Unmute") : t("Mute")} className="btn-icon">{muted || volume === 0 ? <VolumeX size={17}/> : <Volume2 size={17}/>}</button>
+              <input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} onChange={(event) => { setVolume(Number(event.target.value)); setMuted(false); }} className="w-20 accent-violet-300"/>
+            </div>
+            <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} aria-pressed={queueOpen} className={`btn-icon ml-auto shrink-0 md:ml-0 ${queueOpen ? "is-active" : ""}`}><ListMusic size={19}/></button>
           </div>
           {expanded && <div className="fixed inset-0 z-[60] overflow-y-auto bg-[#090a12] px-5 pb-[max(28px,env(safe-area-inset-bottom))] pt-[max(22px,env(safe-area-inset-top))]">
             <div className="mx-auto flex min-h-full w-full max-w-xl flex-col">

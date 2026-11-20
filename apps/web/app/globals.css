@@ -52,6 +52,9 @@
   --shadow-card: 0 12px 32px rgba(3, 4, 10, .45);
   --shadow-float: 0 18px 60px rgba(0, 0, 0, .55);
   --glow-violet: 0 0 80px rgba(139, 92, 246, .16);
+
+  /* Player geometry: one number drives the bar, the nav offset and pb-safe. */
+  --miniplayer-h: 68px;
 }
 
 * { box-sizing: border-box; }
@@ -179,6 +182,7 @@ img, video, canvas, svg { max-width: 100%; }
   transition: background-color var(--dur-fast) var(--ease-soft), color var(--dur-fast) var(--ease-soft), border-color var(--dur-fast) var(--ease-soft);
 }
 .chip:hover { color: #fff; background: var(--surface-2); }
+.progress-accent { background-image: var(--accent-grad); }
 .chip[aria-pressed="true"], .chip.is-active {
   background: var(--surface-3);
   border-color: transparent;
@@ -349,7 +353,10 @@ select:focus-visible {
 .sonora-mobile-nav { padding-bottom: max(var(--sp-2), env(safe-area-inset-bottom)); }
 /* Content clearance so the sticky player never sits on top of the last row
    or the mobile tab bar. */
-.pb-safe { padding-bottom: max(var(--sp-8), calc(env(safe-area-inset-bottom) + var(--sp-8))); }
+.pb-safe { padding-bottom: calc(env(safe-area-inset-bottom) + 176px); }
+@media (min-width: 768px) {
+  .pb-safe { padding-bottom: calc(var(--miniplayer-h) + var(--sp-6)); }
+}
 @media (min-width: 768px) {
   .sonora-workspace > div:last-child { min-width: 0; }
 }
