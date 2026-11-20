@@ -14,11 +14,35 @@ export type JamendoCandidate = RecommendationTrack & {
   provider: string; playable: boolean;
 };
 
+// Unified Jamendo access gate: catalog is available when a client id exists and
+// either non-commercial mode or commercial approval is configured. Every route
+// must use these helpers so catalog listing, search, recommendations and
+// verification flows share identical access semantics.
+export function jamendoConfig(): { clientId: string; nonCommercial: boolean } | null {
+  const clientId = process.env.JAMENDO_CLIENT_ID;
+  const nonCommercial = process.env.JAMENDO_USE_MODE === "noncommercial";
+  const commercialApproved = process.env.JAMENDO_COMMERCIAL_APPROVED === "true";
+  if (!clientId || (!nonCommercial && !commercialApproved)) return null;
+  return { clientId, nonCommercial };
+}
+
+export function jamendoLicenseAllowed(licenseUrl: string, nonCommercial: boolean): boolean {
+  const normalized = licenseUrl.toLowerCase()
+    .replace("http://creativecommons.org/", "")
+    .replace("https://creativecommons.org/", "")
+    .replace("https://www.creativecommons.org/", "");
+  const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
+  const known = normalized.startsWith("publicdomain/zero/") ||
+    ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
+  return known && (nonCommercial || !slug.includes("-nc"));
+}
+
 export async function jamendoCandidates(
   query: string, count: number, order = "relevance"
 ): Promise<JamendoCandidate[]> {
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") return [];
+  const jamendo = jamendoConfig();
+  if (!jamendo) return [];
+  const clientId = jamendo.clientId;
   try {
     const params = new URLSearchParams({
       client_id: clientId, format: "json", limit: String(count), order,
@@ -36,7 +60,7 @@ export async function jamendoCandidates(
       musicinfo?: { tags?: Array<{ name: string }> };
     }> };
     return (payload.results ?? []).flatMap((track) => {
-      if (!track.id || !track.audio) return [];
+      if (!track.id || !track.audio || !jamendoLicenseAllowed(track.license_ccurl ?? "", jamendo.nonCommercial)) return [];
       return [{
         id: `jamendo:${track.id}`, providerTrackId: track.id, title: track.name,
         artist: track.artist_name, album: track.album_name ?? null,

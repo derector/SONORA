@@ -593,10 +593,11 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
       return reply.code(502).send(authError(502, "Audius could not verify this track right now."));
     }
   }
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  const jamendo = jamendoConfig();
+  if (!jamendo) {
+    return reply.code(503).send(authError(503, "Jamendo catalog is not configured."));
   }
+  const clientId = jamendo.clientId;
   try {
     const params = new URLSearchParams({
       client_id: clientId, format: "json", id: providerTrackId,
@@ -843,10 +844,11 @@ app.post<{ Body: { providerTrackId?: string } }>("/api/v1/provider-favorites", a
   if (typeof providerTrackId !== "string" || !/^[0-9]{1,24}$/.test(providerTrackId)) {
     return reply.code(400).send(authError(400, "A valid Jamendo track ID is required."));
   }
-  const clientId = process.env.JAMENDO_CLIENT_ID;
-  if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-    return reply.code(503).send(authError(503, "Jamendo non-commercial access is not configured."));
+  const jamendo = jamendoConfig();
+  if (!jamendo) {
+    return reply.code(503).send(authError(503, "Jamendo catalog is not configured."));
   }
+  const clientId = jamendo.clientId;
   try {
     const params = new URLSearchParams({
       client_id: clientId, format: "json", id: providerTrackId,
@@ -1058,11 +1060,12 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
     tasks.push((async () => {
-      const clientId = process.env.JAMENDO_CLIENT_ID;
-      if (!clientId || process.env.JAMENDO_USE_MODE !== "noncommercial") {
-        providers.jamendo = { ok: false, count: 0, error: "Jamendo non-commercial access is not configured." };
+      const jamendo = jamendoConfig();
+      if (!jamendo) {
+        providers.jamendo = { ok: false, count: 0, error: "Jamendo catalog is not configured." };
         return;
       }
+      const clientId = jamendo.clientId;
       try {
         const params = new URLSearchParams({
           client_id: clientId, format: "json", limit: String(limit), order: "relevance",
@@ -1073,13 +1076,11 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         const payload = await response.json() as { results?: Array<{
           id: string; name: string; duration: number; artist_name: string; album_name?: string;
           image?: string; album_image?: string; audio?: string; audiodownload?: string; audiodownload_allowed?: boolean; license_ccurl?: string; shareurl?: string;
-        }> };
+        }>; headers?: { status?: string; error?: string } };
+        if (payload.headers?.status === "error") throw new Error(payload.headers.error || "Jamendo API rejected the request.");
         for (const track of payload.results ?? []) {
           const licenseUrl = track.license_ccurl ?? "";
-          const normalized = licenseUrl.toLowerCase().replace(/^https?:\/\/(www\.)?creativecommons\.org\//, "");
-          const slug = normalized.startsWith("licenses/") ? normalized.split("/")[1] ?? "" : "";
-          const known = normalized.startsWith("publicdomain/zero/") || ["by", "by-sa", "by-nd", "by-nc", "by-nc-sa", "by-nc-nd"].includes(slug);
-          if (!known || !track.audio || !track.id) continue;
+          if (!track.audio || !track.id || !jamendoLicenseAllowed(licenseUrl, jamendo.nonCommercial)) continue;
           tracks.push({
             id: `jamendo:${track.id}`, providerTrackId: track.id, provider: "Jamendo",
             title: track.name, artist: track.artist_name, album: track.album_name ?? null,
@@ -1223,7 +1224,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
-import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, type JamendoCandidate } from "./catalog.js";
+import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
