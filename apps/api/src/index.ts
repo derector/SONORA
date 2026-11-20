@@ -1491,24 +1491,25 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
     }
     const name = (intent.playlistName ?? `${intent.label} mix`).slice(0, 80);
     const { data: created, error: createError } = await auth.client.from("playlists").insert({
-      owner_id: auth.user.id, name, description: `Created by the SONORA assistant from: ${message.slice(0, 120)}`, is_public: false
-    }).select("id,name").single();
+      owner_id: auth.user.id, title: name, description: `Created by the SONORA assistant from: ${message.slice(0, 120)}`, is_public: false
+    }).select("id,title").single();
     if (createError || !created) {
       return { reply: "I found the tracks but could not save the playlist. Try again in a moment.", intent, tracks: candidates.slice(0, 15) };
     }
     const chosen = candidates.slice(0, 15);
-    const rows = chosen.map((track) => ({
+    const rows = chosen.map((track, index) => ({
       playlist_id: created.id, provider: "jamendo", provider_track_id: track.providerTrackId,
       title: track.title, artist_name: track.artist, album_name: track.album,
       duration_seconds: track.durationSeconds ?? 0, artwork_url: track.artworkUrl,
-      license_url: track.licenseUrl || "https://jamendo.com/legal/license", source_url: track.sourceUrl
+      license_url: track.licenseUrl || "https://jamendo.com/legal/license", source_url: track.sourceUrl,
+      position: index
     }));
     const { error: addError } = await auth.client.from("provider_playlist_tracks").insert(rows);
     if (addError) {
       await auth.client.from("playlists").delete().eq("id", created.id).eq("owner_id", auth.user.id);
       return { reply: "Tracks could not be attached to the new playlist. Try again later.", intent, tracks: chosen };
     }
-    playlist = { id: created.id, name: created.name };
+    playlist = { id: created.id, name: created.title };
   }
   return {
     reply: playlist
