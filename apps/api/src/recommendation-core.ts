@@ -19,7 +19,8 @@ export type RankedRecommendation = RecommendationTrack & {
   reasons: string[];
 };
 
-const normalize = (value: string) =>
+/** Shared text normalizer: lowercase, ё→е, accent/diacritic folding, punctuation folding. */
+export const normalize = (value: string) =>
   value.normalize("NFKD").toLowerCase().replace(/[ё]/g, "е").replace(/[^a-zа-я0-9]+/g, " ").trim();
 
 /** Deterministic, network-free ranking core. Feed it catalog candidates and taste signals. */
