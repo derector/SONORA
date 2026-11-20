@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import {
   ChevronDown, ListMusic, Pause, Play, Repeat, Repeat1,
   SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
@@ -41,6 +42,15 @@ export function usePlayer() {
 function timeLabel(value: number) {
   const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
   return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
+}
+
+// Attribution has exactly one visible home in the interface: the "About track"
+// row of the full player. Creative Commons URLs are shortened to their
+// recognizable code instead of being dumped on the user.
+function licenseLabel(licenseUrl: string) {
+  if (/publicdomain\/zero/i.test(licenseUrl)) return "CC0";
+  const match = /licenses\/([a-z-]+)\/([0-9.]+)/i.exec(licenseUrl);
+  return match ? `CC ${match[1].toUpperCase()} ${match[2]}` : "";
 }
 
 function mediaErrorMessage(code: number | undefined, t: (value: string) => string) {
@@ -181,6 +191,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [muted, setMuted] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
@@ -769,3 +780,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     </PlayerContext.Provider>
   );
 }
+                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
+                {aboutOpen && <div className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
+                  <dl className="mt-3 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("License")}</dt><dd className="text-slate-300">{licenseLabel(currentTrack.licenseUrl) || t("Licensed catalog")}</dd></div>
+                  </dl>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {currentTrack.sourceUrl && <a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323]">{t("Open source page")}</a>}
+                    {currentTrack.licenseUrl && <a href={currentTrack.licenseUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 hover:text-white">{t("Read license terms")}</a>}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-slate-500">{t("SONORA plays licensed catalogs. Rights and attribution always stay with the recording.")}</p>
+                  <Link href="/legal" className="mt-2 inline-block text-[11px] text-violet-200 hover:text-white">{t("Licensing and attribution")}</Link>
+                </div>}

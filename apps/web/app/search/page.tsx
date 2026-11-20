@@ -65,17 +65,15 @@ export default function SearchPage() {
     }
   }, [runSearch]);
 
-  const providerLabels: Record<string, string> = {
-    jamendo: "Jamendo", audius: "Audius", musicbrainz: "MusicBrainz",
-    audiusArtists: "Audius artists", musicbrainzArtists: "MusicBrainz artists"
-  };
+  // Sources stay internal: the interface shows one merged result count only.
+  const resultCount = tracks.length + artists.length + metadata.length;
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1440px] overflow-x-clip px-4 py-6 pb-40 md:px-8">
       <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Search size={14}/> {t("Federated music search")}</p>
-        <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Search across music catalogs.")}</h1>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">{t("Search tracks, artists and recordings across connected open catalogs. Playable results stay linked to their original provider and rights information.")}</p>
+        <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200"><Search size={14}/> {t("Catalog search")}</p>
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{t("Search the catalog.")}</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">{t("Search tracks, artists and recordings in one place. Every playable result keeps its attribution and license information.")}</p>
         <form onSubmit={submit} className="mt-7 flex max-w-3xl gap-2 rounded-2xl border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 mt-2.5 shrink-0 text-slate-400" size={18}/>
           <input value={query} onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }} minLength={2} placeholder={t("Track title, artist or album")} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-slate-500"/>
@@ -86,9 +84,7 @@ export default function SearchPage() {
         </div>
       </section>
 
-      {Object.keys(providers).length > 0 && <section className="mt-6 flex flex-wrap gap-2" aria-label={t("Catalog sources")}>
-        {Object.entries(providers).map(([key, status]) => <span key={key} className={`rounded-full border px-3 py-1.5 text-[11px] ${status.ok ? "border-emerald-300/15 bg-emerald-300/5 text-emerald-200" : "border-amber-300/15 bg-amber-300/5 text-amber-200"}`}>{providerLabels[key] || key}: {status.ok ? status.count + " " + t("results") : t("unavailable")}</span>)}
-      </section>}
+      {!loading && searched && resultCount > 0 && <p className="mt-6 text-xs text-slate-500">{resultCount} {t("results")}</p>}
 
       {error && <p role="alert" className="mt-6 rounded-2xl border border-rose-300/15 bg-rose-300/5 p-4 text-sm text-rose-200">{error}</p>}
       {loading && <div className="flex min-h-48 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Searching connected catalogs…")}</div>}
@@ -117,10 +113,10 @@ export default function SearchPage() {
       </section>}
 
       {!loading && metadata.length > 0 && <section className="mt-10">
-        <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("MusicBrainz identifies recordings and releases. It does not provide audio playback.")}</p></div>
+        <div className="mb-4"><p className="text-[10px] font-semibold uppercase tracking-[.25em] text-slate-500">{t("Metadata only")}</p><h2 className="mt-2 text-2xl font-semibold">{t("Recording matches")}</h2><p className="mt-1 text-xs text-slate-500">{t("Catalog records identify recordings and releases. They do not provide audio playback.")}</p></div>
         <div className="w-full min-w-0 space-y-2">{metadata.map((item) => <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-white/[0.06] px-4 py-3 hover:bg-white/[0.03]"><Disc3 size={18} className="text-slate-500"/><div className="min-w-0 flex-1"><p className="truncate text-sm">{item.title}</p><p className="truncate text-xs text-slate-500">{item.artist}{item.album ? " · " + item.album : ""}</p></div><span className="text-[10px] text-slate-500">{item.provider}</span><ExternalLink size={14} className="text-slate-500"/></a>)}</div>
       </section>}
-      <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · Federated discovery · Every playable result remains attributed to its source")}</footer>
+      <footer className="mt-14 border-t border-white/[0.07] py-6 text-xs text-slate-600">{t("SONORA · One catalog · Every playable result keeps its attribution and license information")}</footer>
     </main>
   );
 }
