@@ -12,9 +12,10 @@ import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states
 import { Reveal } from "../../components/ui/reveal";
 import { imagePayload, profileRequest, type ProfileChanges, type ProfileUser } from "../../lib/profile";
 
-const Favorites = dynamic(() => import("../favorites/page"), { loading: () => <RowsSkeleton /> });
-const Playlists = dynamic(() => import("../playlists/page"), { loading: () => <RowsSkeleton /> });
-const History = dynamic(() => import("../history/page"), { loading: () => <RowsSkeleton /> });
+const Favorites = dynamic(() => import("../../components/profile-library").then((module) => module.FavoritesPane), { loading: () => <RowsSkeleton /> });
+const Playlists = dynamic(() => import("../../components/profile-library").then((module) => module.PlaylistsPane), { loading: () => <RowsSkeleton /> });
+const History = dynamic(() => import("../../components/profile-library").then((module) => module.HistoryPane), { loading: () => <RowsSkeleton /> });
+const Collection = dynamic(() => import("../../components/profile-library").then((module) => module.CollectionPane), { loading: () => <RowsSkeleton /> });
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -106,7 +107,7 @@ export default function ProfilePage() {
     <ProfileTabs active={tab} onChange={setTab} />
     <section id="profile-panel" role="tabpanel" aria-labelledby={`profile-tab-${tab}`} className="mt-5 min-w-0">
       <Reveal key={tab} className="profile-pane">
-        {tab === "favorites" ? <Favorites /> : tab === "playlists" ? <Playlists /> : tab === "history" ? <History /> : <StateBlock icon={Music2} title={t("Your listening space")} body={t("This section is not available yet. Your saved music and listening history are ready in the adjacent tabs.")} actionHref="/discover" actionLabel={t("Explore music")} />}
+        {tab === "favorites" ? <Favorites /> : tab === "playlists" ? <Playlists /> : tab === "history" ? <History /> : tab === "albums" || tab === "artists" ? <Collection key={tab} kind={tab} /> : <StateBlock icon={Music2} title={t("Your listening space")} body={t("This section is not available yet. Your saved music and listening history are ready in the adjacent tabs.")} actionHref="/discover" actionLabel={t("Explore music")} />}
       </Reveal>
     </section>
     {dialog === "edit" && <EditProfileDialog profile={profile} extended={extended} busy={busy} error={error ? t(error) : ""} onClose={() => setDialog(null)} onSave={save} />}

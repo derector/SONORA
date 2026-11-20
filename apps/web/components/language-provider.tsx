@@ -422,6 +422,13 @@ const ru: Record<string, string> = {
   "Share profile": "Поделиться профилем",
   "This section is not available yet. Your saved music and listening history are ready in the adjacent tabs.": "Этот раздел пока недоступен. Сохранённая музыка и история уже доступны в соседних вкладках.",
   "Remove avatar": "Удалить аватар",
+  "This profile section is unavailable.": "Этот раздел профиля недоступен.",
+  "Your data could not be loaded. The service or profile storage may not be ready. No sample data is shown.": "Не удалось загрузить данные. Сервис или хранилище профилей могут быть ещё не настроены. Демонстрационные данные не подставляются.",
+  "Could not remove this saved track.": "Не удалось удалить сохранённый трек.",
+  "History clearing is not supported by this server yet.": "Этот сервер пока не поддерживает очистку истории.",
+  "Grouped from your saved tracks, not a separate subscription list.": "Сгруппировано из сохранённых треков, а не из отдельного списка подписок.",
+  "No saved collection here yet.": "Здесь пока нет сохранённых подборок.",
+  "Save tracks with artist and album details to grow this collection.": "Сохраняй треки с данными об исполнителе и альбоме, чтобы пополнять коллекцию.",
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
