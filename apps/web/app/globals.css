@@ -5,7 +5,7 @@
 :root { color-scheme: dark; }
 * { box-sizing: border-box; }
 html { min-height: 100%; background: #090b10; }
-body { margin: 0; min-height: 100vh; color: #f5f6fa; background: radial-gradient(ellipse at 78% -12%, rgba(124,58,237,.18), transparent 38%), #090b10; font-family: Arial, Helvetica, sans-serif; }
+body { margin: 0; min-height: 100vh; color: #f5f6fa; background: radial-gradient(ellipse at 78% -12%, rgba(124,58,237,.22), transparent 38%), radial-gradient(ellipse at 4% 70%, rgba(14,165,233,.07), transparent 34%), #080910; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 button, a { -webkit-tap-highlight-color: transparent; }
 ::selection { background: rgba(167,139,250,.35); }
 
@@ -44,3 +44,131 @@ body { min-width: 0; }
 main { min-width: 0; max-width: 100%; }
 main > * { min-width: 0; }
 img, video, canvas, svg { max-width: 100%; }
+
+
+/* SONORA 2026 interface refresh: consistent surfaces, focus states and navigation. */
+:root {
+  --sonora-bg: #080910;
+  --sonora-panel: #11121d;
+  --sonora-violet: #c4b5fd;
+  --sonora-cyan: #a5f3fc;
+}
+.sonora-workspace { isolation: isolate; }
+.sonora-sidebar { border-color: rgba(255,255,255,.075); }
+.sonora-sidebar a:focus-visible,
+.sonora-mobile-nav a:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(196,181,253,.9);
+  outline-offset: 3px;
+}
+.sonora-mobile-nav { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+@media (min-width: 768px) {
+  .sonora-workspace > div:last-child { min-width: 0; }
+}
+@media (max-width: 767px) {
+  .sonora-workspace { padding-left: 0; padding-right: 0; padding-top: 0; }
+  .sonora-workspace > div:nth-child(2) { width: 100%; }
+  .sonora-workspace main { border-radius: 0; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* Seasonal effects: CSS-only particles, transforms and opacity only. */
+.season-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+.season-particle {
+  position: absolute;
+  top: -8vh;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  animation-name: season-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+.season-winter {
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.95), rgba(214,228,255,.55));
+  animation-name: season-drift;
+}
+.season-spring {
+  border-radius: 2px;
+  background: linear-gradient(180deg, rgba(165,243,252,0), rgba(165,243,252,.7));
+  animation-name: season-rain;
+}
+.season-autumn {
+  border-radius: 62% 38% 55% 45% / 48% 62% 38% 52%;
+  background: linear-gradient(135deg, rgba(251,191,36,.85), rgba(244,114,82,.75));
+  animation-name: season-leaf;
+  animation-timing-function: cubic-bezier(.45,.05,.55,.95);
+}
+@keyframes season-fall {
+  from { transform: translate3d(0, -8vh, 0); }
+  to { transform: translate3d(var(--season-drift, 0px), 112vh, 0); }
+}
+@keyframes season-drift {
+  from { transform: translate3d(0, -8vh, 0); }
+  50% { transform: translate3d(calc(var(--season-drift, 0px) * .6), 52vh, 0); }
+  to { transform: translate3d(var(--season-drift, 0px), 112vh, 0); }
+}
+@keyframes season-rain {
+  from { transform: translate3d(0, -12vh, 0); }
+  to { transform: translate3d(var(--season-drift, 0px), 116vh, 0); }
+}
+@keyframes season-leaf {
+  from { transform: translate3d(0, -10vh, 0) rotate(0deg); }
+  25% { transform: translate3d(calc(var(--season-drift, 0px) * .35), 26vh, 0) rotate(calc(var(--season-spin, 240deg) * .4)); }
+  55% { transform: translate3d(calc(var(--season-drift, 0px) * -.15), 58vh, 0) rotate(calc(var(--season-spin, 240deg) * .7)); }
+  to { transform: translate3d(var(--season-drift, 0px), 114vh, 0) rotate(var(--season-spin, 240deg)); }
+}
+
+
+/* Motion polish: staggered card entry, page transitions and press feedback. */
+@keyframes card-enter {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.card-enter { animation: card-enter 0.35s ease-out both; }
+@keyframes page-fade-up {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.page-transition { animation: page-fade-up 0.28s ease-out both; }
+.btn-press { transition: transform 150ms ease, filter 150ms ease; }
+.btn-press:active { transform: scale(0.97); }
+.mood-shimmer { position: absolute; inset: 0; overflow: hidden; }
+.mood-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.14) 50%, transparent 62%);
+  transform: translate3d(-60%, 0, 0);
+  animation: mood-shimmer 4.8s ease-in-out infinite;
+}
+@keyframes mood-shimmer {
+  0% { transform: translate3d(-70%, 0, 0); }
+  55%, 100% { transform: translate3d(70%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-enter, .page-transition, .mood-shimmer::after { animation: none; }
+  .season-overlay { display: none; }
+  .btn-press:active { transform: none; }
+}

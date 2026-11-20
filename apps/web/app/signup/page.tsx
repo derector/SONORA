@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function SignupAliasPage() {
-  redirect("/auth");
+  redirect("/auth?mode=register");
 }
