@@ -20,7 +20,8 @@ export const ACCENT_PRESETS = ["aurora", "violet", "ocean", "sunset", "forest", 
 export const PROFILE_ROLES = ["listener", "creator", "curator", "dj"] as const;
 export const PROFILE_COLUMNS =
   "id,email,username,display_name,avatar_url,cover_url,bio,accent,role,status,links,privacy,favorite_genres,created_at,updated_at";
-
+export const PROFILE_AVATAR_BODY_LIMIT = 3_000_000;
+export const PROFILE_COVER_BODY_LIMIT = 4_500_000;
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"
 };
@@ -107,16 +108,21 @@ function genresOr(value: unknown): string[] {
   return "genres" in result ? result.genres : [];
 }
 
-export function mapProfile(row: Record<string, unknown>) {
-  return {
+export function mapProfile(row: Record<string, unknown>, includeExtended = true) {
+  const profile = {
     id: row.id, email: row.email, username: row.username,
     displayName: row.display_name, avatarUrl: row.avatar_url ?? null,
+    createdAt: row.created_at
+  };
+  if (!includeExtended) return profile;
+  return {
+    ...profile,
     coverUrl: row.cover_url ?? null, bio: row.bio ?? null,
     accent: row.accent ?? null, role: row.role ?? null, status: row.status ?? null,
     links: linksOr(row.links),
     privacy: privacyOr(row.privacy),
     favoriteGenres: genresOr(row.favorite_genres),
-    createdAt: row.created_at, updatedAt: row.updated_at ?? null
+    updatedAt: row.updated_at ?? null
   };
 }
 
@@ -133,7 +139,7 @@ export async function readProfile(client: SupabaseClient, userId: string) {
   }
   const base = await client.from("users").select(BASE_PROFILE_COLUMNS).eq("id", userId).single();
   if (base.error || !base.data) return { user: null, partial: true };
-  return { user: mapProfile(base.data as unknown as Record<string, unknown>), partial: true };
+  return { user: mapProfile(base.data as unknown as Record<string, unknown>, false), partial: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -468,7 +474,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
 
   // ----- cover upload / remove -------------------------------------------
   app.post<{ Body: { contentType?: string; base64?: string } }>(
-    "/api/v1/profile/cover", uploadLimit, async (request, reply) => {
+    "/api/v1/profile/cover", { bodyLimit: PROFILE_COVER_BODY_LIMIT, preHandler: uploadLimit.preHandler }, async (request, reply) => {
       const auth = await requireUser(request, reply);
       if (!auth) return;
       const { contentType, base64 } = request.body ?? {};

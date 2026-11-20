@@ -151,7 +151,11 @@ SELECT
   u.links,
   u.favorite_genres,
   u.created_at,
-  COALESCE(lower(u.privacy ->> 'profile'), 'public') AS visibility
+  COALESCE(lower(u.privacy ->> 'profile'), 'public') AS visibility,
+  -- Project the same privacy document written by the API. Missing/invalid
+  -- history values fail closed rather than exposing listening history.
+  CASE WHEN lower(COALESCE(u.privacy ->> 'history', 'true')) = 'true'
+    THEN true ELSE false END AS show_history
 FROM public.users u;
 
 CREATE OR REPLACE VIEW public.public_profile_stats AS
