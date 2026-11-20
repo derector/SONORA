@@ -329,6 +329,13 @@ object SonoraApi {
         if (array == null) return tracks
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
+            // Cleartext guard. AndroidManifest sets usesCleartextTraffic="false", so a
+            // plain http:// stream URL handed to Media3 is rejected by the platform and
+            // the player stalls with no visible error. Only an https:// URL counts as a
+            // deliverable source. No http->https rewrite is attempted for audio: providers
+            // that publish a cleartext stream normally do not serve the same path over TLS,
+            // so rewriting would only move the failure from parse time to playback time.
+            val audioUrl = secureAudioUrl(item.optString("audioUrl"))
             tracks += Track(
                 id = item.optString("id"),
                 providerTrackId = item.optString("providerTrackId", item.optString("id")),
@@ -337,14 +344,53 @@ object SonoraApi {
                 artist = item.optString("artist", "Unknown artist"),
                 album = item.optString("album").takeIf { it.isNotBlank() && it != "null" },
                 durationSeconds = item.optInt("durationSeconds"),
-                artworkUrl = item.optString("artworkUrl").takeIf { it.startsWith("http") },
-                audioUrl = item.optString("audioUrl").takeIf { it.startsWith("http") },
-                downloadUrl = item.optString("downloadUrl").takeIf { it.startsWith("http") },
+                artworkUrl = httpsOrFallback(item.optString("artworkUrl")),
+                audioUrl = audioUrl,
+                // Offline copies are fetched by OkHttp inside this app, so a cleartext
+                // download URL can never succeed either; dropping it hides the offline
+                // action instead of queueing a doomed download.
+                downloadUrl = secureDownloadUrl(item.optString("downloadUrl")),
+                // licenseUrl and sourceUrl are attribution links, never fetched by the
+                // player, so they keep their original value (including the cleartext
+                // creativecommons.org form that recordProviderHistory() still accepts).
                 licenseUrl = item.optString("licenseUrl").takeIf { it.startsWith("http") },
                 sourceUrl = item.optString("sourceUrl").takeIf { it.startsWith("http") },
-                playable = item.optBoolean("playable", item.optString("audioUrl").startsWith("http"))
+                // The track keeps all of its metadata but is reported through the existing
+                // availability flag, so every screen shows it as unavailable instead of
+                // starting a playback attempt that can never succeed.
+                playable = audioUrl != null && item.optBoolean("playable", true)
             )
         }
         return tracks
+    }
+
+    /**
+     * Playable audio must be published over TLS because the manifest disables cleartext
+     * traffic. Anything else (cleartext http, a relative path, an empty string) yields
+     * null, which in turn leaves the track marked as non-playable.
+     */
+    private fun secureAudioUrl(raw: String?): String? =
+        raw?.takeIf { it.isNotBlank() && it.startsWith("https://", ignoreCase = true) }
+
+    /**
+     * Offline copies are downloaded by OkHttp under the same cleartext restriction, and
+     * TrackDownloadWorker only accepts an https URL anyway, so a cleartext download link
+     * is dropped rather than rewritten.
+     */
+    private fun secureDownloadUrl(raw: String?): String? =
+        raw?.takeIf { it.startsWith("https://", ignoreCase = true) }
+
+    /**
+     * Artwork is upgraded to https when the provider only publishes the cleartext form of
+     * the same image path; anything that is not an absolute http(s) URL becomes null so the
+     * UI falls back to its placeholder instead of issuing a request the platform blocks.
+     */
+    private fun httpsOrFallback(raw: String?): String? {
+        val value = raw?.trim().orEmpty()
+        return when {
+            value.startsWith("https://", ignoreCase = true) -> value
+            value.startsWith("http://", ignoreCase = true) -> "https://" + value.substring("http://".length)
+            else -> null
+        }
     }
 }
