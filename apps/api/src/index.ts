@@ -4,7 +4,10 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
-import { registerProfileRoutes } from "./profile-routes.js";
+import {
+  ACCENT_PRESETS, PROFILE_AVATAR_BODY_LIMIT, PROFILE_ROLES, normalizeGenres, normalizeLinks,
+  normalizePrivacy, readProfile, registerProfileRoutes
+} from "./profile-routes.js";
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
@@ -40,6 +43,10 @@ const writeRateLimit = {
 function validEmail(value: unknown): value is string {
   return typeof value === "string" && value.length <= 254 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function profileColumnsUnavailable(error: { code?: unknown } | null | undefined): boolean {
+  return error?.code === "42703" || error?.code === "PGRST204";
 }
 
 // Verifies a provider stream URL with a tiny ranged request. Signed provider
@@ -296,21 +303,24 @@ app.get("/api/v1/auth/me", async (request, reply) => {
 app.get("/api/v1/profile", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
-  const { data, error } = await auth.client.from("users")
-    .select("id,email,username,display_name,avatar_url,created_at")
-    .eq("id", auth.user.id).single();
-  if (error || !data) return reply.code(404).send(authError(404, "Profile not found."));
-  return { user: {
-    id: data.id, email: data.email, username: data.username,
-    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
-  }};
+  const profile = await readProfile(auth.client, auth.user.id);
+  if (!profile.user) return reply.code(404).send(authError(404, "Profile not found."));
+  if (profile.partial) request.log.warn("Profile Center columns are not migrated yet (010_profile_center.sql)");
+  return profile.partial ? { partial: true, user: profile.user } : { user: profile.user };
 });
 
-app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profile", async (request, reply) => {
+app.patch<{
+  Body: {
+    displayName?: string; username?: string; bio?: string | null; accent?: string | null;
+    role?: string | null; status?: string | null; links?: unknown; privacy?: unknown;
+    favoriteGenres?: unknown;
+  }
+}>("/api/v1/profile", async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
-  const { displayName, username } = request.body ?? {};
-  const update: Record<string, string> = {};
+  const { displayName, username, bio, accent, role, status, links, privacy, favoriteGenres } = request.body ?? {};
+  const update: Record<string, unknown> = {};
+  let extendedFieldsRequested = false;
   if (displayName !== undefined) {
     if (!cleanText(displayName, 1, 48)) return reply.code(400).send(authError(400, "Display name must be 1-48 characters."));
     update.display_name = displayName.trim();
@@ -321,6 +331,52 @@ app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profil
     }
     update.username = username.trim().toLowerCase();
   }
+  if (bio !== undefined) {
+    extendedFieldsRequested = true;
+    if (bio === null || (typeof bio === "string" && bio.trim() === "")) update.bio = null;
+    else if (typeof bio !== "string" || bio.trim().length > 280) {
+      return reply.code(400).send(authError(400, "About me is 280 characters or fewer."));
+    } else update.bio = bio.trim();
+  }
+  if (status !== undefined) {
+    extendedFieldsRequested = true;
+    if (status === null || (typeof status === "string" && status.trim() === "")) update.status = null;
+    else if (typeof status !== "string" || status.trim().length > 60) {
+      return reply.code(400).send(authError(400, "Status is 60 characters or fewer."));
+    } else update.status = status.trim();
+  }
+  if (accent !== undefined) {
+    extendedFieldsRequested = true;
+    if (accent === null || accent === "") update.accent = null;
+    else if (typeof accent !== "string" || !ACCENT_PRESETS.includes(accent as typeof ACCENT_PRESETS[number])) {
+      return reply.code(400).send(authError(400, `Cover style must be one of: ${ACCENT_PRESETS.join(", ")}.`));
+    } else update.accent = accent;
+  }
+  if (role !== undefined) {
+    extendedFieldsRequested = true;
+    if (role === null || role === "") update.role = null;
+    else if (typeof role !== "string" || !PROFILE_ROLES.includes(role as typeof PROFILE_ROLES[number])) {
+      return reply.code(400).send(authError(400, `Role must be one of: ${PROFILE_ROLES.join(", ")}.`));
+    } else update.role = role;
+  }
+  if (links !== undefined) {
+    extendedFieldsRequested = true;
+    const result = normalizeLinks(links);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.links = result.items;
+  }
+  if (privacy !== undefined) {
+    extendedFieldsRequested = true;
+    const result = normalizePrivacy(privacy);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.privacy = result.privacy;
+  }
+  if (favoriteGenres !== undefined) {
+    extendedFieldsRequested = true;
+    const result = normalizeGenres(favoriteGenres);
+    if ("error" in result) return reply.code(400).send(authError(400, result.error));
+    update.favorite_genres = result.genres;
+  }
   if (!Object.keys(update).length) return reply.code(400).send(authError(400, "No profile changes were provided."));
   update.updated_at = new Date().toISOString();
   const { data, error } = await auth.client.from("users").update(update)
@@ -328,6 +384,9 @@ app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profil
     .select("id,email,username,display_name,avatar_url,created_at").single();
   if (error || !data) {
     if (error?.code === "23505") return reply.code(409).send(authError(409, "That username is already taken."));
+    if (extendedFieldsRequested && profileColumnsUnavailable(error)) {
+      return reply.code(503).send(authError(503, "Profile Center fields need migration 010 before they can be saved."));
+    }
     request.log.error({ code: error?.code }, "Profile update failed");
     return reply.code(400).send(authError(400, "Could not update this profile."));
   }
@@ -335,13 +394,13 @@ app.patch<{ Body: { displayName?: string; username?: string } }>("/api/v1/profil
     data: { username: data.username, display_name: data.display_name }
   });
   if (metadataError) request.log.warn({ code: metadataError.code }, "Auth profile metadata sync failed");
-  return { user: {
-    id: data.id, email: data.email, username: data.username,
-    displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
-  }};
+  const profile = await readProfile(auth.client, auth.user.id);
+  if (!profile.user) return reply.code(404).send(authError(404, "Profile not found after update."));
+  return profile.partial ? { partial: true, user: profile.user } : { user: profile.user };
 });
 
-app.post<{ Body: { contentType?: string; base64?: string } }>("/api/v1/profile/avatar", async (request, reply) => {
+app.post<{ Body: { contentType?: string; base64?: string } }>(
+  "/api/v1/profile/avatar", { bodyLimit: PROFILE_AVATAR_BODY_LIMIT }, async (request, reply) => {
   const auth = await requireUser(request, reply);
   if (!auth) return;
   const { contentType, base64 } = request.body ?? {};
@@ -378,7 +437,8 @@ app.post<{ Body: { contentType?: string; base64?: string } }>("/api/v1/profile/a
     id: data.id, email: data.email, username: data.username,
     displayName: data.display_name, avatarUrl: data.avatar_url, createdAt: data.created_at
   }};
-});
+  }
+);
 
 app.post("/api/v1/auth/logout", async (request, reply) => {
   const authorization = request.headers.authorization;

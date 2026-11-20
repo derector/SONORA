@@ -1,0 +1,99 @@
+name: SONORA Android APK
+
+on:
+  push:
+    branches: [main, android-native, "fix/**", "integration/**"]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-apk.yml"
+  pull_request:
+    branches: [android-native]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-apk.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sonora-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Build versioned APK
+        id: build
+        working-directory: apps/android
+        env:
+          SONORA_ANDROID_KEYSTORE_BASE64: ${{ secrets.SONORA_ANDROID_KEYSTORE_BASE64 }}
+          SONORA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SONORA_ANDROID_KEYSTORE_PASSWORD }}
+          SONORA_ANDROID_KEY_ALIAS: ${{ secrets.SONORA_ANDROID_KEY_ALIAS }}
+          SONORA_ANDROID_KEY_PASSWORD: ${{ secrets.SONORA_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "$SONORA_ANDROID_KEYSTORE_BASE64" ] && [ -n "$SONORA_ANDROID_KEYSTORE_PASSWORD" ] && [ -n "$SONORA_ANDROID_KEY_ALIAS" ] && [ -n "$SONORA_ANDROID_KEY_PASSWORD" ]; then
+            export SONORA_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/sonora-release.jks"
+            printf "%s" "$SONORA_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$SONORA_ANDROID_KEYSTORE_PATH"
+            chmod 600 "$SONORA_ANDROID_KEYSTORE_PATH"
+            gradle --no-daemon :app:assembleRelease -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
+            echo "variant=release" >> "$GITHUB_OUTPUT"
+            echo "Built with the persistent SONORA release signing key." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gradle --no-daemon :app:assembleDebug -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
+            echo "variant=debug" >> "$GITHUB_OUTPUT"
+            echo "::warning::Stable signing secrets are not configured. This debug APK is for QA only and may not update an already-installed SONORA app."
+            echo "QA-only debug APK: not guaranteed to update an existing installation. Configure the four SONORA_ANDROID_* GitHub Actions secrets for update-safe release builds." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload stable-signed release APK
+        if: steps.build.outputs.variant == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SONORA-Android-release
+          path: apps/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish GitHub Release with OTA asset
+        if: steps.build.outputs.variant == 'release' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="v0.1.$GITHUB_RUN_NUMBER"
+          APK=apps/android/app/build/outputs/apk/release/app-release.apk
+          SHA256=$(sha256sum "$APK" | cut -d" " -f1)
+          cp "$APK" SONORA-latest.apk
+          cp "$APK" "SONORA-release-$TAG.apk"
+          git tag -f "$TAG"
+          git push -f origin "$TAG"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk --clobber
+          else
+            gh release create "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk \
+              --title "SONORA Android $TAG" \
+              --notes "Автоматическая CI-сборка #$GITHUB_RUN_NUMBER (commit ${GITHUB_SHA:0:7}).\n\nSHA-256 APK: $SHA256\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).\n\nВ приложении обновление придёт пушем: Настройки → Проверить обновления."
+          fi
+          echo "Release $TAG published with SONORA-latest.apk" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload QA-only debug APK
+        if: steps.build.outputs.variant == 'debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SONORA-Android-debug-QA-only
+          path: apps/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
