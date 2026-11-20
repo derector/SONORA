@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,6 +97,26 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+
+    // Android 13+ needs POST_NOTIFICATIONS before Media3 can show the playback
+    // notification. Ask once per session, the first time the user actually starts
+    // playback. The answer never gates playback: a denied permission only means no
+    // notification, so the launcher callback intentionally does nothing and playback
+    // is issued right after the request. This is separate from the existing
+    // download-time request in TrackRow, which stays as it is.
+    var playbackNotificationAsked by rememberSaveable { mutableStateOf(false) }
+    val playbackNotificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* No notification when denied; playback itself is unaffected. */ }
+
+    fun ensurePlaybackNotificationPermission() {
+        if (playbackNotificationAsked || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        playbackNotificationAsked = true
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        playbackNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
 
     fun loadTracks(source: String, done: (List<Track>) -> Unit) {
         scope.launch {
@@ -251,6 +272,10 @@ private fun SonoraApp() {
         if (player == null) { message = "Плеер ещё запускается"; return }
         val url = if (local) track.audioUrl else track.audioUrl
         if (url.isNullOrBlank()) { message = "У этого трека нет доступного источника"; return }
+        // First user-initiated playback of the session: make sure the media
+        // notification can be shown. Non-blocking by design; the request is a no-op
+        // on Android 12 and older and is only ever issued once.
+        ensurePlaybackNotificationPermission()
         if (local) {
             activeQueue = listOf(track)
             player.setMediaItem(mediaItem(track, url))
