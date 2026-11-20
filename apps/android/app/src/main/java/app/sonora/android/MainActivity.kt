@@ -61,6 +61,13 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 import java.io.File
+import android.content.Intent
+import android.widget.Toast
+import app.sonora.android.ota.OtaNotifications
+import app.sonora.android.ota.OtaSession
+import app.sonora.android.ota.OtaUpdate
+import app.sonora.android.ota.ReleaseInfo
+import app.sonora.android.ota.UpdateSheet
 
 private val Ink = Color(0xFF080910)
 private val Panel = Color(0xFF141522)
@@ -68,11 +75,40 @@ private val Lime = Color(0xFFC4B5FD)
 private val Muted = Color(0xFF9698AC)
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        // Both notification taps land inside the app: SHOW_UPDATE opens the UpdateSheet,
+        // INSTALL_READY resumes straight into the system installer for the downloaded APK.
+        const val ACTION_SHOW_UPDATE = "app.sonora.android.action.SHOW_UPDATE"
+        const val ACTION_INSTALL_READY = "app.sonora.android.action.INSTALL_READY"
+        const val EXTRA_RELEASE_TAG = "release_tag"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         SonoraApi.initialize(this)
+        OtaNotifications.ensureChannels(this)
+        // Periodic release lookup (12 h, unmetered) plus one quick pass shortly after this
+        // cold start. Neither of them needs the activity to stay alive.
+        OtaUpdate.schedule(this)
+        OtaSession.handleIntent(this, intent)
         setContent { SonoraApp() }
+    }
+
+    // launchMode=singleTop: a notification tapped while the app is alive arrives here
+    // instead of stacking a second activity on top of the first.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        OtaSession.handleIntent(this, intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Back from the unknown-sources grant: the APK is still remembered, so the install
+        // resumes where it stopped without downloading anything again.
+        OtaSession.onResumed(this)
+        OtaSession.refresh(this)
     }
 }
 
@@ -96,6 +132,17 @@ private fun SonoraApp() {
     var message by remember { mutableStateOf("") }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+
+    // Update-flow state: the badge in Настройки, the open sheet, the install explainer.
+    // It lives outside the composable (OtaSession) because the download, the notification
+    // tap and the round-trip through system Settings all outlive a single composition.
+    val ota = OtaSession.state.collectAsState().value
+    LaunchedEffect(ota.toast) {
+        if (ota.toast.isNotBlank()) {
+            Toast.makeText(context, ota.toast, Toast.LENGTH_LONG).show()
+            OtaSession.consumeToast()
+        }
+    }
 
     // Android 13+ needs POST_NOTIFICATIONS before Media3 can show the playback
     // notification. Ask once per session, the first time the user actually starts
@@ -357,7 +404,7 @@ private fun SonoraApp() {
                 Column {
                     current?.let { MiniPlayer(it, onClick = { tab = "Плеер" }, onPlay = { if (isPlaying) controller?.pause() else controller?.play() }, playing = controller?.isPlaying == true) }
                     NavigationBar(containerColor = Color(0xFF11121D), contentColor = Lime, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                        listOf("Главная" to Icons.Default.Home, "Поиск" to Icons.Default.Search, "Медиатека" to Icons.Default.LibraryMusic, "Загрузки" to Icons.Default.Download, "Профиль" to Icons.Default.Person).forEach { (name, icon) ->
+                        listOf("Главная" to Icons.Default.Home, "Поиск" to Icons.Default.Search, "Медиатека" to Icons.Default.LibraryMusic, "Загрузки" to Icons.Default.Download, "Настройки" to Icons.Default.Settings, "Профиль" to Icons.Default.Person).forEach { (name, icon) ->
                             NavigationBarItem(selected = tab == name, onClick = { tab = name }, icon = { Icon(icon, null) }, label = { Text(name, fontSize = 10.sp) }, colors = NavigationBarItemDefaults.colors(selectedIconColor = Lime, selectedTextColor = Lime, indicatorColor = Color(0xFF33294E), unselectedIconColor = Muted, unselectedTextColor = Muted))
                         }
                     }
@@ -394,6 +441,14 @@ private fun SonoraApp() {
                             OfflineDatabase.get(context).offlineTracks().delete(item.provider, item.id)
                         }
                     })
+                    "Настройки" -> SettingsScreen(
+                        update = ota.release,
+                        checking = ota.checking,
+                        lastCheckedAt = OtaUpdate.lastCheckedAt(context),
+                        notificationsAllowed = OtaNotifications.canPost(context),
+                        onCheck = { OtaSession.checkNow(context) },
+                        onOpenUpdate = { OtaSession.openSheet(context) }
+                    )
                     "Профиль" -> ProfileScreen(authStep, authMode, { authMode = it }, email, { email = it }, username, { username = it }, displayName, { displayName = it }, code, { code = it }, busy, message,
                         onRegister = {
                             scope.launch { busy = true; try { withContext(Dispatchers.IO) { SonoraApi.requestOtp(email, username, displayName, true) }; authStep = "verify"; message = "Код отправлен на почту" } catch (e: Exception) { message = e.message ?: "Ошибка регистрации" }; busy = false }
@@ -417,7 +472,139 @@ private fun SonoraApp() {
                     else -> FullPlayer(current, activeQueue, controller, controller?.isPlaying == true, { controller?.pause() }, { controller?.play() }, { controller?.seekToPrevious() }, { controller?.seekToNext() })
                 }
             }
+
+            // ── In-app update surface ────────────────────────────────────────────────
+            // The sheet is where an update is explained, downloaded and installed. It opens
+            // from the notification, from the settings row, or from the manual check itself.
+            if (ota.sheetVisible) {
+                ota.release?.let { release ->
+                    UpdateSheet(
+                        release = release,
+                        onNotNow = { OtaSession.dismissRelease(context) },
+                        onUpdate = { OtaSession.startUpdate(context) },
+                        onDownloadAgain = { OtaSession.startUpdate(context) },
+                        onCancelDownload = { OtaSession.cancelDownload(context) },
+                        onInstall = { file -> OtaSession.install(context, file) },
+                        onDismiss = { OtaSession.closeSheet() }
+                    )
+                }
+            }
+            if (ota.needsInstallPermission) {
+                // The one unavoidable system screen, so it is explained before it is opened.
+                AlertDialog(
+                    onDismissRequest = { OtaSession.declineInstallSettings() },
+                    containerColor = Panel,
+                    title = { Text("Разрешить установку", color = Color.White) },
+                    text = {
+                        Text(
+                            "SONORA скачала обновление и готова установить его. Android требует " +
+                                "разрешить установку из неизвестных источников — это единственный " +
+                                "системный экран, дальше всё пройдёт в приложении.",
+                            color = Muted
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { OtaSession.openInstallSettings(context) }) { Text("Открыть настройки", color = Lime) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { OtaSession.declineInstallSettings() }) { Text("Не сейчас", color = Muted) }
+                    }
+                )
+            }
         }
+    }
+}
+
+/**
+ * The settings surface of the app. The update row is the manual counterpart of the
+ * background check: the same code path, an immediate answer, and a badge whenever a newer
+ * release is known — including the case where notifications are switched off and no
+ * notification could have been posted at all.
+ */
+@Composable
+private fun SettingsScreen(
+    update: ReleaseInfo?,
+    checking: Boolean,
+    lastCheckedAt: Long,
+    notificationsAllowed: Boolean,
+    onCheck: () -> Unit,
+    onOpenUpdate: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().background(Ink).padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Настройки", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Версия", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(BuildConfig.VERSION_NAME, color = Muted, fontSize = 12.sp)
+            }
+            Icon(Icons.Default.Info, contentDescription = null, tint = Muted)
+        }
+        Text("Обновления", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.size(34.dp).clip(CircleShape)
+                        .background(if (update != null) Color(0xFF33294E) else Color(0xFF1D1F2E)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = if (update != null) Lime else Muted, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        if (update != null) "Доступно обновление ${'$'}{update.versionLabel}" else "Обновления SONORA",
+                        color = Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        when {
+                            checking -> "Проверяем…"
+                            update != null -> "${'$'}{update.apkSizeLabel} · установка внутри приложения"
+                            lastCheckedAt == 0L -> "Проверка ещё не выполнялась"
+                            else -> "Последняя проверка: " + java.text.SimpleDateFormat(
+                                "dd.MM HH:mm", java.util.Locale.getDefault()
+                            ).format(java.util.Date(lastCheckedAt))
+                        },
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                }
+                if (checking) CircularProgressIndicator(Modifier.size(18.dp), color = Lime, strokeWidth = 2.dp)
+                else if (update != null) Badge(containerColor = Lime) { Text("NEW", color = Ink, fontSize = 9.sp, fontWeight = FontWeight.Black) }
+            }
+            if (update != null) {
+                Button(
+                    onClick = onOpenUpdate,
+                    colors = ButtonDefaults.buttonColors(containerColor = Lime, contentColor = Ink),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Открыть обновление") }
+            }
+            OutlinedButton(onClick = onCheck, enabled = !checking, modifier = Modifier.fillMaxWidth()) {
+                Text(if (update == null) "Проверить обновления" else "Проверить ещё раз")
+            }
+            if (!notificationsAllowed) {
+                Text(
+                    "Уведомления выключены, поэтому о новом релизе расскажет только эта строка.",
+                    color = Muted,
+                    fontSize = 11.sp
+                )
+            }
+        }
+        Text(
+            "SONORA сама ищет новые релизы примерно раз в 12 часов по Wi-Fi и предлагает " +
+                "обновиться прямо здесь — без сайта и без сторонних сервисов.",
+            color = Muted,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
     }
 }
 
