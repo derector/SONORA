@@ -702,7 +702,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               Progress is a slim 2px violet->teal line on the top edge, driven by
               the same clock as the hover-revealed time labels (group). Error and
               queue float above the bar so it never grows past 68px. */}
-          <div className="group fixed inset-x-3 bottom-3 z-50 mx-auto flex h-[var(--miniplayer-h)] max-w-[1440px] items-center gap-2 rounded-card border border-white/10 bg-[#11121d]/90 px-3 shadow-float backdrop-blur-xl sm:gap-3 md:px-4">
+          <div className="group fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 mx-auto flex h-[var(--miniplayer-h)] max-w-[1440px] items-center gap-2 rounded-card border border-white/10 bg-[#11121d]/90 px-3 shadow-float backdrop-blur-xl sm:gap-3 md:px-4">
             <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden bg-white/10">
               <div className="absolute inset-y-0 left-0 bg-white/15" style={{ width: `${duration ? Math.min(100, buffered / duration * 100) : 0}%` }}/>
               <div className="progress-accent absolute inset-y-0 left-0" style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>

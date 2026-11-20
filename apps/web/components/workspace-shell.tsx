@@ -32,17 +32,19 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="sonora-workspace mx-auto flex min-h-screen w-full max-w-[1680px] gap-4 px-3 py-3 md:gap-5 md:px-5 lg:px-7">
-      <aside className="sonora-sidebar sticky top-3 hidden h-[calc(100vh-24px)] w-[244px] shrink-0 flex-col rounded-[28px] border border-white/[0.08] bg-[#10111a]/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl md:flex">
+      <aside className="sonora-sidebar sticky top-3 hidden h-[calc(100vh-24px)] w-[220px] shrink-0 flex-col rounded-panel border border-white/[0.08] bg-[#10111a]/90 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl md:flex">
         <Link href="/" className="mb-9 flex items-center gap-3 rounded-2xl px-2 py-3">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-violet-300/25 to-cyan-300/10 text-violet-100 ring-1 ring-white/10"><AudioLines size={21}/></span>
           <span><span className="block text-[15px] font-bold tracking-[.24em]">SONORA</span><span className="mt-1 block text-[9px] uppercase tracking-[.22em] text-slate-500">{t("Music universe")}</span></span>
         </Link>
-        <p className="mb-3 px-3 text-[9px] font-semibold uppercase tracking-[.25em] text-slate-600">{t("Workspace")}</p>
+        <p className="t-eyebrow mb-2 px-3">{t("Workspace")}</p>
         <nav className="space-y-1">
           {links.map(({ href, label, icon: Icon }) => (
             <Link key={href} href={href} aria-current={active(href) ? "page" : undefined}
-              className={`group flex items-center gap-3 rounded-2xl px-3 py-3 text-[13px] transition-all duration-200 ${active(href) ? "bg-gradient-to-r from-violet-300/15 to-cyan-300/[0.04] text-violet-100 ring-1 ring-violet-200/10" : "text-slate-400 hover:bg-white/[0.045] hover:text-white"}`}>
-              <Icon size={17} className={active(href) ? "text-violet-200" : "text-slate-500 group-hover:text-slate-200"}/>{t(label)}
+              className={`group relative flex items-center gap-3 rounded-card px-3 py-2.5 text-sm transition-all duration-200 ${active(href) ? "bg-surface-lift font-medium text-white" : "text-muted hover:bg-surface hover:text-white"}`}>
+              {/* Active rail: flat surface fill plus a 3px violet left indicator. */}
+              {active(href) && <span aria-hidden className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-accent"/>}
+              <Icon size={18} className={active(href) ? "text-accent" : "text-slate-500 group-hover:text-slate-200"}/>{t(label)}
             </Link>
           ))}
         </nav>
@@ -84,17 +86,18 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-6 gap-1 rounded-[22px] border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[94px]" : "bottom-3"}`} aria-label={t("Workspace")}>
+      {/* Five tabs max. Import/history/profile live in the header and the
+          library shelf, so the bar never overflows. */}
+      <nav className={`sonora-mobile-nav fixed inset-x-3 z-40 mx-auto grid max-w-[520px] grid-cols-5 gap-1 rounded-panel border border-white/10 bg-[#11121d]/95 p-2 shadow-2xl shadow-black/50 backdrop-blur-2xl md:hidden ${currentTrack ? "bottom-[calc(max(12px,env(safe-area-inset-bottom))_+_var(--miniplayer-h)_+_14px)]" : "bottom-[max(12px,env(safe-area-inset-bottom))]"}`} aria-label={t("Workspace")}>
         {[
           { href: "/", label: "Discover", icon: Compass },
           { href: "/search", label: "Search", icon: Search },
           { href: "/assistant", label: "Assistant", icon: Sparkles },
-          { href: "/playlists", label: "Library", icon: Library },
           { href: "/favorites", label: "Liked tracks", icon: Heart },
-          { href: profileHref, label: "Your profile", icon: UserRound }
+          { href: "/playlists", label: "Library", icon: Library }
         ].map(({ href, label, icon: Icon }) => (
-          <Link key={label} href={href} aria-current={active(href) ? "page" : undefined} className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[9px] transition ${active(href) ? "bg-violet-300/15 text-violet-100" : "text-slate-500 hover:text-slate-200"}`}>
-            <Icon size={18}/><span className="max-w-full truncate">{t(label)}</span>
+          <Link key={label} href={href} aria-current={active(href) ? "page" : undefined} className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-pill px-1 py-2 text-[10px] font-medium transition-colors duration-200 ${active(href) ? "bg-surface-lift text-white" : "text-muted hover:text-white"}`}>
+            <Icon size={19} className={active(href) ? "text-accent" : undefined}/><span className="max-w-full truncate">{t(label)}</span>
           </Link>
         ))}
       </nav>
