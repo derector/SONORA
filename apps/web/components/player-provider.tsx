@@ -757,7 +757,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>
                   {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
-                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("Source")}</a></div>
+                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
+                {aboutOpen && <div className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
+                  <dl className="mt-3 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 max-w-[65%] truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
+                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("License")}</dt><dd className="text-slate-300">{licenseLabel(currentTrack.licenseUrl) || t("Licensed catalog")}</dd></div>
+                  </dl>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {currentTrack.sourceUrl && <a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323]">{t("Open source page")}</a>}
+                    {currentTrack.licenseUrl && <a href={currentTrack.licenseUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 hover:text-white">{t("Read license terms")}</a>}
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-slate-500">{t("SONORA plays licensed catalogs. Rights and attribution always stay with the recording.")}</p>
+                  <Link href="/legal" className="mt-2 inline-block text-[11px] text-violet-200 hover:text-white">{t("Licensing and attribution")}</Link>
+                </div>}
                 <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
                 <div className="mt-7 flex items-center justify-between">
                   <button type="button" onClick={()=>setShuffle(v=>!v)} aria-label={t("Shuffle")} className={shuffle?"text-violet-200":"text-slate-500"}><Shuffle size={21}/></button>
@@ -780,17 +793,3 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     </PlayerContext.Provider>
   );
 }
-                <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
-                {aboutOpen && <div className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
-                  <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
-                  <dl className="mt-3 space-y-2 text-xs">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
-                    <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("License")}</dt><dd className="text-slate-300">{licenseLabel(currentTrack.licenseUrl) || t("Licensed catalog")}</dd></div>
-                  </dl>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {currentTrack.sourceUrl && <a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323]">{t("Open source page")}</a>}
-                    {currentTrack.licenseUrl && <a href={currentTrack.licenseUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300 hover:text-white">{t("Read license terms")}</a>}
-                  </div>
-                  <p className="mt-3 text-[11px] leading-5 text-slate-500">{t("SONORA plays licensed catalogs. Rights and attribution always stay with the recording.")}</p>
-                  <Link href="/legal" className="mt-2 inline-block text-[11px] text-violet-200 hover:text-white">{t("Licensing and attribution")}</Link>
-                </div>}
