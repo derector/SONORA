@@ -13,6 +13,13 @@ import java.util.concurrent.TimeUnit
 
 object SonoraApi {
     private const val BASE = "https://sonora-web-api-production.up.railway.app"
+    /**
+     * Bitrate the user selected in Настройки → Воспроизведение, in kbit/s (0 = server default).
+     * Sent as X-Sonora-Quality on every API call so the resolver can honour it as soon as
+     * API-lane adopts the parameter; the app already uses it as the ceiling for data saver.
+     */
+    @Volatile
+    var qualityKbps: Int = 0
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val http = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
@@ -34,11 +41,14 @@ object SonoraApi {
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
+        qualityKbps = runCatching { app.sonora.android.ui.SonoraPrefs.qualityKbps(context, cellular = false) }.getOrDefault(0)
     }
 
     private fun request(path: String, method: String = "GET", body: JSONObject? = null, authenticated: Boolean = false): JSONObject {
         fun buildRequest(): Request {
             val builder = Request.Builder().url(BASE + path).header("Accept", "application/json")
+            val quality = qualityKbps
+            if (quality > 0) builder.header("X-Sonora-Quality", quality.toString())
             if (body != null) builder.header("Content-Type", "application/json")
                 .method(method, body.toString().toRequestBody(jsonType))
             else if (method != "GET") builder.method(method, ByteArray(0).toRequestBody(null))
@@ -151,6 +161,10 @@ object SonoraApi {
         }
     }
     fun email(): String = prefs.getString("email", "").orEmpty()
+
+    /** The bearer token for callers outside this object (profile endpoints). Never logged. */
+    fun accessToken(): String? = prefs.getString("access_token", null)
+
     fun isSignedIn(): Boolean = prefs.getString("access_token", null) != null
 
     fun discover(provider: String): List<Track> {
