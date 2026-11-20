@@ -690,6 +690,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch { /* Media Session is optional and browser-dependent. */ }
   }, [currentTrack, isPlaying, queue, queueIndex, repeatMode, shuffle, t]);
 
+  // Playback errors float above the mini-player as toasts: they slide in
+  // from the right (CSS .toast-in) and retire themselves after a beat.
+  useEffect(() => {
+    if (!playbackError) return;
+    const id = setTimeout(() => setPlaybackError(""), 7000);
+    return () => clearTimeout(id);
+  }, [playbackError]);
+
   const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
 
   return (
@@ -702,11 +710,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               Progress is a slim 2px violet->teal line on the top edge, driven by
               the same clock as the hover-revealed time labels (group). Error and
               queue float above the bar so it never grows past 68px. */}
-          <div className="group fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 mx-auto flex h-[var(--miniplayer-h)] max-w-[1440px] items-center gap-2 rounded-card border border-white/10 bg-[#11121d]/90 px-3 shadow-float backdrop-blur-xl sm:gap-3 md:px-4">
-            <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden bg-white/10">
+          <div className="player-enter group fixed inset-x-3 bottom-[max(12px,env(safe-area-inset-bottom))] z-50 mx-auto flex h-[var(--miniplayer-h)] max-w-[1440px] items-center gap-2 rounded-card border border-white/10 bg-[#11121d]/90 px-3 shadow-float backdrop-blur-xl sm:gap-3 md:px-4">
+            <div className="mini-progress absolute inset-x-0 top-0 h-[2px] bg-white/10">
               <div className="absolute inset-y-0 left-0 bg-white/15" style={{ width: `${duration ? Math.min(100, buffered / duration * 100) : 0}%` }}/>
               <div className="progress-accent absolute inset-y-0 left-0" style={{ width: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>
             </div>
+            <span aria-hidden className={`player-thumb${isPlaying ? " is-playing" : ""}`} style={{ left: `${duration ? Math.min(100, currentTime / duration * 100) : 0}%` }}/>
             <input aria-label={t("Seek through track")} type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} disabled={!duration} onChange={(event) => {
               const next = Number(event.target.value);
               if (audioRef.current && Number.isFinite(next)) { audioRef.current.currentTime = next; setCurrentTime(next); }
@@ -715,13 +724,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
               <span>{timeLabel(currentTime)}</span><span>{timeLabel(duration)}</span>
             </div>
             {(playbackError || queueOpen) && <div className="pointer-events-none absolute inset-x-3 bottom-full mb-7 flex flex-col gap-2">
-              {playbackError && <p role="status" className="pointer-events-auto flex items-start gap-2 rounded-card border border-rose-300/15 bg-[#11121d]/95 px-3 py-2 text-[11px] leading-4 text-rose-200 shadow-float backdrop-blur-xl"><AlertCircle size={14} className="mt-0.5 shrink-0"/>{playbackError}</p>}
-              {queueOpen && <div className="pointer-events-auto mx-auto max-h-64 w-full max-w-xl overflow-y-auto rounded-card border border-white/10 bg-[#11121d]/95 p-2 shadow-float backdrop-blur-xl">
+              {playbackError && <p role="status" className="toast-in pointer-events-auto flex items-start gap-2 rounded-card border border-rose-300/15 bg-[#11121d]/95 px-3 py-2 text-[11px] leading-4 text-rose-200 shadow-float backdrop-blur-xl"><AlertCircle size={14} className="mt-0.5 shrink-0"/>{playbackError}</p>}
+              {queueOpen && <div className="queue-panel pointer-events-auto mx-auto max-h-64 w-full max-w-xl overflow-y-auto rounded-card border border-white/10 bg-[#11121d]/95 p-2 shadow-float backdrop-blur-xl">
                 <div className="mb-2 flex items-center justify-between px-2 text-xs text-muted"><span>{t("Up next")} · {queue.length} {t("tracks")}</span><button type="button" onClick={() => setQueueOpen(false)} aria-label={t("Close queue")} className="btn-icon !h-8 !w-8"><X size={14}/></button></div>
                 {queue.map((item, index) => <button key={item.id} type="button" onClick={() => playAt(index)} className={`flex w-full min-w-0 items-center gap-3 rounded-tile px-2 py-2 text-left text-xs hover:bg-white/5 ${index === queueIndex ? "text-violet-200" : "text-slate-300"}`}>
                   <Artwork src={item.artworkUrl} iconSize={13} className="h-8 w-8 shrink-0"/>
                   <span className="min-w-0 flex-1 truncate">{item.title}</span><span className="max-w-24 truncate text-muted">{item.artist}</span>
-                  {index === queueIndex && isPlaying && <span className="text-violet-200">♫</span>}
+                  {index === queueIndex && isPlaying && <span className="eq-bars text-violet-200" aria-hidden><i /><i /><i /></span>}
                 </button>)}
               </div>}
             </div>}
@@ -732,8 +741,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <button type="button" onClick={() => setShuffle((v) => !v)} aria-label={t("Shuffle")} aria-pressed={shuffle} className={`btn-icon hidden sm:grid ${shuffle ? "is-active" : ""}`}><Shuffle size={17}/></button>
               <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="btn-icon"><SkipBack size={18}/></button>
-              <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="btn-press grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/30">
-                {isLoading ? <LoaderCircle size={18} className="animate-spin"/> : isPlaying ? <Pause size={18} fill="currentColor"/> : <Play size={18} fill="currentColor" className="ml-0.5"/>}
+              <button type="button" onClick={togglePlay} aria-label={isPlaying ? t("Pause") : t("Play")} className="btn-press pp-toggle grid h-10 w-10 shrink-0 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-lg shadow-violet-950/30">
+                {isLoading ? <LoaderCircle size={18} className="animate-spin"/> : (
+                  <>
+                    <Play size={18} fill="currentColor" className={isPlaying ? "pp-off ml-0.5" : undefined} aria-hidden/>
+                    <Pause size={18} fill="currentColor" className={isPlaying ? undefined : "pp-off"} aria-hidden/>
+                  </>
+                )}
               </button>
               <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="btn-icon"><SkipForward size={18}/></button>
               <button type="button" onClick={() => setRepeatMode((m) => m === "off" ? "all" : m === "all" ? "one" : "off")} aria-label={t("Repeat")} aria-pressed={repeatMode !== "off"} className={`btn-icon hidden sm:grid ${repeatMode !== "off" ? "is-active" : ""}`}>{repeatMode === "one" ? <Repeat1 size={17}/> : <Repeat size={17}/>}</button>
@@ -744,7 +758,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             </div>
             <button type="button" onClick={() => setQueueOpen((open) => !open)} aria-label={t("Toggle queue")} aria-pressed={queueOpen} className={`btn-icon ml-auto shrink-0 md:ml-0 ${queueOpen ? "is-active" : ""}`}><ListMusic size={19}/></button>
           </div>
-          {expanded && <div className="fixed inset-0 z-[60] overflow-y-auto bg-[#090a12] px-5 pb-[max(28px,env(safe-area-inset-bottom))] pt-[max(22px,env(safe-area-inset-top))]">
+          {expanded && <div className="overlay-fade fixed inset-0 z-[60] overflow-y-auto bg-[#090a12] px-5 pb-[max(28px,env(safe-area-inset-bottom))] pt-[max(22px,env(safe-area-inset-top))]">
             <div className="mx-auto flex min-h-full w-full max-w-xl flex-col">
               <div className="flex items-center justify-between">
                 <button type="button" onClick={() => setExpanded(false)} aria-label={t("Minimize player")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ChevronDown size={23}/></button>
@@ -752,12 +766,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                 <button type="button" onClick={() => { setQueueOpen((v) => !v); setExpanded(false); }} aria-label={t("Open queue")} className="rounded-full p-3 text-slate-300 hover:bg-white/10"><ListMusic size={21}/></button>
               </div>
               <div className="flex flex-1 flex-col justify-center py-8">
-                <div className="relative mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30">
+                <div className={`cover-breathe relative mx-auto aspect-square w-full max-w-[min(78vw,390px)] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-violet-700/30 via-[#211934] to-slate-900 shadow-2xl shadow-violet-950/30 ${isPlaying ? "is-breathing" : ""}`}>
                   <div className="grid h-full w-full place-items-center text-violet-100"><ListMusic size={76} strokeWidth={1}/></div>
                   {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} onError={(event) => event.currentTarget.remove()} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
                 <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
-                {aboutOpen && <div className="mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
+                {aboutOpen && <div className="state-in mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
                   <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
                   <dl className="mt-3 space-y-2 text-xs">
                     <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 max-w-[65%] truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
@@ -770,18 +784,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   <p className="mt-3 text-[11px] leading-5 text-slate-500">{t("SONORA plays licensed catalogs. Rights and attribution always stay with the recording.")}</p>
                   <Link href="/legal" className="mt-2 inline-block text-[11px] text-violet-200 hover:text-white">{t("Licensing and attribution")}</Link>
                 </div>}
-                <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-0 h-full w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
+                <div className="mt-8 flex items-center gap-3 text-xs tabular-nums text-slate-400"><span>{timeLabel(currentTime)}</span><div className="seek-bar relative flex-1 overflow-hidden rounded-full bg-white/10"><div className="absolute inset-y-0 left-0 bg-white/20" style={{width:`${duration ? Math.min(100, buffered / duration * 100) : 0}%`}}/><div className="absolute inset-y-0 left-0 rounded-full bg-violet-300" style={{width:`${duration ? Math.min(100, currentTime / duration * 100) : 0}%`}}/><input type="range" aria-label={t("Seek through track")} min="0" max={duration || 0} step="0.1" value={Math.min(currentTime,duration || 0)} disabled={!duration} onChange={(event)=>{const v=Number(event.target.value);if(audioRef.current){audioRef.current.currentTime=v;setCurrentTime(v);}}} className="absolute inset-x-0 -top-2 -bottom-2 w-full cursor-pointer opacity-0"/></div><span>{timeLabel(duration)}</span></div>
                 <div className="mt-7 flex items-center justify-between">
                   <button type="button" onClick={()=>setShuffle(v=>!v)} aria-label={t("Shuffle")} className={shuffle?"text-violet-200":"text-slate-500"}><Shuffle size={21}/></button>
                   <button type="button" onClick={previousTrack} aria-label={t("Previous track")} className="text-slate-200"><SkipBack size={27}/></button>
-                  <button type="button" onClick={togglePlay} aria-label={isPlaying?t("Pause"):t("Play")} className="grid h-16 w-16 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-xl shadow-violet-950/30">{isLoading?<LoaderCircle size={27} className="animate-spin"/>:isPlaying?<Pause size={28} fill="currentColor"/>:<Play size={28} fill="currentColor"/>}</button>
+                  <button type="button" onClick={togglePlay} aria-label={isPlaying?t("Pause"):t("Play")} className="pp-toggle grid h-16 w-16 place-items-center rounded-full bg-violet-200 text-[#171323] shadow-xl shadow-violet-950/30">{isLoading?<LoaderCircle size={27} className="animate-spin"/>:(<><Play size={28} fill="currentColor" className={isPlaying?"pp-off ml-0.5":undefined} aria-hidden/><Pause size={28} fill="currentColor" className={isPlaying?undefined:"pp-off"} aria-hidden/></>)}</button>
                   <button type="button" onClick={nextTrack} aria-label={t("Next track")} className="text-slate-200"><SkipForward size={27}/></button>
                   <button type="button" onClick={()=>setRepeatMode(m=>m==="off"?"all":m==="all"?"one":"off")} aria-label={t("Repeat")} className={repeatMode!=="off"?"text-violet-200":"text-slate-500"}>{repeatMode==="one"?<Repeat1 size={21}/>:<Repeat size={21}/>}</button>
                 </div>
                 <div className="mt-8 flex items-center gap-3"><VolumeX size={17} className="text-slate-500"/><input aria-label={t("Volume")} type="range" min="0" max="1" step="0.01" value={muted?0:volume} onChange={event=>{setVolume(Number(event.target.value));setMuted(false);}} className="flex-1 accent-violet-300"/><Volume2 size={17} className="text-slate-400"/></div>
                 {playbackError && <p role="status" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 p-3 text-sm text-rose-200">{playbackError}</p>}
                 <div className="mt-8 flex flex-wrap justify-center gap-2">
-                  {(["original","speed","slowed"] as const).map(mode=><button key={mode} type="button" onClick={()=>setPlaybackMode(mode)} aria-pressed={playbackMode===mode} className={`rounded-full px-4 py-2 text-xs ${playbackMode===mode?"bg-violet-200 text-[#171323]":"border border-white/10 text-slate-400"}`}>{mode==="original"?t("Original"):mode==="speed"?t("Speed up")+" · 1.25×":t("Slowed")+" · 0.8×"}</button>)}
+                  {(["original","speed","slowed"] as const).map(mode=><button key={mode} type="button" onClick={()=>setPlaybackMode(mode)} aria-pressed={playbackMode===mode} className={`btn-press rounded-full px-4 py-2 text-xs ${playbackMode===mode?"bg-violet-200 text-[#171323]":"border border-white/10 text-slate-400"}`}>{mode==="original"?t("Original"):mode==="speed"?t("Speed up")+" · 1.25×":t("Slowed")+" · 0.8×"}</button>)}
                 </div>
               </div>
               <div className="flex justify-center pb-2"><button type="button" onClick={()=>{setQueueOpen(true);setExpanded(false);}} className="flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm text-slate-300"><ListMusic size={17}/>{t("Open queue")} · {queue.length}</button></div>
