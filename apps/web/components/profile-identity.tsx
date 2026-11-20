@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type FormEvent } from "react";
 import { Camera, Check, Link2, Pencil, Share2, Trash2, UserRound, X } from "lucide-react";
 import { useLanguage } from "./language-provider";
-import { ACCENT_PRESETS, coverGradient, ROLE_LABELS, type ProfileChanges, type ProfileUser } from "../lib/profile";
+import { ACCENT_PRESETS, coverGradient, ROLE_LABELS, type ProfileChanges, type ProfileIdentity, type ProfileUser } from "../lib/profile";
 
 export const PROFILE_TABS = [
   { id: "overview", label: "Overview" }, { id: "favorites", label: "Favorites" },
@@ -46,7 +46,7 @@ export function ProfileTabs({ active, onChange }: { active: ProfileTab; onChange
   </div>;
 }
 
-export function ProfileHero({ profile, actions, avatarAction }: { profile: ProfileUser; actions?: ReactNode; avatarAction?: ReactNode }) {
+export function ProfileHero({ profile, actions, avatarAction }: { profile: ProfileIdentity; actions?: ReactNode; avatarAction?: ReactNode }) {
   const { t } = useLanguage();
   return <section className="surface overflow-hidden">
     <div className="relative h-36 sm:h-48" style={{ background: coverGradient(profile.accent) }}>

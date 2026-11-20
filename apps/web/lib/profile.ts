@@ -21,6 +21,9 @@ export type ProfileUser = SonoraUser & {
   favoriteGenres?: string[];
   privacy?: { history: boolean; profile: "public" | "private"; comments: boolean };
 };
+export type ProfileIdentity = Pick<ProfileUser,
+  "username" | "displayName" | "avatarUrl" | "coverUrl" | "bio" | "accent" | "role" | "status" | "links"
+>;
 export type ProfileChanges = {
   displayName?: string; username?: string; bio?: string | null; status?: string | null;
   accent?: string | null; role?: string | null; links?: ProfileLink[]; favoriteGenres?: string[];

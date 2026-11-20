@@ -1,0 +1,52 @@
+{
+  "routes": [
+    {
+      "path": "/assistant"
+    },
+    {
+      "path": "/auth"
+    },
+    {
+      "path": "/discover"
+    },
+    {
+      "path": "/favorites"
+    },
+    {
+      "path": "/history"
+    },
+    {
+      "path": "/import"
+    },
+    {
+      "path": "/legal"
+    },
+    {
+      "path": "/"
+    },
+    {
+      "path": "/playlists/:playlistId"
+    },
+    {
+      "path": "/playlists"
+    },
+    {
+      "path": "/profile"
+    },
+    {
+      "path": "/register"
+    },
+    {
+      "path": "/search"
+    },
+    {
+      "path": "/settings"
+    },
+    {
+      "path": "/signup"
+    },
+    {
+      "path": "/u/:username"
+    }
+  ]
+}
