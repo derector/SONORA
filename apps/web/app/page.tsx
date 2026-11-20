@@ -8,6 +8,7 @@ import { MoodPicker } from "../components/mood-picker";
 import { Rail } from "../components/ui/rail";
 import { TrackCard } from "../components/ui/track-card";
 import { ErrorBlock, RailSkeleton } from "../components/ui/states";
+import { useReveal } from "../lib/motion";
 
 type CatalogTrack = PlayerTrack & { provider: string; playable?: boolean };
 type CatalogResponse = { items?: CatalogTrack[]; error?: string };
@@ -20,6 +21,7 @@ export default function Home() {
   const [tracks, setTracks] = useState<CatalogTrack[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState("");
+  const notesReveal = useReveal<HTMLElement>();
 
   useEffect(() => {
     let active = true;
@@ -113,8 +115,8 @@ export default function Home() {
             subtitle={t("Live selections from the licensed catalogs")}
             viewAllHref="/discover"
           >
-            {playableTracks.map((track, index) => (
-              <div key={track.id} className="rail-item card-enter" style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+            {playableTracks.map((track) => (
+              <div key={track.id} className="rail-item">
                 <TrackCard
                   title={track.title}
                   artist={track.artist}
@@ -129,7 +131,7 @@ export default function Home() {
           </Rail>
         )}
 
-        <section className="surface mt-10 flex items-center gap-3 p-5 md:p-6">
+        <section ref={notesReveal} className="surface mt-10 rv flex items-center gap-3 p-5 md:p-6">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-tile bg-accent-soft text-violet-200"><AudioLines size={19} /></span>
           <div className="min-w-0">
             <h2 className="text-[15px] font-semibold leading-snug">{t("A listening space, not just a feed.")}</h2>

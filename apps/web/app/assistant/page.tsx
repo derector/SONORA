@@ -8,6 +8,7 @@ import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
 import { ErrorBlock, RowsSkeleton } from "../../components/ui/states";
+import { useReveal } from "../../lib/motion";
 
 // The assistant answers with a reply, the intent it detected, playable tracks
 // from the unified catalog and, occasionally, a playlist it created.
@@ -40,6 +41,7 @@ export default function AssistantPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const emptyReveal = useReveal<HTMLDivElement>();
 
   useEffect(() => {
     const node = listRef.current;
@@ -126,24 +128,24 @@ export default function AssistantPage() {
 
       <div ref={listRef} className="mt-6 min-h-64 flex-1 space-y-3 overflow-y-auto pr-1" aria-live="polite">
         {messages.length === 0 && (
-          <div className="flex h-full flex-col items-start gap-3 rounded-3xl border border-dashed border-white/10 p-6">
-            <MessageSquareText size={20} className="text-slate-500"/>
+          <div ref={emptyReveal} className="rv flex h-full flex-col items-start gap-3 rounded-3xl border border-dashed border-white/10 p-6">
+            <MessageSquareText size={20} className="empty-float text-slate-500"/>
             <p className="text-sm text-slate-400">{t("Start with one of these:")}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="pop-stagger flex flex-wrap gap-2">
               {SUGGESTIONS.map((suggestion) => (
-                <button key={suggestion} type="button" onClick={() => setDraft(suggestion)} className="chip btn-press">{t(suggestion)}</button>
+                <button key={suggestion} type="button" onClick={() => setDraft(suggestion)} className="chip btn-press chip-pop">{t(suggestion)}</button>
               ))}
             </div>
           </div>
         )}
         {messages.map((message) => message.role === "user" ? (
-          <div key={message.id} className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-violet-200/90 px-4 py-3 text-sm text-[#171323]">{message.text}</div>
+          <div key={message.id} className="msg-in ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-violet-200/90 px-4 py-3 text-sm text-[#171323]">{message.text}</div>
         ) : message.role === "error" ? (
-          <div key={message.id} role="alert" className="mr-auto w-full max-w-[92%]">
+          <div key={message.id} role="alert" className="msg-in mr-auto w-full max-w-[92%]">
             <ErrorBlock title={message.text} onRetry={message.query ? () => void sendText(message.query as string) : undefined} retryLabel={t("Try again")}/>
           </div>
         ) : (
-          <div key={message.id} className="mr-auto max-w-[92%] space-y-3">
+          <div key={message.id} className="msg-in mr-auto max-w-[92%] space-y-3">
             {message.text ? (
               <div className="rounded-2xl rounded-bl-md border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-sm leading-6 text-slate-200">{message.text}</div>
             ) : (

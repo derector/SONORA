@@ -6,6 +6,7 @@ import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
 import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
+import { useReveal } from "../../lib/motion";
 
 type HistoryItem = {
   id: string;
@@ -46,6 +47,8 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
   const [error, setError] = useState("");
+  const headReveal = useReveal<HTMLDivElement>();
+  const listReveal = useReveal<HTMLDivElement>();
 
   async function startHistoryTrack(item: HistoryItem) {
     if (currentTrack?.id === item.provider_track_id) {
@@ -127,14 +130,14 @@ export default function HistoryPage() {
         </div>
       ) : (
         <section className="mt-8" aria-labelledby="history-heading">
-          <div className="mb-3 flex items-end justify-between">
+          <div ref={headReveal} className="rv rv-mask mb-3 flex items-end justify-between">
             <div>
               <p className="t-eyebrow">{t("Your activity")}</p>
               <h2 id="history-heading" className="t-h2 mt-1">{t("Listening events")}</h2>
             </div>
             <span className="t-meta">{items.length} {t("events")}</span>
           </div>
-          <div className="min-w-0 space-y-0.5">
+          <div ref={listReveal} className="rv rv-flat rv-stagger-x min-w-0 space-y-0.5">
             {items.map((item) => (
               <TrackRow
                 key={item.id}

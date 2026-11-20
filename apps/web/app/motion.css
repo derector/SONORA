@@ -1,0 +1,330 @@
+/* ============================================================================
+   SONORA motion system — loaded after globals.css so it can refine and
+   extend the base tokens. Structure:
+     1. Easing/duration tokens and stagger variables
+     2. Route transitions & nav progress shimmer
+     3. Scroll reveal (.rv) and stagger groups
+     4. Card & row interactions
+     5. Player motion
+     6. Tabs, chips and nav pill
+     7. Skeleton shimmer
+     8. Assistant, search and empty states
+     9. Micro-interactions
+    10. Consolidated reduced-motion kill switch
+   Every animation here is CSS-only (keyframes/transitions); JS only toggles
+   classes through lib/motion.ts primitives.
+   ========================================================================= */
+
+/* 1 — Tokens. --ease-d1 is the standard decelerate curve, --ease-d2 the deep
+   expo for large travels, --ease-spring overshoots slightly for pops. */
+:root {
+  --ease-spring: cubic-bezier(.34, 1.45, .5, 1);
+  --ease-d1: cubic-bezier(.2, .7, .2, 1);
+  --ease-d2: cubic-bezier(.16, 1, .3, 1);
+  --dur-reveal: 520ms;
+  --dur-item: 460ms;
+  --stagger-step: 60ms;
+  --stagger-cap: 300ms;
+}
+
+/* 2 — Route transitions. The 8px enter lives in globals (.page-transition);
+   these refinements slow it slightly and add the directional variants the
+   tab-order-aware PageTransition picks. */
+.page-transition { animation-duration: 320ms; animation-timing-function: var(--ease-d1); }
+.page-from-forward { animation-name: page-slide-from-right; }
+.page-from-back { animation-name: page-slide-from-left; }
+@keyframes page-slide-from-right {
+  from { opacity: 0; transform: translate3d(12px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes page-slide-from-left {
+  from { opacity: 0; transform: translate3d(-12px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes page-fade-up {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Nav progress: fixed 2px strip, violet->teal gradient sweeping while a
+   client navigation is in flight. */
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 90;
+  pointer-events: none;
+  opacity: 0;
+  background: rgba(139, 92, 246, .08);
+  transition: opacity 240ms var(--ease-d1);
+}
+.route-progress.is-active { opacity: 1; }
+.route-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 38%;
+  background: var(--accent-grad);
+  transform: translate3d(-110%, 0, 0);
+}
+.route-progress.is-active::after { animation: route-shimmer 950ms var(--ease-d1) infinite; }
+@keyframes route-shimmer {
+  from { transform: translate3d(-110%, 0, 0); }
+  to { transform: translate3d(370%, 0, 0); }
+}
+
+/* 3 — Scroll reveal. Elements start hidden and are released once by the
+   shared IntersectionObserver in lib/motion.ts (.rv-in). Stagger groups
+   animate their direct children in 60ms steps, capped at 300ms. */
+.rv {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  transition:
+    opacity var(--dur-reveal) var(--ease-d1),
+    transform var(--dur-reveal) var(--ease-d1),
+    clip-path var(--dur-reveal) var(--ease-d2);
+  transition-delay: var(--rv-delay, 0ms);
+}
+.rv-x { transform: translate3d(24px, 0, 0); }
+.rv-flat { transform: none; }
+.rv.rv-in { opacity: 1; transform: translate3d(0, 0, 0); }
+/* Mask reveal for section headings: a bottom-up clip wipe, no travel. */
+.rv-mask { transform: none; clip-path: inset(0 0 105% 0); }
+.rv-mask.rv-in { clip-path: inset(0 0 -12% 0); }
+
+.rv-in .rv-stagger > *, .rv-in.rv-stagger > * { animation: rv-item-up var(--dur-item) var(--ease-d1) both; }
+.rv-in .rv-stagger-x > *, .rv-in.rv-stagger-x > * { animation: rv-item-x var(--dur-item) var(--ease-d1) both; }
+@keyframes rv-item-up {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes rv-item-x {
+  from { opacity: 0; transform: translate3d(24px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.rv-stagger > *:nth-child(2), .rv-stagger-x > *:nth-child(2) { animation-delay: calc(var(--stagger-step) * 1); }
+.rv-stagger > *:nth-child(3), .rv-stagger-x > *:nth-child(3) { animation-delay: calc(var(--stagger-step) * 2); }
+.rv-stagger > *:nth-child(4), .rv-stagger-x > *:nth-child(4) { animation-delay: calc(var(--stagger-step) * 3); }
+.rv-stagger > *:nth-child(5), .rv-stagger-x > *:nth-child(5) { animation-delay: calc(var(--stagger-step) * 4); }
+.rv-stagger > *:nth-child(6), .rv-stagger-x > *:nth-child(6) { animation-delay: calc(var(--stagger-step) * 5); }
+.rv-stagger > *:nth-child(n+7), .rv-stagger-x > *:nth-child(n+7) { animation-delay: var(--stagger-cap); }
+
+/* 4 — Cards and rows: hover scale + shadow bloom, press squash, cover sheen
+   sweep and the live-row equalizer bars. */
+.track-card {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    box-shadow var(--dur-base) var(--ease-soft),
+    background-color var(--dur-fast) var(--ease-soft);
+}
+.track-card:hover {
+  transform: translateY(-3px) scale(1.03);
+  box-shadow:
+    0 18px 48px rgba(3, 4, 10, .55),
+    0 0 0 1px rgba(139, 92, 246, .16),
+    0 0 32px rgba(139, 92, 246, .14);
+}
+.track-card:active { transform: scale(.97); transition-duration: 90ms; }
+.track-card .artwork::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, .22) 50%, transparent 62%);
+  transform: translate3d(-120%, 0, 0);
+}
+.track-card:hover .artwork::after { animation: sheen-sweep 750ms var(--ease-d1) forwards; }
+@keyframes sheen-sweep {
+  from { transform: translate3d(-120%, 0, 0); }
+  to { transform: translate3d(120%, 0, 0); }
+}
+.mood-tile { transition: transform var(--dur-base) var(--ease-spring), box-shadow var(--dur-base) var(--ease-soft); }
+.mood-tile:hover { transform: translateY(-3px) scale(1.03); box-shadow: var(--shadow-card); }
+.mood-tile:active { transform: scale(.97); transition-duration: 90ms; }
+@media (hover: none) {
+  .track-card:hover, .mood-tile:hover { transform: none; box-shadow: none; }
+  .track-card:hover .artwork::after { animation: none; }
+}
+
+/* Equalizer bars: current track row, queue rows and the logo mark. */
+.eq-bars { display: inline-flex; align-items: flex-end; gap: 2px; width: 13px; height: 12px; flex: none; }
+.eq-bars i {
+  display: block;
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(.3);
+  transform-origin: bottom;
+  animation: eq-bounce 900ms var(--ease-soft) infinite;
+}
+.eq-bars i:nth-child(1) { animation-delay: -260ms; }
+.eq-bars i:nth-child(2) { animation-delay: -610ms; }
+.eq-bars i:nth-child(3) { animation-delay: -430ms; }
+@keyframes eq-bounce {
+  0%, 100% { transform: scaleY(.3); }
+  50% { transform: scaleY(1); }
+}
+
+/* 5 — Player motion. Entrance, thumb, morph, queue spring, breathe, seek. */
+.player-enter { animation: player-slide-up 460ms var(--ease-d1) both; }
+@keyframes player-slide-up {
+  from { opacity: 0; transform: translate3d(0, 140%, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+/* Mini progress: slim by default, 3px under the pointer — the seek range
+   underneath already covers the whole hit area. */
+.mini-progress { transition: height var(--dur-fast) var(--ease-soft); }
+.group:hover .mini-progress { height: 3px; }
+.player-thumb {
+  position: absolute;
+  top: 1px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 999px;
+  background: #fff;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-50%) scale(.5);
+  transition: opacity 180ms var(--ease-soft), transform 180ms var(--ease-spring);
+}
+.group:hover .player-thumb, .player-thumb.is-playing { opacity: 1; transform: translateY(-50%) scale(1); }
+.player-thumb.is-playing { animation: thumb-pulse 1.6s var(--ease-soft) infinite; }
+@keyframes thumb-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(139, 92, 246, .45); }
+  50% { box-shadow: 0 0 0 6px rgba(139, 92, 246, .08); }
+}
+/* Play/pause morph: both states stack in one grid cell; the outgoing icon
+   shrinks and rotates away while the incoming one springs in. */
+.pp-toggle svg { grid-area: 1 / 1; transition: transform 220ms var(--ease-spring), opacity 140ms var(--ease-soft); }
+.pp-toggle svg.pp-off { opacity: 0; transform: scale(.45) rotate(-40deg); pointer-events: none; }
+.queue-panel { transform-origin: bottom center; animation: queue-pop 340ms var(--ease-spring) both; }
+@keyframes queue-pop {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(.97); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.overlay-fade { animation: overlay-fade 280ms var(--ease-d1) both; }
+@keyframes overlay-fade { from { opacity: 0; } }
+.state-in { animation: state-in 260ms var(--ease-d1) both; }
+@keyframes state-in { from { opacity: 0; transform: translate3d(0, 8px, 0); } }
+.cover-breathe > * { transition: transform 400ms var(--ease-d1); }
+.cover-breathe.is-breathing > * { animation: cover-breathe 6s ease-in-out infinite; }
+@keyframes cover-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.022); }
+}
+.seek-bar { height: 4px; transition: height var(--dur-fast) var(--ease-soft); }
+.seek-bar:hover { height: 6px; }
+
+/* 6 — Tabs, chips and the logo mark. The mobile nav pill is one shared
+   surface measured against the active tab (workspace-shell tabPill);
+   chips get springy press/pop states. */
+.sonora-mobile-nav { transition: bottom 260ms var(--ease-d1); }
+.nav-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07), 0 4px 16px rgba(0, 0, 0, .35);
+  transition: transform 280ms var(--ease-spring), width 280ms var(--ease-spring), height 240ms var(--ease-d1), opacity 200ms var(--ease-soft);
+  pointer-events: none;
+}
+.chip {
+  transition:
+    background-color var(--dur-fast) var(--ease-soft),
+    border-color var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-soft),
+    transform 220ms var(--ease-spring),
+    box-shadow 220ms var(--ease-soft);
+}
+.chip:active { transform: scale(.96); }
+.chip[aria-pressed="true"], .chip.is-active { transform: scale(1.03); box-shadow: 0 4px 14px rgba(139, 92, 246, .18); }
+/* Logo equalizer: three idle bars hidden behind the mark, alive on hover. */
+.logo-eq {
+  position: absolute;
+  right: 5px;
+  bottom: 4px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 8px;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-soft);
+}
+.logo-eq i {
+  display: block;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: currentColor;
+  transform: scaleY(.3);
+  transform-origin: bottom;
+}
+.logo-mark:hover .logo-eq, .logo-mark:focus-visible .logo-eq { opacity: .95; }
+.logo-mark:hover .logo-eq i { animation: eq-bounce 780ms var(--ease-soft) infinite; }
+.logo-mark:hover .logo-eq i:nth-child(1) { animation-delay: -120ms; }
+.logo-mark:hover .logo-eq i:nth-child(2) { animation-delay: -380ms; }
+.logo-mark:hover .logo-eq i:nth-child(3) { animation-delay: -250ms; }
+
+/* 7 — Skeletons. .shimmer is the canonical unified class; .skeleton (used by
+   every loader in components/ui/states.tsx) keeps the same wave, and loader
+   rows pick the wave up with a per-row delay. */
+.shimmer {
+  border-radius: var(--r-tile);
+  background: linear-gradient(100deg, var(--surface-1) 40%, var(--surface-3) 50%, var(--surface-1) 60%);
+  background-size: 220% 100%;
+  animation: skeleton-wave 1.5s var(--ease-soft) infinite;
+}
+.shimmer-rows > *:nth-child(2) .skeleton, .shimmer-rows > *:nth-child(2) .shimmer { animation-delay: 120ms; }
+.shimmer-rows > *:nth-child(3) .skeleton, .shimmer-rows > *:nth-child(3) .shimmer { animation-delay: 240ms; }
+.shimmer-rows > *:nth-child(4) .skeleton, .shimmer-rows > *:nth-child(4) .shimmer { animation-delay: 360ms; }
+.shimmer-rows > *:nth-child(5) .skeleton, .shimmer-rows > *:nth-child(5) .shimmer { animation-delay: 480ms; }
+.shimmer-rows > *:nth-child(n+6) .skeleton, .shimmer-rows > *:nth-child(n+6) .shimmer { animation-delay: 600ms; }
+
+/* 8 — Assistant, search and empty states. */
+.msg-in { animation: msg-in 380ms var(--ease-d1) both; }
+@keyframes msg-in { from { opacity: 0; transform: translate3d(0, 10px, 0); } }
+.chip-pop { animation: chip-pop 300ms var(--ease-spring) backwards; }
+@keyframes chip-pop {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+.pop-stagger > *:nth-child(2).chip-pop { animation-delay: 60ms; }
+.pop-stagger > *:nth-child(3).chip-pop { animation-delay: 120ms; }
+.pop-stagger > *:nth-child(n+4).chip-pop { animation-delay: 180ms; }
+.empty-float { animation: float-idle 3s ease-in-out infinite; }
+@keyframes float-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* 9 — Micro-interactions: one press scale for every button, hover lift for
+   icon links, dialog/overlay backdrop fade (existing dialogs pick .state-in
+   and .overlay-fade up in section 5). */
+.btn-press:active, .btn-primary:active, .btn-ghost:active, .btn-icon:active { transform: scale(.96); transition-duration: 90ms; }
+.btn-icon:hover, .icon-lift:hover { transform: translateY(-1px); }
+
+/* 10 — Consolidated reduced-motion kill switch for the motion system.
+   globals.css already clamps all durations; this forces every state that
+   *starts* hidden (reveals, staggers) to its final pose immediately. */
+@media (prefers-reduced-motion: reduce) {
+  .rv, .rv-x, .rv-flat, .rv-mask {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+    transition: none !important;
+  }
+  .rv-stagger > *, .rv-stagger-x > * { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .route-progress { display: none !important; }
+  .page-transition, .player-enter, .queue-panel, .overlay-fade, .state-in, .toast-in, .msg-in, .chip-pop { animation: none !important; }
+  .player-thumb.is-playing, .cover-breathe.is-breathing > *, .eq-bars i, .logo-mark:hover .logo-eq i, .empty-float, .mood-shimmer::after { animation: none !important; }
+  .track-card:hover, .mood-tile:hover, .chip[aria-pressed="true"], .chip.is-active { transform: none !important; }
+  .track-card:hover .artwork::after { animation: none !important; }
+  .nav-pill { transition: none !important; }
+  .seek-bar:hover { height: 4px; }
+}

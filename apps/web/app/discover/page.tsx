@@ -7,6 +7,7 @@ import { useLanguage } from "../../components/language-provider";
 import { Rail } from "../../components/ui/rail";
 import { TrackCard } from "../../components/ui/track-card";
 import { ErrorBlock, RailSkeleton, StateBlock } from "../../components/ui/states";
+import { useReveal } from "../../lib/motion";
 
 type Track = {
   id: string;
@@ -44,6 +45,7 @@ export default function DiscoverPage() {
   const [savingFavorite, setSavingFavorite] = useState<string>("");
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
+  const exploreHead = useReveal<HTMLDivElement>();
 
   async function loadTracks(search = "", selectedSource: CatalogSource = source, selectedSort: AudiusSort = audiusSort) {
     setLoading(true);
@@ -143,8 +145,8 @@ export default function DiscoverPage() {
 
       {recommendations.length > 0 && (
         <Rail eyebrow={t("Picked from your listening")} title={t("For you")} titleId="discover-for-you-heading">
-          {recommendations.map((track, index) => (
-            <div key={track.id} className="rail-item card-enter" style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+          {recommendations.map((track) => (
+            <div key={track.id} className="rail-item">
               <TrackCard
                 title={track.title}
                 artist={track.artist}
@@ -165,7 +167,7 @@ export default function DiscoverPage() {
         </Rail>
       )}
 
-      <div className="mt-10 flex flex-wrap items-end justify-between gap-4">
+      <div ref={exploreHead} className="rv rv-mask mt-10 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="t-eyebrow">{t("Open catalogs")}</p>
           <h2 className="t-h2 mt-1">{t("Tracks to explore")}</h2>
@@ -206,8 +208,8 @@ export default function DiscoverPage() {
         </div>
       ) : (
         <Rail eyebrow={source === "jamendo" ? t("Collections") : t("Creator uploads")} title={t("Music to explore")} titleId="discover-catalog-heading" viewAllHref="/search" viewAllLabel={t("Catalog search")}>
-          {tracks.map((track, index) => (
-            <div key={track.id} className="rail-item card-enter" style={{ animationDelay: `${Math.min(index * 45, 300)}ms` }}>
+          {tracks.map((track) => (
+            <div key={track.id} className="rail-item">
               <TrackCard
                 title={track.title}
                 artist={track.artist}
