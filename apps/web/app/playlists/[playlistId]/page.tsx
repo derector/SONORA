@@ -3,9 +3,11 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, AudioLines, ExternalLink, LoaderCircle, Music2, Play, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Disc3, Link2, Play, Plus, Search, Trash2 } from "lucide-react";
 import { useLanguage } from "../../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../../components/player-provider";
+import { formatDuration, TrackRow } from "../../../components/ui/track-row";
+import { RowsSkeleton, StateBlock } from "../../../components/ui/states";
 
 type ProviderTrack = {
   provider: string;
@@ -30,13 +32,12 @@ type SearchTrack = PlayerTrack & { id: string; provider: string; providerTrackId
 type SearchResult = { items?: SearchTrack[]; tracks?: SearchTrack[]; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-const timeLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
 export default function PlaylistDetailPage() {
   const params = useParams<{ playlistId: string }>();
   const playlistId = params.playlistId;
   const { t } = useLanguage();
-  const { playTrack } = usePlayer();
+  const { currentTrack, isPlaying, playTrack } = usePlayer();
   const [token, setToken] = useState("");
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [query, setQuery] = useState("");
@@ -45,6 +46,7 @@ export default function PlaylistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [savingId, setSavingId] = useState("");
+  const [startingId, setStartingId] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -133,6 +135,8 @@ export default function PlaylistDetailPage() {
   }
 
   async function playSaved(track: ProviderTrack, queue: ProviderTrack[]) {
+    setStartingId(track.provider + track.provider_track_id);
+    setError("");
     try {
       const loadSavedTrack = async (item: ProviderTrack) => {
         const params = new URLSearchParams({ id: item.provider_track_id });
@@ -153,63 +157,121 @@ export default function PlaylistDetailPage() {
       playTrack(current, startIndex >= 0 ? queueTracks.slice(startIndex) : [current]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start playback.");
+    } finally {
+      setStartingId("");
     }
   }
 
   const saved = playlist?.provider_playlist_tracks ?? [];
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-4 py-6 pb-40 md:px-8">
+    <main className="mx-auto min-h-screen w-full max-w-5xl px-4 py-6 pb-40 md:px-8">
       <header className="flex items-center justify-between">
-        <Link href="/playlists" className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white"><ArrowLeft size={17}/> {t("Back to playlists")}</Link>
-        <span className="flex items-center gap-2 text-sm font-semibold tracking-[.2em]"><AudioLines className="text-violet-300"/> SONORA</span>
+        <Link href="/playlists" className="btn-press inline-flex items-center gap-2 text-sm text-muted hover:text-white"><ArrowLeft size={17} /> {t("Back to playlists")}</Link>
       </header>
-      {loading ? <div className="flex min-h-64 items-center justify-center gap-3 text-sm text-slate-400"><LoaderCircle className="animate-spin" size={18}/> {t("Loading playlist…")}</div> : !playlist ? (
-        <section className="mt-10 rounded-3xl border border-white/10 p-8"><h1 className="text-xl font-semibold">{t("Playlist unavailable")}</h1><p className="mt-2 text-sm text-slate-400">{error || t("Sign in to open this playlist.")}</p><Link href="/auth" className="mt-5 inline-flex rounded-full bg-violet-200 px-5 py-3 text-sm font-semibold text-[#171323]">{t("Sign in")}</Link></section>
+      {loading ? <div className="mt-8"><RowsSkeleton count={5} /></div> : !playlist ? (
+        <div className="mt-8">
+          <StateBlock
+            icon={Disc3}
+            tone="neutral"
+            title={t("Playlist unavailable")}
+            body={error || t("Sign in to open this playlist.")}
+            actionHref="/auth"
+            actionLabel={t("Sign in")}
+          />
+        </div>
       ) : (
         <>
-          <section className="mt-10 rounded-[2rem] border border-violet-300/15 bg-gradient-to-br from-[#292044] via-[#171426] to-[#10131c] p-7 md:p-10">
-            <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("Your playlist")}</p>
-            <h1 className="mt-3 text-3xl font-semibold md:text-5xl">{playlist.title}</h1>
-            <p className="mt-3 text-sm text-slate-300">{playlist.description || t("Your music, collected in one place.")}</p>
-            <p className="mt-5 text-xs text-slate-500">{saved.length} {t("tracks")} · {t("Licensed catalog tracks")}</p>
+          <section className="panel-hero mt-6 flex flex-wrap items-center gap-5 px-6 py-8 md:px-8">
+            <div className="grid h-24 w-24 shrink-0 place-items-center rounded-card bg-gradient-to-br from-accent/45 to-accent-teal/25 shadow-card md:h-32 md:w-32">
+              <Disc3 size={40} className="text-white/85" strokeWidth={1.4} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="t-eyebrow">{t("Your playlist")}</p>
+              <h1 className="t-display mt-1 break-words">{playlist.title}</h1>
+              <p className="t-meta mt-2">{playlist.description || t("Your music, collected in one place.")}</p>
+              <p className="t-meta mt-3">{saved.length} {t("tracks")} · {t("Licensed catalog tracks")}</p>
+            </div>
           </section>
-          <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.025] p-5 md:p-6">
-            <h2 className="flex items-center gap-2 font-semibold"><Search size={17} className="text-violet-200"/> {t("Find tracks to add")}</h2>
-            <div className="mt-4 flex gap-2"><button type="button" onClick={() => { setSearchProvider("jamendo"); setResults([]); }} aria-pressed={searchProvider === "jamendo"} className={searchProvider === "jamendo" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>{t("Collections")}</button><button type="button" onClick={() => { setSearchProvider("audius"); setResults([]); }} aria-pressed={searchProvider === "audius"} className={searchProvider === "audius" ? "rounded-full bg-violet-200 px-4 py-2 text-xs text-[#171323]" : "rounded-full border border-white/10 px-4 py-2 text-xs text-slate-300"}>{t("Creator uploads")}</button></div>
+
+          <section className="surface mt-8 p-5 md:p-6" aria-labelledby="playlist-add-heading">
+            <h2 id="playlist-add-heading" className="flex items-center gap-2 text-[15px] font-semibold"><Search size={17} className="text-violet-200" /> {t("Find tracks to add")}</h2>
+            <div className="mt-4 flex gap-2">
+              <button type="button" onClick={() => { setSearchProvider("jamendo"); setResults([]); }} aria-pressed={searchProvider === "jamendo"} className="btn-press chip">{t("Collections")}</button>
+              <button type="button" onClick={() => { setSearchProvider("audius"); setResults([]); }} aria-pressed={searchProvider === "audius"} className="btn-press chip">{t("Creator uploads")}</button>
+            </div>
             <form onSubmit={searchTracks} className="mt-4 flex gap-2">
-              <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder={t("Search by track or artist")} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm outline-none focus:border-violet-300/60"/>
-              <button disabled={searching || query.trim().length < 2} className="inline-flex items-center gap-2 rounded-xl bg-violet-200 px-4 py-3 text-sm font-semibold text-[#171323] disabled:opacity-50">{searching ? <LoaderCircle className="animate-spin" size={16}/> : <Search size={16}/>} {t("Search")}</button>
+              <input value={query} onChange={(event) => setQuery(event.target.value)} minLength={2} placeholder={t("Search by track or artist")} className="field min-w-0 flex-1" />
+              <button disabled={searching || query.trim().length < 2} className="btn-press btn-primary !px-4 text-sm">{searching ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden /> : <Search size={16} />}<span className="hidden sm:inline">{t("Search")}</span></button>
             </form>
-            {results.length > 0 && <div className="mt-4 divide-y divide-white/[0.06]">
-              {results.map((track) => <div key={track.id} className="flex items-center gap-3 py-3">
-                {track.artworkUrl ? <img src={track.artworkUrl} alt="" className="h-11 w-11 rounded-lg object-cover"/> : <div className="grid h-11 w-11 place-items-center rounded-lg bg-violet-300/10"><Music2 size={18}/></div>}
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist}{track.durationSeconds ? " · " + timeLabel(track.durationSeconds) : ""}</p></div>
-                <button type="button" onClick={() => void addTrack(track)} disabled={savingId === track.id || saved.some((item) => item.provider === track.provider.toLowerCase() && item.provider_track_id === (track.providerTrackId ?? track.id.replace(/^audius:/, "")))} className="rounded-lg border border-violet-200/20 p-2 text-violet-200 hover:bg-violet-200/10 disabled:opacity-40" aria-label={t("Add track")} >{savingId === track.id ? <LoaderCircle size={16} className="animate-spin"/> : <Plus size={16}/>}</button>
-              </div>)}
+            {searching && <div className="mt-4"><RowsSkeleton count={3} /></div>}
+            {!searching && results.length > 0 && <div className="mt-4 min-w-0 space-y-0.5">
+              {results.map((track) => (
+                <TrackRow
+                  key={track.id}
+                  track={track}
+                  onPlay={() => { /* results are previewable only after they join the playlist */ }}
+                  disabled
+                  meta={track.durationSeconds ? <>{track.artist} · {formatDuration(track.durationSeconds)}</> : track.artist}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => void addTrack(track)}
+                      disabled={savingId === track.id || saved.some((item) => item.provider === track.provider.toLowerCase() && item.provider_track_id === (track.providerTrackId ?? track.id.replace(/^audius:/, "")))}
+                      aria-label={t("Add track")}
+                      className="btn-icon !text-violet-200 hover:bg-accent-soft"
+                    >
+                      {savingId === track.id ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-200/40 border-t-violet-200" aria-hidden /> : <Plus size={16} />}
+                    </button>
+                  }
+                />
+              ))}
             </div>}
           </section>
-          <section className="mt-9">
-            <h2 className="text-2xl font-semibold">{t("Playlist tracks")}</h2>
-            {saved.length === 0 ? <div className="mt-4 rounded-3xl border border-dashed border-white/10 p-10 text-center"><Disc3Fallback/><p className="mt-3 font-medium">{t("No tracks yet")}</p><p className="mt-1 text-sm text-slate-500">{t("Search above and add your first track.")}</p></div> : (
-              <div className="mt-4 space-y-2">
-                {saved.map((track) => <article key={track.provider + track.provider_track_id} className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.025] p-3">
-                  {track.artwork_url ? <img src={track.artwork_url} alt="" className="h-12 w-12 rounded-xl object-cover"/> : <div className="grid h-12 w-12 place-items-center rounded-xl bg-violet-300/10"><Music2 size={20}/></div>}
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{track.title}</p><p className="truncate text-xs text-slate-500">{track.artist_name}{track.album_name ? " · " + track.album_name : ""} · {track.duration_seconds ? timeLabel(track.duration_seconds) : ""}</p></div>
-                  <a href={track.source_url} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="rounded-lg p-2 text-slate-500 hover:text-white"><ExternalLink size={16}/></a>
-                  <button type="button" onClick={() => void playSaved(track, saved)} aria-label={t("Play track")} className="rounded-lg p-2 text-violet-200 hover:bg-violet-200/10"><Play size={17} fill="currentColor"/></button>
-                  <button type="button" onClick={() => void removeTrack(track)} aria-label={t("Remove track")} className="rounded-lg p-2 text-slate-500 hover:bg-rose-400/10 hover:text-rose-200"><Trash2 size={16}/></button>
-                </article>)}
+
+          <section className="mt-8" aria-labelledby="playlist-tracks-heading">
+            <h2 id="playlist-tracks-heading" className="t-h2">{t("Playlist tracks")}</h2>
+            {saved.length === 0 ? (
+              <div className="mt-4">
+                <StateBlock
+                  icon={Disc3}
+                  tone="neutral"
+                  title={t("No tracks yet")}
+                  body={t("Search above and add your first track.")}
+                />
+              </div>
+            ) : (
+              <div className="mt-4 min-w-0 space-y-0.5">
+                {saved.map((track, index) => (
+                  <TrackRow
+                    key={track.provider + track.provider_track_id}
+                    leading={<span className="t-meta hidden w-6 shrink-0 text-right tabular-nums sm:block">{index + 1}</span>}
+                    track={{
+                      id: track.provider_track_id,
+                      title: track.title,
+                      artist: track.artist_name,
+                      artworkUrl: track.artwork_url,
+                      durationSeconds: track.duration_seconds
+                    }}
+                    isCurrent={currentTrack?.id === track.provider_track_id}
+                    isPlaying={isPlaying}
+                    busy={startingId === track.provider + track.provider_track_id}
+                    meta={track.album_name ? <>{track.artist_name} · {track.album_name}</> : track.artist_name}
+                    onPlay={() => void playSaved(track, saved)}
+                    trailing={
+                      <>
+                        <a href={track.source_url} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="btn-icon hidden sm:grid"><Link2 size={15} /></a>
+                        <button type="button" onClick={() => void removeTrack(track)} aria-label={t("Remove track")} className="btn-icon hover:!text-rose-200"><Trash2 size={15} /></button>
+                      </>
+                    }
+                  />
+                ))}
               </div>
             )}
           </section>
         </>
       )}
-      {notice && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{notice}</p>}
-      {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
+      {notice && <p role="status" className="mt-5 rounded-card border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs text-emerald-200">{t(notice) || notice}</p>}
+      {error && <p role="alert" className="mt-5 rounded-card border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs text-rose-200">{error}</p>}
     </main>
   );
-}
-
-function Disc3Fallback() {
-  return <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-violet-300/10 text-violet-200"><Music2 size={24}/></div>;
 }

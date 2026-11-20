@@ -363,6 +363,8 @@ const ru: Record<string, string> = {
   "Import matches titles you already own inside SONORA's licensed catalogs. SONORA never downloads audio from other services and never streams protected files it is not allowed to serve. Playback history and favorites are stored in your SONORA account; your language and seasonal effects choices stay on this device.": "Импорт сопоставляет треки, которые у тебя уже есть, внутри лицензионных каталогов SONORA. SONORA не скачивает аудио из других сервисов и не транслирует защищённые файлы, которые не может отдавать. История воспроизведения и избранное хранятся в аккаунте SONORA; выбор языка и сезонных эффектов остаётся на этом устройстве.",
   "Rights holders": "Правообладателям",
   "If you hold rights to a recording and believe it is presented without a valid deed, contact the source that published it and use the license or report link on that source page. SONORA honors withdrawals received from its catalogs.": "Если ты обладаешь правами на запись и считаешь, что она опубликована без действующей лицензии, обратись к источнику, который её разместил, и используй ссылку лицензии или жалобы на его странице. SONORA исполняет отзывы, полученные из своих каталогов.",
+  "Could not load your favorites.": "Не удалось загрузить избранное.",
+  "Could not load listening history.": "Не удалось загрузить историю.",
   "Scroll left": "Прокрутить влево",
   "Scroll right": "Прокрутить вправо",
   "Try again": "Попробовать снова",
