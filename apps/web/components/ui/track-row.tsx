@@ -71,7 +71,11 @@ export function TrackRow({
         </span>
       </button>
       <div className="min-w-0 flex-1">
-        <p className="t-row truncate">{track.title}</p>
+        <p className="t-row flex min-w-0 items-center gap-2">
+          <span className="truncate">{track.title}</span>
+          {/* Three CSS bars tell "this exact row is live" without any audio work. */}
+          {showPause ? <span className="eq-bars shrink-0 text-violet-200" aria-hidden><i /><i /><i /></span> : null}
+        </p>
         <div className="t-meta mt-0.5 truncate">
           {meta !== undefined ? meta : track.artist || t("Unknown artist")}
         </div>
