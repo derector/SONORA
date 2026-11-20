@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:recommendations": "tsx --test src/recommendation-core.test.ts",
     "test:import": "tsx --test src/import-core.test.ts",
-    "test:profile-access": "node --test tests/profile-access.test.mjs"
+    "test:profile-access": "node --test tests/profile*.test.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

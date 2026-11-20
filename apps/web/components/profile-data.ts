@@ -13,6 +13,7 @@ export type HistoryTrack = SavedTrack & { id: string; event_type: "play" | "comp
 export type Playlist = { id: string; title: string; description: string | null; is_public?: boolean; updated_at: string };
 export type Stats = {
   windowDays: number;
+  historyMayBeTruncated?: boolean;
   counts: { events: number; favorites: number; catalogFavorites: number; playlists: number; followers: number; following: number; artists: number; albums: number };
   minutes: { week: number; month: number; total: number }; streakDays: number;
   topArtists: { name: string; events: number; minutes: number }[];

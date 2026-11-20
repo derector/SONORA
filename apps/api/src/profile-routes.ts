@@ -261,7 +261,7 @@ async function providerEvents(client: SupabaseClient, userId: string, sinceIso: 
       .eq("user_id", userId).gte("occurred_at", sinceIso)
       .order("occurred_at", { ascending: false }).limit(2000);
   }
-  if (result.error) return [];
+  if (result.error) throw Object.assign(new Error("Listening history is temporarily unavailable."), { statusCode: 503 });
   return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
     artist: String(row.artist_name ?? "Unknown artist"),
     title: String(row.title ?? ""),
@@ -278,7 +278,7 @@ async function catalogEvents(client: SupabaseClient, userId: string, sinceIso: s
     .select("event_type,listened_ms,occurred_at,track:tracks(id,title,artist:artists(name))")
     .eq("user_id", userId).gte("occurred_at", sinceIso)
     .order("occurred_at", { ascending: false }).limit(1000);
-  if (result.error) return [];
+  if (result.error) throw Object.assign(new Error("Listening history is temporarily unavailable."), { statusCode: 503 });
   return ((result.data ?? []) as Array<Record<string, unknown>>).map((row) => {
     const track = row.track as { id?: string; title?: string; artist?: { name?: string } | null } | null;
     return {
@@ -424,7 +424,7 @@ export function feedbackArtists(
 
 async function safeCount(client: SupabaseClient, table: string, column: string, filter: string, value: string) {
   const result = await client.from(table).select(column, { count: "exact", head: true }).eq(filter, value);
-  return result.error ? 0 : result.count ?? 0;
+  return result.error ? null : result.count ?? 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +558,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       safeCount(auth.client, "user_follows", "followee_id", "follower_id", auth.user.id),
       safeCount(auth.client, "track_feedback", "user_id", "user_id", auth.user.id)
     ]);
-    if (profile.error) request.log.warn({ code: profile.error.code }, "Profile stats lookup failed");
+    if (profile.error || !profile.data || favoriteRows.error ||
+        providerFavorites === null || catalogFavorites === null || playlists === null ||
+        followers === null || following === null || feedback === null) {
+      return reply.code(503).send(authError(503, "Profile statistics are temporarily unavailable."));
+    }
     const summary = summarizeEvents(rows);
     // Albums are favorites grouped by album name: the catalog has no album rows
     // for provider tracks, so this is the honest grouping available today.
@@ -576,6 +580,8 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
     }
     return {
       windowDays: 180,
+      historyMayBeTruncated: rows.filter((row) => row.trackKey.startsWith("jamendo:")).length >= 2000 ||
+        rows.filter((row) => row.trackKey.startsWith("catalog:")).length >= 1000,
       counts: {
         events: rows.length,
         favorites: providerFavorites,
@@ -611,6 +617,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       auth.client.from("track_feedback").select("kind,track_key").eq("user_id", auth.user.id).limit(500),
       auth.client.from("users").select(PROFILE_COLUMNS).eq("id", auth.user.id).maybeSingle()
     ]);
+    if (profile.error || !profile.data || favorites.error || skipped.error || feedback.error) {
+      return reply.code(503).send(authError(503, "Music taste is temporarily unavailable."));
+    }
     const declaredGenres = genresOr((profile.data as Record<string, unknown> | null)?.favorite_genres);
     const resolved = feedbackArtists(
       (feedback.data ?? []) as Array<{ kind: string; track_key: string }>, rows
@@ -941,6 +950,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         const profiles = ids.length
           ? await client.from("public_profiles").select("id,username,display_name,avatar_url,visibility").in("id", ids)
           : { data: [] };
+        if ("error" in profiles && profiles.error) {
+          return reply.code(503).send(authError(503, "This list is temporarily unavailable."));
+        }
         const byId = new Map<string, Record<string, unknown>>(
           ((profiles.data ?? []) as Array<Record<string, unknown>>).map((row) => [String(row.id), row])
         );
@@ -948,13 +960,15 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
           const profile = byId.get(row[otherColumn]);
           // Accounts that switched to private drop out of the list instead of
           // rendering a blank row.
-          if (!profile || profile.visibility === "private") return [];
+          if (!profile || profile.visibility !== "public") return [];
           return [{
             id: row[otherColumn], username: profile.username, displayName: profile.display_name,
             avatarUrl: profile.avatar_url ?? null, since: row.created_at
           }];
         });
-        return { username: target.username, direction, limit: 50, offset, items, nextOffset: offset + 50 };
+        const hasMore = rows.length === 50 && offset < 5000;
+        return { username: target.username, direction, limit: 50, offset, items, hasMore,
+          nextOffset: hasMore ? offset + 50 : null };
       }
     );
   }

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Music2, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { useAuth } from "../../components/auth-provider";
 import { useLanguage } from "../../components/language-provider";
 import { Camera, CoverDialog, EditProfileDialog, Pencil, ProfileHero, ProfileTabs, Share2, Trash2, type ProfileTab } from "../../components/profile-identity";
-import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states";
+import { ErrorBlock, RowsSkeleton } from "../../components/ui/states";
 import { Reveal } from "../../components/ui/reveal";
 import { imagePayload, profileRequest, type ProfileChanges, type ProfileUser } from "../../lib/profile";
 
@@ -16,6 +16,10 @@ const Favorites = dynamic(() => import("../../components/profile-library").then(
 const Playlists = dynamic(() => import("../../components/profile-library").then((module) => module.PlaylistsPane), { loading: () => <RowsSkeleton /> });
 const History = dynamic(() => import("../../components/profile-library").then((module) => module.HistoryPane), { loading: () => <RowsSkeleton /> });
 const Collection = dynamic(() => import("../../components/profile-library").then((module) => module.CollectionPane), { loading: () => <RowsSkeleton /> });
+const Overview = dynamic(() => import("../../components/profile-insights").then((module) => module.OverviewPane), { loading: () => <RowsSkeleton /> });
+const Statistics = dynamic(() => import("../../components/profile-insights").then((module) => module.StatisticsPane), { loading: () => <RowsSkeleton /> });
+const Taste = dynamic(() => import("../../components/profile-insights").then((module) => module.TastePane), { loading: () => <RowsSkeleton /> });
+const Friends = dynamic(() => import("../../components/profile-people").then((module) => module.FriendsPane), { loading: () => <RowsSkeleton /> });
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -107,7 +111,7 @@ export default function ProfilePage() {
     <ProfileTabs active={tab} onChange={setTab} />
     <section id="profile-panel" role="tabpanel" aria-labelledby={`profile-tab-${tab}`} className="mt-5 min-w-0">
       <Reveal key={tab} className="profile-pane">
-        {tab === "favorites" ? <Favorites /> : tab === "playlists" ? <Playlists /> : tab === "history" ? <History /> : tab === "albums" || tab === "artists" ? <Collection key={tab} kind={tab} /> : <StateBlock icon={Music2} title={t("Your listening space")} body={t("This section is not available yet. Your saved music and listening history are ready in the adjacent tabs.")} actionHref="/discover" actionLabel={t("Explore music")} />}
+        {tab === "favorites" ? <Favorites /> : tab === "playlists" ? <Playlists /> : tab === "history" ? <History /> : tab === "albums" || tab === "artists" ? <Collection key={tab} kind={tab} /> : tab === "stats" ? <Statistics /> : tab === "taste" ? <Taste /> : tab === "friends" ? <Friends username={profile.username} /> : <Overview onOpen={setTab} />}
       </Reveal>
     </section>
     {dialog === "edit" && <EditProfileDialog profile={profile} extended={extended} busy={busy} error={error ? t(error) : ""} onClose={() => setDialog(null)} onSave={save} />}
