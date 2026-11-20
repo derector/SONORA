@@ -18,6 +18,13 @@ object SonoraApi {
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(25, TimeUnit.SECONDS)
         .build()
+    /**
+     * The app's single OkHttp client. Non-API callers must not open a second connection
+     * pool, so they read this and derive their own timeouts with newBuilder() (which shares
+     * the pool and dispatcher): currently the in-app update layer, for the GitHub release
+     * lookup and for streaming the APK.
+     */
+    val sharedClient: OkHttpClient get() = http
     private lateinit var prefs: android.content.SharedPreferences
 
     fun initialize(context: Context) {
