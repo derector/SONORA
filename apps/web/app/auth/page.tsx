@@ -48,11 +48,11 @@ export default function AuthPage() {
         credentials: "include", body: JSON.stringify(body)
       });
       const result = await response.json() as AuthResult;
-      if (!response.ok) throw new Error(result.error || "Could not send the code.");
+      if (!response.ok) throw new Error(result.error || t("Could not send the code."));
       setStep("verify");
       setMessage(t("A sign-in code has been requested. Check your email, including spam."));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : t("Something went wrong."));
     } finally { setBusy(false); }
   }
 
@@ -66,13 +66,13 @@ export default function AuthPage() {
       });
       const result = await response.json() as AuthResult;
       if (!response.ok || !result.session?.access_token || !result.user) {
-        throw new Error(result.error || "The code could not be verified.");
+        throw new Error(result.error || t("The code could not be verified."));
       }
       acceptSession(result.session.access_token, result.user, result.session.expires_at);
       router.replace("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setError(err instanceof Error ? err.message : t("Something went wrong."));
     } finally { setBusy(false); }
   }
 
@@ -80,7 +80,7 @@ export default function AuthPage() {
     <main className="flex min-h-screen items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <Link href="/" className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition hover:text-white"><ArrowLeft size={16}/> {t("Back to SONORA")}</Link>
-        <section className="rounded-[2rem] border border-white/10 bg-[#11111b]/90 p-7 shadow-2xl shadow-violet-950/20 backdrop-blur-xl sm:p-9">
+        <section className="rounded-panel border border-white/10 bg-panel/90 p-7 shadow-2xl shadow-violet-950/20 backdrop-blur-xl sm:p-9">
           <div className="mb-8 flex items-center gap-3">
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-violet-300/10 text-violet-200"><AudioLines size={23}/></span>
             <div><p className="text-sm font-semibold tracking-[.22em]">SONORA</p><p className="mt-1 text-xs text-slate-500">{t("Your music identity")}</p></div>
@@ -117,7 +117,7 @@ export default function AuthPage() {
           )}
           {message && <p className="mt-5 rounded-xl border border-emerald-300/15 bg-emerald-300/5 px-4 py-3 text-xs leading-5 text-emerald-200">{message}</p>}
           {error && <p role="alert" className="mt-5 rounded-xl border border-rose-300/15 bg-rose-300/5 px-4 py-3 text-xs leading-5 text-rose-200">{error}</p>}
-          <p className="mt-7 text-center text-[10px] leading-5 text-slate-600">{t("Protected by Supabase Auth. Your refresh session is stored in a secure HttpOnly cookie.")}</p>
+          <p className="mt-7 text-center text-xs leading-5 text-slate-600">{t("Protected by Supabase Auth. Your refresh session is stored in a secure HttpOnly cookie.")}</p>
         </section>
       </div>
     </main>

@@ -369,6 +369,10 @@ const ru: Record<string, string> = {
   "Scroll right": "Прокрутить вправо",
   "Try again": "Попробовать снова",
   "Music library": "Музыкальная библиотека",
+  "Could not send the code.": "Не удалось отправить код.",
+  "Something went wrong.": "Что-то пошло не так.",
+  "The code could not be verified.": "Не удалось проверить код.",
+  "external VK player": "внешний плеер VK",
 
 };
 
