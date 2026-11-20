@@ -1,0 +1,90 @@
+name: SONORA Android emulator smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-emulator-smoke.yml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-emulator-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: sonora-android-emulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build debug APK
+        run: gradle -p apps/android :app:assembleDebug -PsonoraVersionCode=999 -PsonoraVersionName=0.1.999
+
+      - name: Boot emulator, install app, and capture screen
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          cores: 2
+          ram-size: 2048M
+          disk-size: 4096M
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
+            adb shell am force-stop app.sonora.android
+            adb shell monkey -p app.sonora.android 1
+            sleep 8
+            adb exec-out screencap -p > "$GITHUB_WORKSPACE/sonora-android-start.png"
+            adb shell dumpsys activity activities | grep -m1 'mResumedActivity' | tee "$GITHUB_WORKSPACE/sonora-android-activity.txt"
+
+      - name: Upload emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonora-android-emulator-evidence
+          path: |
+            sonora-android-start.png
+            sonora-android-activity.txt
+          if-no-files-found: warn
+          retention-days: 14
