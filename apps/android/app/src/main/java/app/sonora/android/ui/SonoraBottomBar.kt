@@ -81,8 +81,8 @@ private val NavMuted = Color(0xFF8E90A6)
  *  - captions no longer wrap onto two rows. Each label is one line and the type size
  *    steps 11 → 10 → 9 sp with the label length, instead of the indicator squeezing it.
  *  - the indicator is painted *under* the content, not inside the item layout (Material
- *    put it in the icon slot, which is what crushed the text). One pill lives in the bar's
- *    Box and animates its position and size with a spring at dampingRatio 0.8.
+ *    put it in the icon slot, which is what crushed the text). One compact glass pill lives
+ *    in the bar's Box and animates around the selected icon + caption with a spring.
  */
 @Composable
 fun SonoraBottomBar(
@@ -122,13 +122,15 @@ fun SonoraBottomBar(
     val cx by animateFloatAsState(
         if (cellPx > 0f) cellPx * (pillIndex + 0.5f) else 0f, spec, label = "pill-cx"
     )
-    val cy by animateFloatAsState(topPx + iconBoxPx + gapPx + labelH / 2f, spec, label = "pill-cy")
+    // The glass wraps the complete selected tab, not just the label row.
+    val contentHeightPx = iconBoxPx + gapPx + labelH
+    val cy by animateFloatAsState(topPx + contentHeightPx / 2f, spec, label = "pill-cy")
     val widthPx by animateFloatAsState(
         (labelW + padXPx * 2f).coerceAtMost((cellPx - 4f).coerceAtLeast(1f)),
         spec,
         label = "pill-width"
     )
-    val heightPx by animateFloatAsState(labelH + padYPx * 2f, spec, label = "pill-height")
+    val heightPx by animateFloatAsState(contentHeightPx + padYPx * 2f, spec, label = "pill-height")
     val pillAlpha by animateFloatAsState(
         if (barWidthPx.value > 0f && measured != null) 1f else 0f,
         if (motion) tween(180) else snap(),
@@ -151,7 +153,12 @@ fun SonoraBottomBar(
                         (cy - heightPx / 2f).roundToInt()
                     )
                 }
-                .size(width = widthPx.dp, height = heightPx.dp)
+                // widthPx/heightPx are measured in physical pixels; converting them back to
+                // dp avoids the density multiplication that made the old pill span multiple tabs.
+                .size(
+                    width = with(density) { widthPx.toDp() },
+                    height = with(density) { heightPx.toDp() }
+                )
                 .alpha(pillAlpha)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(
