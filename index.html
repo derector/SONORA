@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SONORA — музыка, которая слышит тебя</title>
+<meta name="description" content="SONORA — бесплатная музыкальная платформа: единый каталог с настоящим MP3-звучанием, плейлисты, синхронизация, AI-помощник и нативное Android-приложение.">
+<meta property="og:title" content="SONORA — скачай приложение">
+<meta property="og:description" content="Единый каталог музыки, офлайн-режим, AI-помощник. Android 8+. Бесплатно.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%238b5cf6'/><stop offset='.5' stop-color='%233b82f6'/><stop offset='1' stop-color='%2314b8a6'/></linearGradient></defs><circle cx='50' cy='50' r='46' fill='url(%23g)'/><path d='M30 58 q6 -22 12 0 t12 0 t12 0' stroke='%230a0a0f' stroke-width='7' fill='none' stroke-linecap='round'/></svg>">
+<style>
+:root{
+  --bg:#0a0a0f; --bg2:#101018; --card:#14141f;
+  --violet:#8b5cf6; --blue:#3b82f6; --teal:#14b8a6;
+  --text:#f4f4f6; --muted:#9b9bab;
+  --grad:linear-gradient(93deg,var(--violet),var(--blue) 48%,var(--teal));
+  --r:22px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;line-height:1.55;overflow-x:hidden}
+::selection{background:rgba(139,92,246,.45)}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1140px;margin:0 auto;padding:0 22px}
+/* aurora */
+.aurora{position:fixed;inset:0;z-index:-1;pointer-events:none}
+.aurora b{position:absolute;border-radius:50%;filter:blur(110px);opacity:.28;animation:drift 16s ease-in-out infinite alternate}
+.aurora b:nth-child(1){width:52vw;height:52vw;background:var(--violet);top:-18vw;left:-10vw}
+.aurora b:nth-child(2){width:44vw;height:44vw;background:var(--blue);top:28vh;right:-16vw;animation-delay:-6s}
+.aurora b:nth-child(3){width:36vw;height:36vw;background:var(--teal);bottom:-14vw;left:22vw;animation-delay:-11s}
+@keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(4vw,-3vh,0) scale(1.12)}}
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);background:rgba(10,10,15,.66);border-bottom:1px solid rgba(255,255,255,.06)}
+nav{display:flex;align-items:center;gap:26px;padding:14px 0}
+.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px;letter-spacing:.06em}
+.logo i{width:30px;height:30px;border-radius:50%;background:var(--grad);display:inline-block;position:relative}
+.logo i::after{content:"";position:absolute;inset:8px 6px;border-bottom:3px solid #0a0a0f;border-radius:2px;box-shadow:0 -6px 0 -1px #0a0a0f,0 6px 0 -1px #0a0a0f}
+nav .links{display:flex;gap:22px;color:var(--muted);font-size:14.5px;margin-left:auto}
+nav .links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:10px;font-weight:700;border-radius:999px;padding:14px 26px;transition:transform .15s ease,box-shadow .2s ease;font-size:15.5px}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--grad);color:#fff;box-shadow:0 10px 34px rgba(99,102,241,.42)}
+.btn-primary:hover{box-shadow:0 14px 44px rgba(20,184,166,.4);transform:translateY(-1px)}
+.btn-ghost{border:1px solid rgba(255,255,255,.16);color:var(--text)}
+.btn-ghost:hover{border-color:rgba(255,255,255,.4)}
+.btn-sm{padding:9px 18px;font-size:13.5px}
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;padding:88px 0 72px}
+h1{font-size:clamp(38px,5.4vw,64px);line-height:1.04;letter-spacing:-.02em;font-weight:900}
+h1 .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);font-size:19px;margin:22px 0 34px;max-width:520px}
+.cta{display:flex;gap:14px;flex-wrap:wrap}
+.meta{margin-top:18px;color:var(--muted);font-size:13px;display:flex;gap:16px;flex-wrap:wrap}
+.meta b{color:var(--text)}
+/* phone */
+.phone{justify-self:center;width:300px;height:610px;border-radius:44px;border:1px solid rgba(255,255,255,.14);background:linear-gradient(170deg,#171724,#0c0c13 60%);box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 10px rgba(255,255,255,.03),0 -30px 80px rgba(139,92,246,.12) inset;padding:18px 16px;position:relative}
+.phone::before{content:"";position:absolute;top:12px;left:50%;transform:translateX(-50%);width:86px;height:20px;border-radius:12px;background:#0a0a0f;border:1px solid rgba(255,255,255,.07)}
+.p-top{margin-top:26px;font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+.p-hero{margin:14px 0;border-radius:18px;background:var(--grad);padding:16px 16px 14px;color:#fff}
+.p-hero small{opacity:.85;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase}
+.p-hero div{font-weight:800;font-size:17px;margin-top:3px}
+.p-row{display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:12px;font-size:12.5px;color:#d9d9e3}
+.p-row:nth-child(odd){background:rgba(255,255,255,.035)}
+.p-art{width:36px;height:36px;border-radius:9px;flex:none}
+.p-row b{display:block;font-size:12.5px;color:#fff;font-weight:600}
+.p-row span{font-size:11px;color:var(--muted)}
+.p-eq{margin-left:auto;display:flex;gap:2px;align-items:flex-end;height:14px}
+.p-eq i{width:3px;background:var(--teal);border-radius:2px;animation:eq 1s ease-in-out infinite}
+.p-eq i:nth-child(1){height:6px;animation-delay:-.2s}.p-eq i:nth-child(2){height:12px}.p-eq i:nth-child(3){height:8px;animation-delay:-.5s}.p-eq i:nth-child(4){height:13px;animation-delay:-.8s}
+@keyframes eq{50%{transform:scaleY(.35)}}
+.p-player{position:absolute;left:14px;right:14px;bottom:16px;background:#191926;border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:12px 14px}
+.p-player .t{display:flex;justify-content:space-between;font-size:12px;font-weight:700;margin-bottom:8px}
+.p-player .t small{color:var(--muted);font-weight:400}
+.p-bar{height:4px;border-radius:4px;background:rgba(255,255,255,.12);position:relative;margin-bottom:10px}
+.p-bar i{position:absolute;left:0;top:0;bottom:0;width:42%;background:var(--grad);border-radius:4px}
+.p-ctrl{display:flex;justify-content:center;align-items:center;gap:22px}
+.p-ctrl s{width:0;height:0;border-left:11px solid #cfcfe0;border-top:7px solid transparent;border-bottom:7px solid transparent;display:inline-block;text-decoration:none}
+.p-ctrl .play{width:40px;height:40px;border-radius:50%;background:var(--grad);position:relative;box-shadow:0 6px 18px rgba(139,92,246,.5)}
+.p-ctrl .play::after{content:"";position:absolute;left:15px;top:12px;border-left:11px solid #fff;border-top:7px solid transparent;border-bottom:7px solid transparent}
+.p-ctrl r{width:0;height:0;border-right:11px solid #cfcfe0;border-top:7px solid transparent;border-bottom:7px solid transparent;display:inline-block}
+section{padding:70px 0}
+h2{font-size:clamp(26px,3.4vw,40px);letter-spacing:-.01em;margin-bottom:12px}
+.h2sub{color:var(--muted);max-width:640px;margin-bottom:44px;font-size:16.5px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:var(--r);padding:24px 22px;transition:transform .18s ease,border-color .2s ease}
+.card:hover{transform:translateY(-4px);border-color:rgba(139,92,246,.45)}
+.card em{font-style:normal;display:inline-flex;width:44px;height:44px;border-radius:13px;align-items:center;justify-content:center;font-size:21px;background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(20,184,166,.18));border:1px solid rgba(139,92,246,.3);margin-bottom:16px}
+.card h3{font-size:16.5px;margin-bottom:8px}
+.card p{color:var(--muted);font-size:13.8px}
+.moods{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.mood{position:relative;aspect-ratio:3/4;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.08)}
+.mood img{width:100%;height:100%;object-fit:cover;transition:transform .35s ease}
+.mood:hover img{transform:scale(1.07)}
+.mood span{position:absolute;left:0;right:0;bottom:0;padding:26px 12px 10px;font-weight:700;font-size:13.5px;background:linear-gradient(transparent,rgba(5,5,10,.88))}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+.step{background:var(--card);border:1px solid rgba(255,255,255,.07);border-radius:var(--r);padding:26px;position:relative}
+.step::before{counter-increment:s;content:counter(s,decimal-leading-zero);font-weight:900;font-size:40px;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;display:block;margin-bottom:10px}
+.step p{color:var(--muted);font-size:14px}
+.step h3{margin-bottom:8px;font-size:17px}
+details{border-bottom:1px solid rgba(255,255,255,.08);padding:18px 4px}
+summary{cursor:pointer;font-weight:700;font-size:16.5px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+summary::after{content:"+";font-size:22px;color:var(--muted);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg);color:var(--teal)}
+details p{color:var(--muted);margin-top:12px;font-size:14.5px;max-width:760px}
+.final{background:linear-gradient(120deg,rgba(139,92,246,.16),rgba(59,130,246,.12),rgba(20,184,166,.16));border:1px solid rgba(139,92,246,.3);border-radius:30px;padding:58px 40px;text-align:center}
+.final h2{margin-bottom:14px}
+.final p{color:#c9c9d8;max-width:560px;margin:0 auto 30px}
+footer{border-top:1px solid rgba(255,255,255,.07);padding:34px 0 44px;color:var(--muted);font-size:13px}
+footer .f{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+footer .links{margin-left:auto;display:flex;gap:18px}
+footer a:hover{color:var(--text)}
+.hash{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;word-break:break-all;opacity:.55;margin-top:14px}
+@media(max-width:960px){.hero{grid-template-columns:1fr;text-align:center;padding-top:56px}.sub{margin:20px auto 30px}.cta{justify-content:center}.meta{justify-content:center}.phone{margin-top:26px}.grid{grid-template-columns:1fr 1fr}.moods{grid-template-columns:repeat(3,1fr)}.steps{grid-template-columns:1fr}nav .links{display:none}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="aurora"><b></b><b></b><b></b></div>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#"><i></i>SONORA</a>
+      <div class="links">
+        <a href="#features">Возможности</a>
+        <a href="#moods">Настроения</a>
+        <a href="#install">Установка</a>
+        <a href="#faq">Вопросы</a>
+      </div>
+      <a class="btn btn-primary btn-sm" href="https://github.com/derector/SONORA/releases/download/v0.1.156/SONORA-release-367a0b6.apk">Скачать APK</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="wrap hero">
+  <div>
+    <h1>Музыка, которая <span class="grad">слышит тебя</span></h1>
+    <p class="sub">Единый каталог с настоящим звучанием, плейлисты, офлайн-режим, синхронизация между телефоном и браузером и собственный AI-помощник, который подбирает треки под настроение. Бесплатно и без рекламы.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/derector/SONORA/releases/download/v0.1.156/SONORA-release-367a0b6.apk">⬇&nbsp;Скачать для Android</a>
+      <a class="btn btn-ghost" href="https://sonora-web-production-fb072d10.up.railway.app">Открыть веб-версию</a>
+    </div>
+    <div class="meta">
+      <span>версия <b>0.1.156</b></span>
+      <span>Android <b>8.0+</b></span>
+      <span>размер <b>15 МБ</b></span>
+      <span>подпись <b>проверена</b></span>
+    </div>
+  </div>
+  <div class="phone" aria-hidden="true">
+    <div class="p-top"><span>SONORA</span><span>9:41</span></div>
+    <div class="p-hero"><small>Слушайте сейчас</small><div>Вечерняя подборка для тебя</div></div>
+    <div class="p-row"><i class="p-art" style="background:linear-gradient(135deg,#8b5cf6,#3b82f6)"></i><div><b>Midnight Circuit</b><span>Aurora Field</span></div><div class="p-eq"><i></i><i></i><i></i><i></i></div></div>
+    <div class="p-row"><i class="p-art" style="background:linear-gradient(135deg,#14b8a6,#3b82f6)"></i><div><b>Rainy Café</b><span>Slow Pages</span></div></div>
+    <div class="p-row"><i class="p-art" style="background:linear-gradient(135deg,#f472b6,#8b5cf6)"></i><div><b>Neon Drive</b><span>Kitsune 9</span></div></div>
+    <div class="p-row"><i class="p-art" style="background:linear-gradient(135deg,#3b82f6,#0ea5e9)"></i><div><b>Ocean Bloom</b><span>Still Water</span></div></div>
+    <div class="p-player">
+      <div class="t"><span>Midnight Circuit<small> — Aurora Field</small></span><small>1:47 / 4:12</small></div>
+      <div class="p-bar"><i></i></div>
+      <div class="p-ctrl"><s></s><div class="play"></div><r></r></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Всё, что нужно меломану</h2>
+    <p class="h2sub">SONORA объединяет лицензированные открытые каталоги в одну библиотеку: ты просто ищешь музыку и слушаешь — без переключения между приложениями.</p>
+    <div class="grid">
+      <div class="card"><em>🎧</em><h3>Настоящее воспроизведение</h3><p>Полноценный MP3-стриминг с перемоткой, очередью, случайным и повторным воспроизведением.</p></div>
+      <div class="card"><em>🤖</em><h3>AI-помощник на русском</h3><p>«Собери плейлист для ночной поездки» — и он собран. Объясняет, почему советует именно эти треки.</p></div>
+      <div class="card"><em>⚡</em><h3>Персональные рекомендации</h3><p>Учится на реальных прослушиваниях: лайки, пропуски, дослушанные до конца треки.</p></div>
+      <div class="card"><em>📥</em><h3>Офлайн-режим</h3><p>Скачивай разрешённые треки и слушай в метро, самолёте и без интернета.</p></div>
+      <div class="card"><em>🔄</em><h3>Синхронизация</h3><p>Плейлисты, избранное и история — едины в приложении и на сайте. Вход по коду из email.</p></div>
+      <div class="card"><em>📚</em><h3>Импорт музыки</h3><p>Переноси плейлисты с других площадок: ссылкой или файлом экспорта.</p></div>
+      <div class="card"><em>🔔</em><h3>Управление везде</h3><p>Уведомление, экран блокировки и наушники с кнопками — всё работает как надо.</p></div>
+      <div class="card"><em>🆓</em><h3>Бесплатно</h3><p>Никаких premium-ограничений на поиск, плейлисты и базовые рекомендации.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="moods">
+  <div class="wrap">
+    <h2>Настроение вместо сотен жанров</h2>
+    <p class="h2sub">Выбери состояние — SONORA подберёт звук под него.</p>
+    <div class="moods">
+      <div class="mood"><img src="moods/focus.jpg" alt="Фокус"><span>Фокус</span></div>
+      <div class="mood"><img src="moods/energy.jpg" alt="Энергия"><span>Энергия</span></div>
+      <div class="mood"><img src="moods/relax.jpg" alt="Релакс"><span>Релакс</span></div>
+      <div class="mood"><img src="moods/party.jpg" alt="Вечеринка"><span>Вечеринка</span></div>
+      <div class="mood"><img src="moods/sleep.jpg" alt="Сон"><span>Сон</span></div>
+      <div class="mood"><img src="moods/discovery.jpg" alt="Открытия"><span>Открытия</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Установка за минуту</h2>
+    <p class="h2sub">Приложение распространяется напрямую — без магазинов. Обновления выходят в этом же канале.</p>
+    <div class="steps">
+      <div class="step"><h3>Скачай APK</h3><p>Нажми «Скачать для Android». Файл подписан стабильным ключом разработчика, контрольная сумма опубликована.</p></div>
+      <div class="step"><h3>Разреши установку</h3><p>Android попросит подтвердить установку из неизвестного источника — это стандартный шаг для приложений вне Play Market.</p></div>
+      <div class="step"><h3>Войди по email</h3><p>Код из письма — и библиотека, плейлисты и история синхронизируются с веб-версией.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <h2>Частые вопросы</h2>
+    <p class="h2sub">Коротко о главном.</p>
+    <details><summary>Откуда музыка?</summary><p>SONORA работает только с лицензированными открытыми каталогами и API, которые разрешают стриминг. Каждый трек несёт метаданные источника и лицензии; при воспроизведении ты всегда слышишь официальный файл, а не пиратскую копию.</p></details>
+    <details><summary>Это правда бесплатно?</summary><p>Да. Поиск, плейлисты, избранное, история и рекомендации не закрыты подпиской. Проект развивается на открытой инфраструктуре и бесплатных тарифах API.</p></details>
+    <details><summary>Безопасно ли ставить APK не из Play Market?</summary><p>Сборка выполняется публично в GitHub Actions, каждый релиз подписан одним и тем же ключом и публикуется с SHA-256. Можешь сверить подпись любым APK-анализатором.</p></details>
+    <details><summary>Есть ли iOS-версия?</summary><p>Пока нет — доступен веб-клиент с полным плеером. iOS-приложение в планах развития.</p></details>
+    <details><summary>Как перенести плейлисты с других сервисов?</summary><p>Раздел «Импорт» принимает ссылки на плейлисты публичных площадок и файлы экспорта (Spotify, Apple Music, универсальный CSV). SONORA сама находит совпадения в едином каталоге и собирает плейлист у тебя в библиотеке.</p></details>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="final">
+      <h2>Слушай по-новому уже сегодня</h2>
+      <p>Один аккаунт — телефон и браузер. Без рекламы, без paywall, без лишних приложений.</p>
+      <div class="cta" style="justify-content:center">
+        <a class="btn btn-primary" href="https://github.com/derector/SONORA/releases/download/v0.1.156/SONORA-release-367a0b6.apk">⬇&nbsp;Скачать APK 0.1.156</a>
+        <a class="btn btn-ghost" href="https://sonora-web-production-fb072d10.up.railway.app">Веб-версия</a>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap f">
+    <span>© 2026 SONORA · сделано для любителей музыки</span>
+    <div class="links">
+      <a href="https://github.com/derector/SONORA">GitHub</a>
+      <a href="https://github.com/derector/SONORA/releases">Релизы</a>
+      <a href="https://sonora-web-production-fb072d10.up.railway.app/legal">Правовая информация</a>
+    </div>
+  </div>
+  <div class="wrap hash">SHA-256 APK 0.1.156: b09cb1c358601bead3e0bc96f0ad40ca75a5a8f83e6716f0d6bb1b01f896241a</div>
+</footer>
+</body>
+</html>
