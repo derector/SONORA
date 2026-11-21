@@ -244,7 +244,7 @@ object OtaUpdate {
 
         val downloadedCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
         val installedInfo = runCatching {
-            context.packageManager.getPackageInfo(context.packageName, signingInfoFlags())
+            context.packageManager.getPackageInfo(context.packageName, packageInfoSigningFlags())
         }.getOrNull() ?: return "Не удалось проверить установленную версию SONORA"
         val installedCode = PackageInfoCompat.getLongVersionCode(installedInfo)
         if (downloadedCode <= installedCode) {
@@ -255,10 +255,6 @@ object OtaUpdate {
         }
         return null
     }
-    private fun signingInfoFlags(): Int =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
-        else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
-
     fun apkFile(context: Context): File = File(File(context.cacheDir, "updates"), APK_FILE_NAME)
 
     /** Millis of the last completed check attempt, for the «Последняя проверка» line. */
@@ -398,7 +394,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                 // Android's installer. This prevents a stale/wrong asset being offered.
                 val archiveInfo = applicationContext.packageManager.getPackageArchiveInfo(
                     partial.absolutePath,
-                    android.content.pm.PackageManager.GET_META_DATA or signingInfoFlags()
+                    android.content.pm.PackageManager.GET_META_DATA or packageInfoSigningFlags()
                 )
                 if (archiveInfo == null || archiveInfo.packageName != applicationContext.packageName) {
                     partial.delete()
@@ -414,7 +410,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                     )
                 }
                 val downloadedVersionCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
-                val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, signingInfoFlags())
+                val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, packageInfoSigningFlags())
                 val installedVersionCode = PackageInfoCompat.getLongVersionCode(installedInfo)
                 if (downloadedVersionCode <= installedVersionCode) {
                     partial.delete()
