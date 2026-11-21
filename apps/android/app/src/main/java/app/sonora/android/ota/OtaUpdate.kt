@@ -13,6 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import androidx.core.content.pm.PackageInfoCompat
 import app.sonora.android.BuildConfig
 import app.sonora.android.data.SonoraApi
 import app.sonora.android.download.TrackDownloadWorker
@@ -159,7 +160,7 @@ object OtaUpdate {
             UNIQUE_DOWNLOAD,
             ExistingWorkPolicy.REPLACE,
             OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
-                .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "expectedBytes" to asset.size))
+                .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
                 .build()
@@ -198,6 +199,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
         val url = inputData.getString("url")
             ?: return@withContext Result.failure(workDataOf(ERROR to "Нет ссылки на установочный файл"))
         val tag = inputData.getString("tag").orEmpty()
+        val expectedVersion = inputData.getString("version").orEmpty()
         val expectedBytes = inputData.getLong("expectedBytes", 0L)
         if (!url.startsWith("https://")) {
             return@withContext Result.failure(workDataOf(ERROR to "Ссылка на обновление небезопасна"))
@@ -271,6 +273,36 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                     partial.delete()
                     return@withContext Result.failure(workDataOf(ERROR to "Скачанный файл не является APK"))
                 }
+
+                // Validate the embedded APK identity and version before handing it to
+                // Android's installer. This prevents a stale/wrong asset being offered.
+                val archiveInfo = applicationContext.packageManager.getPackageArchiveInfo(
+                    partial.absolutePath,
+                    android.content.pm.PackageManager.GET_META_DATA
+                )
+                if (archiveInfo == null || archiveInfo.packageName != applicationContext.packageName) {
+                    partial.delete()
+                    return@withContext Result.failure(workDataOf(ERROR to "APK не принадлежит приложению SONORA"))
+                }
+                val expectedTuple = parseVersion(expectedVersion)
+                val actualTuple = parseVersion(archiveInfo.versionName)
+                if (expectedTuple == null || actualTuple != expectedTuple) {
+                    val actualVersionLabel = archiveInfo.versionName ?: "неизвестна"
+                    partial.delete()
+                    return@withContext Result.failure(
+                        workDataOf(ERROR to "Версия APK ($actualVersionLabel) не совпадает с релизом $expectedVersion")
+                    )
+                }
+                val downloadedVersionCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
+                val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, 0)
+                val installedVersionCode = PackageInfoCompat.getLongVersionCode(installedInfo)
+                if (downloadedVersionCode <= installedVersionCode) {
+                    partial.delete()
+                    return@withContext Result.failure(
+                        workDataOf(ERROR to "Скачан APK не новее установленной версии. Обновление отменено.")
+                    )
+                }
+
                 if (target.exists() && !target.delete()) return@withContext Result.retry()
                 if (!partial.renameTo(target)) {
                     return@withContext Result.failure(workDataOf(ERROR to "Не удалось сохранить файл"))
