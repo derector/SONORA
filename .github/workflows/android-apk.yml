@@ -7,7 +7,7 @@ on:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
   pull_request:
-    branches: [android-native]
+    branches: [android-native, "fix/**"]
     paths:
       - "apps/android/**"
       - ".github/workflows/android-apk.yml"
