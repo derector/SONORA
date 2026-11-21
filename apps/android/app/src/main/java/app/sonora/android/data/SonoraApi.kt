@@ -377,8 +377,10 @@ object SonoraApi {
     data class MusicSearch(
         val tracks: List<Track> = emptyList(),
         val matches: List<CatalogMatch> = emptyList(),
+        val artists: List<CatalogArtist> = emptyList(),
         val searched: Boolean = false
     )
+    data class CatalogArtist(val id: String, val name: String, val handle: String, val trackCount: Int?)
 
     fun search(query: String): MusicSearch {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20&inApp=true")
@@ -396,7 +398,19 @@ object SonoraApi {
                 add(CatalogMatch(id, provider, title, item.optString("artist"), isrc, duration))
             }
         }
-        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, searched = true)
+        val catalogArtists = result.optJSONArray("artists")
+        val artists = buildList {
+            if (catalogArtists == null) return@buildList
+            for (index in 0 until catalogArtists.length()) {
+                val item = catalogArtists.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                val name = item.optString("name")
+                val handle = item.optString("handle").takeIf { it.isNotBlank() && it != "null" }
+                if (id.isBlank() || name.isBlank() || item.optString("provider") != "Audius") continue
+                add(CatalogArtist(id, name, handle ?: name, item.optInt("trackCount", -1).takeIf { it >= 0 }))
+            }
+        }
+        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, artists, searched = true)
     }
 
     fun findPlayableVersion(match: CatalogMatch): Track? {

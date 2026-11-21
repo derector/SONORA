@@ -1284,7 +1284,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
       for (const user of await audiusUsers) {
         artists.push({
           id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
-          handle: user.handle ?? null, followerCount: user.follower_count ?? null,
+          handle: user.handle ?? null, followerCount: user.follower_count ?? null, trackCount: user.track_count ?? null,
           imageUrl: user.profile_picture?.["150x150"] ?? null,
           sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
         });
@@ -1322,12 +1322,15 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   if (inApp) {
     const matchingArtists = artists.filter((artist) => matchesCatalogSearch(q, artist.name) || matchesCatalogSearch(q, artist.handle));
-    const matchingMetadata = metadata.filter((item) => matchesCatalogSearch(q, item.artist, item.title, item.album));
+    const relevantMetadata = metadata.filter((item) => matchesCatalogSearch(q, item.artist, item.title, item.album));
     const exactProfiles = matchingArtists.filter((artist) =>
       [artist.name, artist.handle].some((value) => catalogSearchKey(value) === queryKey));
     const exactAudiusIds = new Set(exactProfiles.filter((artist) => artist.provider === "Audius").map((artist) => artist.id));
     const exactArtist = exactProfiles.length > 0 ||
-      matchingMetadata.some((item) => catalogSearchKey(item.artist) === queryKey);
+      relevantMetadata.some((item) => catalogSearchKey(item.artist) === queryKey);
+    const matchingMetadata = exactArtist
+      ? relevantMetadata.filter((item) => matchesCatalogSearch(q, item.artist))
+      : relevantMetadata;
     const creditsMatch = (track: Record<string, unknown>) =>
       track.provider === "Audius" && exactAudiusIds.size > 0
         ? exactAudiusIds.has(`audius-user:${track.artistId}`)

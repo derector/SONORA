@@ -590,8 +590,12 @@ private fun SonoraApp() {
             ) { screen ->
                 when (screen) {
                     "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") })
-                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = SonoraApi.MusicSearch(); message = "" }, searchResults, busy, message, {
-                        val term = query.trim()
+                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = SonoraApi.MusicSearch(); message = "" }, searchResults, busy, message, { value ->
+                        val term = value.trim()
+                        if (query != value) {
+                            query = value
+                            searchResults = SonoraApi.MusicSearch()
+                        }
                         if (term.isBlank()) {
                             searchResults = SonoraApi.MusicSearch()
                             message = "Введите название трека или исполнителя"
@@ -797,7 +801,7 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
@@ -807,8 +811,8 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
             placeholder = { Text("Трек, исполнитель, альбом") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { search() }),
-            trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
+            keyboardActions = KeyboardActions(onSearch = { search(query) }),
+            trailingIcon = { IconButton(onClick = { search(query) }) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
@@ -820,6 +824,19 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(items = results.tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
                 TrackRow(track, index, { play(track) }, {})
+            }
+            if (results.artists.isNotEmpty()) {
+                item {
+                    Text("Исполнители в каталоге", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                items(results.artists, key = { "artist:${it.id}" }) { artist ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
+                        .clickable(enabled = !busy) { search(artist.handle) }.padding(14.dp)) {
+                        Text(artist.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(if (artist.trackCount == 0) "В профиле нет загруженных треков" else "Треки исполнителя в SONORA",
+                            color = Muted, fontSize = 12.sp)
+                    }
+                }
             }
             if (results.matches.isNotEmpty()) {
                 item {

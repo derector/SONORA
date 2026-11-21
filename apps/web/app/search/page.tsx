@@ -10,7 +10,7 @@ import { Artwork } from "../../components/ui/artwork";
 import { useReveal } from "../../lib/motion";
 
 type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
-type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
+type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; trackCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; isrc?: string | null; releaseDate?: string | null; sourceUrl: string; playable: false };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; providers?: Record<string, ProviderStatus>; error?: string };
@@ -225,7 +225,9 @@ export default function SearchPage() {
                 <Artwork src={artist.imageUrl} rounded="rounded-full" iconSize={20} className="h-12 w-12" />
                 <div className="min-w-0 flex-1">
                   <p className="t-row truncate">{artist.name}</p>
-                  <p className="t-meta mt-0.5 truncate">{artist.followerCount ? `${artist.followerCount.toLocaleString()} ${t("followers")}` : t("Recording artist")}</p>
+                  <p className="t-meta mt-0.5 truncate">{artist.trackCount === 0
+                    ? t("No tracks uploaded to this profile")
+                    : artist.followerCount ? `${artist.followerCount.toLocaleString()} ${t("followers")}` : t("Recording artist")}</p>
                 </div>
               </button>
             ))}
