@@ -61,8 +61,10 @@ CREATE INDEX IF NOT EXISTS user_follows_follower_idx
 
 ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Follow graph is readable by signed-in users" ON public.user_follows;
-CREATE POLICY "Follow graph is readable by signed-in users"
-  ON public.user_follows FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Users can read their own follow edges" ON public.user_follows;
+CREATE POLICY "Users can read their own follow edges"
+  ON public.user_follows FOR SELECT TO authenticated
+  USING ((SELECT auth.uid()) = follower_id OR (SELECT auth.uid()) = followee_id);
 DROP POLICY IF EXISTS "Users can follow from their own account" ON public.user_follows;
 CREATE POLICY "Users can follow from their own account"
   ON public.user_follows FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = follower_id);
@@ -178,6 +180,17 @@ FROM public.users u
 WHERE lower(COALESCE(u.privacy ->> 'profile', 'public')) = 'public';
 
 GRANT SELECT ON public.public_profiles TO anon, authenticated;
+
+-- Public follower lists contain only edges between two public profiles. Direct
+-- reads of user_follows remain limited to the signed-in user's own edges.
+CREATE OR REPLACE VIEW public.public_follow_edges
+WITH (security_barrier = true) AS
+SELECT f.follower_id, f.followee_id, f.created_at
+FROM public.user_follows f
+JOIN public.public_profiles follower ON follower.id = f.follower_id
+JOIN public.public_profiles followee ON followee.id = f.followee_id;
+
+GRANT SELECT ON public.public_follow_edges TO anon, authenticated;
 GRANT SELECT ON public.public_profile_stats TO anon, authenticated;
 
 -- ---------------------------------------------------------------------------
