@@ -2,7 +2,7 @@ name: SONORA Android emulator smoke
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "fix/**"]
     paths:
       - "apps/android/**"
       - ".github/workflows/android-emulator-smoke.yml"
