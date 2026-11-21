@@ -1,7 +1,7 @@
 package app.sonora.android.data
 
+import android.util.Base64
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -113,26 +113,17 @@ object ProfileApi {
     }
 
     /**
-     * Uploads a downscaled JPEG and returns the stored URL. The client always keeps its own
-     * copy of the picture, so the avatar survives even while this route answers 404.
+     * Uploads a downscaled JPEG using the API's JSON/base64 contract and returns the stored URL.
+     * The local copy remains available offline if the remote upload fails.
      */
     fun uploadAvatar(jpeg: ByteArray): String? {
-        val token = SonoraApi.accessToken() ?: return null
-        return runCatching {
-            val body = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("avatar", "avatar.jpg", jpeg.toRequestBody("image/jpeg".toMediaType()))
-                .build()
-            val request = Request.Builder()
-                .url("$BASE/api/v1/profile/avatar")
-                .header("Authorization", "Bearer $token")
-                .post(body)
-                .build()
-            SonoraApi.sharedClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val data = JSONObject(response.body?.string().orEmpty())
-                (data.optJSONObject("profile") ?: data).text("avatarUrl", "avatar_url", "url")
-            }
-        }.getOrNull()
+        val body = JSONObject()
+            .put("contentType", "image/jpeg")
+            .put("base64", Base64.encodeToString(jpeg, Base64.NO_WRAP))
+        val data = call("/api/v1/profile/avatar", "POST", body) ?: return null
+        val profile = data.optJSONObject("user")
+            ?: data.optJSONObject("profile")
+            ?: data
+        return profile.text("avatarUrl", "avatar_url", "url")
     }
 }
