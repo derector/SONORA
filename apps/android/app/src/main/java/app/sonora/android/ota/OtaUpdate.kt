@@ -1,6 +1,9 @@
 package app.sonora.android.ota
 
 import android.content.Context
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -24,6 +27,38 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.TimeUnit
+
+
+/**
+ * Checks whether Android can install [downloaded] over [installed] without uninstalling.
+ * On API 28+, a single-signer APK may legitimately rotate its key when its proof-of-rotation
+ * lineage contains the currently installed signer. Multi-signer APKs require an exact set.
+ * API 26-27 do not expose signing lineage, so they require an exact signer set.
+ */
+private fun hasCompatibleSigningCertificate(installed: PackageInfo, downloaded: PackageInfo): Boolean {
+    fun sameSignerSet(left: Array<android.content.pm.Signature>?, right: Array<android.content.pm.Signature>?): Boolean {
+        if (left == null || right == null || left.isEmpty() || left.size != right.size) return false
+        return left.all { signer ->
+            right.any { candidate -> signer.toByteArray().contentEquals(candidate.toByteArray()) }
+        }
+    }
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        val installedSigning = installed.signingInfo ?: return false
+        val downloadedSigning = downloaded.signingInfo ?: return false
+        if (installedSigning.hasMultipleSigners || downloadedSigning.hasMultipleSigners) {
+            sameSignerSet(installedSigning.apkContentsSigners, downloadedSigning.apkContentsSigners)
+        } else {
+            val installedCurrentSigner = installedSigning.apkContentsSigners.singleOrNull() ?: return false
+            downloadedSigning.signingCertificateHistory?.any { historicalSigner ->
+                installedCurrentSigner.toByteArray().contentEquals(historicalSigner.toByteArray())
+            } == true
+        }
+    } else {
+        @Suppress("DEPRECATION")
+        sameSignerSet(installed.signatures, downloaded.signatures)
+    }
+}
 
 /**
  * The decisions of the update flow: when it looks, what "newer" means for this build, and
@@ -188,7 +223,7 @@ object OtaUpdate {
 
         val archiveInfo = context.packageManager.getPackageArchiveInfo(
             apk.absolutePath,
-            android.content.pm.PackageManager.GET_META_DATA
+            android.content.pm.PackageManager.GET_META_DATA or signingInfoFlags()
         ) ?: return "Не удалось прочитать версию скачанного APK"
         if (archiveInfo.packageName != context.packageName) {
             return "Скачанный файл не является приложением SONORA"
@@ -202,14 +237,21 @@ object OtaUpdate {
 
         val downloadedCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
         val installedInfo = runCatching {
-            context.packageManager.getPackageInfo(context.packageName, 0)
+            context.packageManager.getPackageInfo(context.packageName, signingInfoFlags())
         }.getOrNull() ?: return "Не удалось проверить установленную версию SONORA"
         val installedCode = PackageInfoCompat.getLongVersionCode(installedInfo)
         if (downloadedCode <= installedCode) {
             return "Этот APK не новее уже установленной версии"
         }
+        if (!hasCompatibleSigningCertificate(installedInfo, archiveInfo)) {
+            return "Подпись APK не совпадает с установленной SONORA. Установка поверх невозможна."
+        }
         return null
     }
+    private fun signingInfoFlags(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
+        else @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+
     fun apkFile(context: Context): File = File(File(context.cacheDir, "updates"), APK_FILE_NAME)
 
     /** Millis of the last completed check attempt, for the «Последняя проверка» line. */
@@ -349,7 +391,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                 // Android's installer. This prevents a stale/wrong asset being offered.
                 val archiveInfo = applicationContext.packageManager.getPackageArchiveInfo(
                     partial.absolutePath,
-                    android.content.pm.PackageManager.GET_META_DATA
+                    android.content.pm.PackageManager.GET_META_DATA or signingInfoFlags()
                 )
                 if (archiveInfo == null || archiveInfo.packageName != applicationContext.packageName) {
                     partial.delete()
@@ -365,12 +407,18 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                     )
                 }
                 val downloadedVersionCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
-                val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, 0)
+                val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, signingInfoFlags())
                 val installedVersionCode = PackageInfoCompat.getLongVersionCode(installedInfo)
                 if (downloadedVersionCode <= installedVersionCode) {
                     partial.delete()
                     return@withContext Result.failure(
                         workDataOf(ERROR to "Скачан APK не новее установленной версии. Обновление отменено.")
+                    )
+                }
+                if (!hasCompatibleSigningCertificate(installedInfo, archiveInfo)) {
+                    partial.delete()
+                    return@withContext Result.failure(
+                        workDataOf(ERROR to "Подпись APK не совпадает с установленной SONORA. Установка поверх невозможна.")
                     )
                 }
 
