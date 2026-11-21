@@ -69,7 +69,6 @@ import app.sonora.android.download.TrackDownloadWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 import java.io.File
 import android.content.Intent
@@ -248,11 +247,27 @@ private fun SonoraApp() {
         } catch (_: Exception) {
             authStep = "welcome"
         }
+        // MediaController is thread-confined to its application looper (the main thread).
+        // Never construct it on Dispatchers.IO and never block the main thread waiting for
+        // its future: attach the completion callback to the main executor instead.
         try {
-            controller = withContext(Dispatchers.IO) {
-                MediaController.Builder(context, SessionToken(context, ComponentName(context, app.sonora.android.playback.PlaybackService::class.java))).buildAsync().get(10, TimeUnit.SECONDS)
-            }
-        } catch (_: Exception) { message = "Плеер подключится при следующем запуске" }
+            val token = SessionToken(
+                context,
+                ComponentName(context, app.sonora.android.playback.PlaybackService::class.java)
+            )
+            val future = MediaController.Builder(context, token).buildAsync()
+            future.addListener({
+                try {
+                    controller = future.get()
+                } catch (error: Exception) {
+                    Log.e("SONORA_PLAYBACK", "MediaController connection failed", error)
+                    message = "Плеер не смог подключиться. Перезапусти приложение."
+                }
+            }, ContextCompat.getMainExecutor(context))
+        } catch (error: Exception) {
+            Log.e("SONORA_PLAYBACK", "MediaController creation failed", error)
+            message = "Плеер подключится при следующем запуске"
+        }
         loadCatalog { tracks = it }
     }
 
@@ -410,16 +425,25 @@ private fun SonoraApp() {
         val player = controller ?: return@LaunchedEffect
         if (activeQueue.isEmpty()) return@LaunchedEffect
         while (true) {
+            // Read every MediaController property on its application (main) looper.
+            // Only the disk write is dispatched to IO. Reading these properties inside
+            // withContext(IO) caused Media3's verifyApplicationThread crash on Xiaomi.
             if (player.mediaItemCount > 0) {
+                val queueSnapshot = activeQueue.toList()
+                val currentIndex = player.currentMediaItemIndex
+                val positionMs = player.currentPosition
+                val shuffleEnabled = player.shuffleModeEnabled
+                val repeatMode = player.repeatMode
+                val playWhenReady = player.playWhenReady
                 withContext(Dispatchers.IO) {
                     PlaybackStateStore.save(
                         context = context,
-                        queue = activeQueue,
-                        currentIndex = player.currentMediaItemIndex,
-                        positionMs = player.currentPosition,
-                        shuffleEnabled = player.shuffleModeEnabled,
-                        repeatMode = player.repeatMode,
-                        playWhenReady = player.playWhenReady
+                        queue = queueSnapshot,
+                        currentIndex = currentIndex,
+                        positionMs = positionMs,
+                        shuffleEnabled = shuffleEnabled,
+                        repeatMode = repeatMode,
+                        playWhenReady = playWhenReady
                     )
                 }
             }
