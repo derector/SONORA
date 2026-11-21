@@ -114,6 +114,24 @@ object OtaSession {
 
     /** The only place that talks to the system installer. */
     fun install(context: Context, apk: File) {
+        val invalidReason = OtaUpdate.validateReadyApk(context, apk)
+        if (invalidReason != null) {
+            OtaPreferences.clearReadyApk(context)
+            val latestRelease = OtaUpdate.availableRelease(context)
+            if (latestRelease != null) OtaUpdate.startDownload(context, latestRelease)
+            _state.update {
+                it.copy(
+                    pendingInstallFile = null,
+                    needsInstallPermission = false,
+                    toast = if (latestRelease != null) {
+                        "$invalidReason. Скачиваю актуальную версию ${latestRelease.versionLabel} заново."
+                    } else {
+                        "$invalidReason. Установлена последняя доступная версия или требуется новая проверка."
+                    }
+                )
+            }
+            return
+        }
         when (OtaInstaller.launch(context, apk)) {
             OtaInstaller.Outcome.LAUNCHED -> OtaPreferences.clearReadyApk(context)
             OtaInstaller.Outcome.NEEDS_PERMISSION ->
