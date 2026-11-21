@@ -130,6 +130,16 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
 
 const moods = ["lofi для фокуса", "неон для пробежки", "джаз для вечера", "эмбиент для паузы", "новые музыкальные открытия"];
 let moodIndex = 0;
+const phoneShots = $(".phone-stack img");
+if (phoneShots.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  let phoneIndex = 0;
+  setInterval(() => {
+    phoneShots[phoneIndex].classList.remove("active");
+    phoneIndex = (phoneIndex + 1) % phoneShots.length;
+    phoneShots[phoneIndex].classList.add("active");
+  }, 5200);
+}
+
 const moodLine = $("#moodLine");
 if (!matchMedia("(prefers-reduced-motion: reduce)").matches && moodLine) {
   setInterval(() => {
@@ -152,6 +162,15 @@ $$(".demo-tab").forEach((button) => button.addEventListener("click", () => {
 
 const seek = $("#seek");
 const currentTime = $("#currentTime");
+const waveform = $("#waveform");
+if (waveform) {
+  for (let i = 0; i < 34; i++) {
+    const bar = document.createElement("i");
+    bar.style.setProperty("--h", `${8 + ((i * 7 + 3) % 19)}px`);
+    bar.style.setProperty("--d", `${(i % 11) * 47}ms`);
+    waveform.append(bar);
+  }
+}
 const playToggle = $("#playToggle");
 let demoPosition = 42;
 let demoPlaying = false;
@@ -174,6 +193,7 @@ seek?.addEventListener("input", () => {
 playToggle?.addEventListener("click", () => {
   demoPlaying = !demoPlaying;
   playToggle.textContent = demoPlaying ? "Ⅱ" : "▶";
+  waveform?.classList.toggle("playing", demoPlaying);
   playToggle.setAttribute("aria-label", demoPlaying ? "Остановить демо" : "Запустить демо");
   if (demoFrame) clearTimeout(demoFrame);
   if (demoPlaying) tick();
