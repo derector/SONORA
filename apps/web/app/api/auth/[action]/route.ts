@@ -62,6 +62,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       responseHeaders.append("Set-Cookie", firstPartyCookie);
     }
 
+    // Diagnostic metadata only: never log cookie values, tokens, email addresses or bodies.
+    if (action === "refresh" || action === "verify") {
+      console.info("[SONORA auth proxy]", JSON.stringify({
+        action,
+        refreshCookieReceived: Boolean(refreshToken),
+        upstreamStatus: upstream.status,
+        upstreamSetCookieCount: upstreamCookies.length,
+        pathRewriteCandidateCount: upstreamCookies.filter((value) => /;\\s*Path=\\/api\\/v1\\/auth(?=;|$)/i.test(value)).length
+      }));
+    }
+
     return new NextResponse(await upstream.text(), {
       status: upstream.status,
       headers: responseHeaders
