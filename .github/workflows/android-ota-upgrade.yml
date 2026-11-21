@@ -18,10 +18,11 @@ concurrency:
 
 jobs:
   ota-upgrade:
-    runs-on: ubuntu-latest
+    # Linux hosted runners in this repository have no /dev/kvm access.
+    # Run the x86_64 emulator on macOS, where the Android emulator can use
+    # the host hypervisor instead of timing out under software CPU emulation.
+    runs-on: macos-15
     timeout-minutes: 35
-    env:
-      ANDROID_I_WANT_MY_TCG: "yes"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
