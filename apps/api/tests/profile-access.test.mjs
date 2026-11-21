@@ -28,6 +28,10 @@ function fixture(visibility = "private") {
         async limit() {
           assert.equal(table, "playlists");
           return { data: [], error: null };
+        },
+        async range() {
+          assert.equal(table, "public_follow_edges");
+          return { data: [], error: null };
         }
       };
       return chain;
@@ -52,6 +56,16 @@ for (const suffix of ["", "/playlists", "/followers", "/following"]) {
     } finally { await app.close(); }
   });
 }
+
+test("public follower lists use the privacy-filtered follow projection", async () => {
+  const { app, queries } = fixture("public");
+  try {
+    const result = await app.inject({ method: "GET", url: "/api/v1/users/alex/followers" });
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(result.json().items, []);
+    assert.deepEqual(queries, ["public_profiles", "public_follow_edges"]);
+  } finally { await app.close(); }
+});
 
 test("another signed-in viewer cannot read a private follower list", async () => {
   const { app, queries } = fixture();
