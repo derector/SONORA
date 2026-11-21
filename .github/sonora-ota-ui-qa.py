@@ -54,7 +54,6 @@ def tap(match):
 
 
 def open_updates():
-    shell("am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
     tap(find(("Настройки",)))
     size = re.findall(r"(\d+)x(\d+)", shell("wm", "size"))[-1]
     width, height = map(int, size)
@@ -79,6 +78,7 @@ def version():
 def main():
     adb("install", "-r", "apps/android/app/build/outputs/apk/release/app-release.apk", timeout=90)
     assert version() == 199
+    shell("am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
     open_updates()
     find(("Доступно обновление SONORA",))
     visible = [label(n) for n in nodes()]
@@ -99,6 +99,7 @@ def main():
         time.sleep(2)
     assert version() == 200, version()
     print("System Package Installer updated SONORA to 0.1.200.", flush=True)
+    tap(find(("Open", "Открыть")))
 
     open_updates()
     find(("Обновления SONORA",))
