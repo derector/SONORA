@@ -92,7 +92,7 @@ object SonoraPrefs {
             else -> file.length()
         }
         val external = app.getExternalFilesDir(null)
-        val database = runCatching { app.getDatabasePath("sonora_offline.db") }.getOrNull()
+        val database = runCatching { app.getDatabasePath("sonora-offline.db") }.getOrNull()
         return sizeOf(app.cacheDir) + sizeOf(app.filesDir) +
             (external?.let { sizeOf(it) } ?: 0L) + (database?.let { sizeOf(it) } ?: 0L)
     }
