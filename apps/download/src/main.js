@@ -4,15 +4,15 @@ const OWNER = "derector";
 const REPO = "SONORA";
 const RELEASES_API = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=5`;
 const FALLBACK = {
-  tag_name: "v0.1.182",
-  name: "SONORA Android v0.1.182",
-  published_at: "2026-11-21T10:07:10Z",
-  body: "Автоматическая CI-сборка #182.\nSHA-256 APK: 8b7b7e338a50730cc8caff458285d67670b110262e01d015705efa96ee8d7b60\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
+  tag_name: "v0.1.184",
+  name: "SONORA Android v0.1.184",
+  published_at: "2026-11-21T11:23:34Z",
+  body: "Автоматическая CI-сборка #184.\nSHA-256 APK: 795536f59aff4887f836b8aff34c4a698561cdce3806125c2a753a5ec7ac59ed\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
   assets: [{
     name: "SONORA-latest.apk",
     size: 15892555,
-    digest: "sha256:8b7b7e338a50730cc8caff458285d67670b110262e01d015705efa96ee8d7b60",
-    browser_download_url: "https://github.com/derector/SONORA/releases/download/v0.1.182/SONORA-latest.apk"
+    digest: "sha256:795536f59aff4887f836b8aff34c4a698561cdce3806125c2a753a5ec7ac59ed",
+    browser_download_url: "https://github.com/derector/SONORA/releases/download/v0.1.184/SONORA-latest.apk"
   }]
 };
 
@@ -21,7 +21,7 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 const apkUrl = (release) => release?.assets?.find((asset) => asset.name.toLowerCase().endsWith(".apk"))?.browser_download_url
   || "https://github.com/derector/SONORA/releases/latest";
 const sizeLabel = (bytes) => bytes ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : "Размер уточняется";
-const versionLabel = (release) => (release?.tag_name || "v0.1.182").replace(/^v/, "v");
+const versionLabel = (release) => (release?.tag_name || "v0.1.184").replace(/^v/, "v");
 const safeDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(new Date(value)) : "Дата не указана";
 const getSha = (release, asset) => {
   const digest = asset?.digest || "";
