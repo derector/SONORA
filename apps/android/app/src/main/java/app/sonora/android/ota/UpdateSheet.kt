@@ -68,16 +68,10 @@ fun UpdateSheet(
     val infos by remember(workManager) {
         workManager.getWorkInfosForUniqueWorkFlow(OtaUpdate.UNIQUE_DOWNLOAD)
     }.collectAsState(initial = emptyList())
-    // A unique-work chain can retain an older SUCCEEDED item after a replacement
-    // download is enqueued. Prefer active work, then the success for this exact release,
-    // and only then the newest remaining item so an old APK cannot mask a new attempt.
-    val info = infos.firstOrNull {
-        it.state == WorkInfo.State.RUNNING ||
-            it.state == WorkInfo.State.ENQUEUED ||
-            it.state == WorkInfo.State.BLOCKED
-    } ?: infos.firstOrNull {
-        it.outputData.getString(UpdateDownloadWorker.TAG) == release.tagName
-    } ?: infos.lastOrNull()
+    // WorkManager's list may contain historical requests in unspecified order.
+    // Only render the request explicitly recorded when this release was enqueued.
+    val currentDownloadId = OtaPreferences.currentDownloadId(context)
+    val info = infos.firstOrNull { it.id.toString() == currentDownloadId }
     val workState = info?.state
     val progress = info?.progress?.getInt(UpdateDownloadWorker.PROGRESS, -1) ?: -1
     val downloaded = info?.progress?.getLong(UpdateDownloadWorker.DOWNLOADED, 0L) ?: 0L
