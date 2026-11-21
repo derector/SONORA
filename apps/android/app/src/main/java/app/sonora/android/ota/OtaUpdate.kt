@@ -35,6 +35,13 @@ import java.util.concurrent.TimeUnit
  * lineage contains the currently installed signer. Multi-signer APKs require an exact set.
  * API 26-27 do not expose signing lineage, so they require an exact signer set.
  */
+private fun packageInfoSigningFlags(): Int =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) PackageManager.GET_SIGNING_CERTIFICATES
+    else legacySigningFlag()
+
+@Suppress("DEPRECATION")
+private fun legacySigningFlag(): Int = PackageManager.GET_SIGNATURES
+
 private fun hasCompatibleSigningCertificate(installed: PackageInfo, downloaded: PackageInfo): Boolean {
     fun sameSignerSet(left: Array<android.content.pm.Signature>?, right: Array<android.content.pm.Signature>?): Boolean {
         if (left == null || right == null || left.isEmpty() || left.size != right.size) return false
@@ -223,7 +230,7 @@ object OtaUpdate {
 
         val archiveInfo = context.packageManager.getPackageArchiveInfo(
             apk.absolutePath,
-            android.content.pm.PackageManager.GET_META_DATA or signingInfoFlags()
+            android.content.pm.PackageManager.GET_META_DATA or packageInfoSigningFlags()
         ) ?: return "Не удалось прочитать версию скачанного APK"
         if (archiveInfo.packageName != context.packageName) {
             return "Скачанный файл не является приложением SONORA"
