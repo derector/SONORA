@@ -1,78 +1,51 @@
-name: SONORA signed Android upgrade QA
+name: SONORA in-app Android update QA
 on:
   push:
     branches: [qa/ota-signed-upgrade]
-    paths: ['.github/workflows/android-signed-upgrade-qa.yml']
+    paths: ['.github/workflows/android-signed-upgrade-qa.yml', '.github/sonora-ota-ui-qa.py']
 permissions:
   contents: read
-  actions: read
 jobs:
-  signed-upgrade:
+  in-app-update:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
-      - name: Download signed QA APK from the patch build
-        uses: actions/download-artifact@v4
+      - run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          name: SONORA-Android-release
-          run-id: 44945407457
-          github-token: ${{ github.token }}
-      - name: Download and check release APKs
+          gradle-version: '8.9'
+      - name: Build signed QA baseline with the patched updater
+        working-directory: apps/android
+        env:
+          SONORA_ANDROID_KEYSTORE_BASE64: ${{ secrets.SONORA_ANDROID_KEYSTORE_BASE64 }}
+          SONORA_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.SONORA_ANDROID_KEYSTORE_PASSWORD }}
+          SONORA_ANDROID_KEY_ALIAS: ${{ secrets.SONORA_ANDROID_KEY_ALIAS }}
+          SONORA_ANDROID_KEY_PASSWORD: ${{ secrets.SONORA_ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          for version in 178 179; do
-            curl --retry 3 -fsSL "https://github.com/derector/SONORA/releases/download/v0.1.$version/SONORA-release-v0.1.$version.apk" -o "sonora-$version.apk"
-          done
-          sha256sum -c <<'CHECKSUMS'
-          8d65135e4ea87a7cde2710d38467bc77405d8fb4d9ebd7030270ab242c65f677  sonora-178.apk
-          27702013475989871dea730b33b1ae5f56927f08e33a148120dfbe5c9cde5127  sonora-179.apk
-          96b19194d96725fc7824b36d512100044896430e60c0f37bbc7ade494ccb462f  app-release.apk
-          CHECKSUMS
-      - name: Prepare device assertions
+          export SONORA_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/sonora-qa-release.jks"
+          trap 'rm -f "$SONORA_ANDROID_KEYSTORE_PATH"' EXIT
+          umask 077
+          printf '%s' "$SONORA_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$SONORA_ANDROID_KEYSTORE_PATH"
+          gradle --no-daemon :app:assembleRelease -PsonoraVersionCode=199 -PsonoraVersionName=0.1.199
+      - name: Verify GitHub latest matches the UI test target
         run: |
-          cat > "$RUNNER_TEMP/sonora-upgrade.sh" <<'UPGRADE'
-          set -euo pipefail
-          exec > >(tee "$RUNNER_TEMP/sonora-upgrade.log") 2>&1
-          package=app.sonora.android
-          previous_install=
-          previous_app_id=
-          for version in 178 179 230; do
-            case "$version" in
-              230) apk=app-release.apk ;;
-              *) apk="sonora-$version.apk" ;;
-            esac
-            adb install -r "$apk"
-            state=$(adb shell dumpsys package "$package" | tr -d '\r')
-            grep -E "versionCode=$version( |$)" <<< "$state"
-            grep -E "versionName=0\.1\.$version$" <<< "$state"
-            install_time=$(sed -n 's/^ *firstInstallTime=//p' <<< "$state" | head -1)
-            app_id=$(sed -nE 's/^ *(appId|userId)=([0-9]+)$/\2/p' <<< "$state" | head -1)
-            test -n "$install_time"
-            test -n "$app_id"
-            if [ -n "$previous_install" ]; then
-              test "$previous_install" = "$install_time"
-              test "$previous_app_id" = "$app_id"
-            fi
-            previous_install=$install_time
-            previous_app_id=$app_id
-            echo "Installed 0.1.$version with appId=$app_id and firstInstallTime=$install_time"
-          done
-          adb shell am start -W -n "$package/.MainActivity" | tee "$RUNNER_TEMP/sonora-activity.txt"
-          grep -q 'Status: ok' "$RUNNER_TEMP/sonora-activity.txt"
-          sleep 5
-          adb shell pidof "$package" | grep -Eq '[0-9]+'
-          echo 'SONORA 0.1.230 launched after the signed upgrades.'
-          UPGRADE
-      - name: Verify signed upgrades and launch
+          curl --retry 3 -fsSL https://api.github.com/repos/derector/SONORA/releases/latest |
+            jq -e '.tag_name == "v0.1.200"'
+      - name: Check, download and install inside SONORA
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -84,7 +57,4 @@ jobs:
           disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash "$RUNNER_TEMP/sonora-upgrade.sh"
-      - name: Summarize upgrade
-        if: always()
-        run: cat "$RUNNER_TEMP/sonora-upgrade.log" >> "$GITHUB_STEP_SUMMARY"
+          script: python3 -u .github/sonora-ota-ui-qa.py
