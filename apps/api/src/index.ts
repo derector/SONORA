@@ -1231,16 +1231,26 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           id: string; name?: string; handle?: string; follower_count?: number;
           profile_picture?: Record<string, string> | null;
         }> };
+        const stopWords = new Set(["the", "and", "for", "with", "from"]);
+        const normalizeSearchText = (value: string) => value.toLocaleLowerCase()
+          .normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+        const queryWords = normalizeSearchText(q).split(/\s+/).filter(Boolean);
+        const meaningfulWords = queryWords.filter((word) => !stopWords.has(word));
+        const requiredWords = meaningfulWords.length ? meaningfulWords : queryWords;
+        const audiusArtists: Array<Record<string, unknown>> = [];
         for (const user of payload.data ?? []) {
           if (!user.id || !(user.name || user.handle)) continue;
-          artists.push({
+          const searchableName = normalizeSearchText(`${user.name ?? ""} ${user.handle ?? ""}`);
+          if (requiredWords.length && !requiredWords.every((word) => searchableName.includes(word))) continue;
+          audiusArtists.push({
             id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
             handle: user.handle ?? null, followerCount: user.follower_count ?? null,
             imageUrl: user.profile_picture?.["150x150"] ?? null,
             sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
           });
         }
-        providers.audiusArtists = { ok: true, count: artists.length };
+        artists.push(...audiusArtists);
+        providers.audiusArtists = { ok: true, count: audiusArtists.length };
       } catch (error) {
         providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
