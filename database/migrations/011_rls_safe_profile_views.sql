@@ -16,6 +16,8 @@ CREATE POLICY "Public profiles are readable"
 -- Column-level grants ensure the new public row policy never makes email or the
 -- raw privacy document readable through the public REST API.
 REVOKE SELECT ON TABLE public.users FROM anon, authenticated;
+REVOKE SELECT (email, privacy, updated_at) ON public.users FROM anon;
+REVOKE SELECT (email) ON public.users FROM authenticated;
 GRANT SELECT (
   id, username, display_name, avatar_url, cover_url, accent, role, status,
   bio, links, favorite_genres, created_at, profile_visibility, show_history
