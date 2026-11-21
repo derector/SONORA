@@ -280,24 +280,27 @@ fun ProfileCenter(
                         Text("В SONORA с $registeredAt", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
                     }
                     Row(
-                        Modifier.padding(top = 16.dp),
+                        Modifier.fillMaxWidth().padding(top = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(onClick = { editOpen = true }) {
+                        OutlinedButton(onClick = { editOpen = true }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Edit, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Изменить")
+                            Text("Изменить", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        OutlinedButton(onClick = { privacyOpen = true }) {
+                        OutlinedButton(onClick = { privacyOpen = true }, modifier = Modifier.weight(1f)) {
                             Icon(Icons.Default.Lock, null, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Приватность")
+                            Text("Приватность", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
-                        OutlinedButton(onClick = { showStats = !showStats }) {
-                            Icon(Icons.Default.InsertChart, null, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Статистика")
-                        }
+                    }
+                    OutlinedButton(
+                        onClick = { showStats = !showStats },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    ) {
+                        Icon(Icons.Default.InsertChart, null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(if (showStats) "Скрыть статистику" else "Статистика")
                     }
                 }
             }
