@@ -111,6 +111,10 @@ object OtaUpdate {
             // Remove the previous offer and its ready APK so an older release cannot linger
             // in Settings or be reused by a notification after the release disappears.
             if (response.raw.isBlank()) {
+                // Stop an in-flight worker before dropping its release metadata. The worker
+                // also re-checks the tag before publishing its completed APK to close the
+                // cancellation race.
+                cancelDownload(context)
                 OtaPreferences.forgetRelease(context)
                 OtaPreferences.clearReadyApk(context)
                 return@withContext CheckResult.UpToDate
@@ -375,6 +379,12 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                     return@withContext Result.failure(workDataOf(ERROR to "Не удалось сохранить файл"))
                 }
 
+                // A release check may have invalidated this download while the bytes
+                // were streaming. Never publish an APK for a release that is no longer cached.
+                if (isStopped || OtaPreferences.cachedRelease(applicationContext)?.tagName != tag) {
+                    target.delete()
+                    return@withContext Result.failure(workDataOf(ERROR to "Релиз обновления больше не актуален"))
+                }
                 OtaPreferences.rememberReadyApk(applicationContext, tag, target)
                 setProgress(workDataOf(PROGRESS to 100, DOWNLOADED to target.length(), TOTAL to target.length()))
                 OtaNotifications.postUpdateReady(applicationContext, tag)
