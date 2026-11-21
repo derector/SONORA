@@ -70,13 +70,16 @@ object PlaybackStateStore {
         return runCatching {
             val state = JSONObject(raw)
             val array = state.optJSONArray("tracks") ?: JSONArray()
-            val tracks = ArrayList<Track>(array.length())
+            // Keep each surviving track's original queue index. If a downloaded
+            // file was removed, filtering it must not shift the saved playhead onto
+            // the following track by accident.
+            val indexedTracks = ArrayList<Pair<Int, Track>>(array.length())
             for (index in 0 until array.length()) {
                 val item = array.optJSONObject(index) ?: continue
                 val localPath = item.optString("localPath").takeIf { it.isNotBlank() && it != "null" }
                 val localFile = localPath?.let(::File)
                 if (localFile != null && !localFile.isFile) continue
-                tracks += Track(
+                indexedTracks += index to Track(
                     id = item.optString("id"),
                     providerTrackId = item.optString("providerTrackId"),
                     provider = item.optString("provider"),
@@ -89,11 +92,22 @@ object PlaybackStateStore {
                     playable = localFile?.isFile == true
                 )
             }
-            if (tracks.isEmpty()) return null
+            if (indexedTracks.isEmpty()) return null
+            val tracks = indexedTracks.map { it.second }
+            val requestedIndex = state.optInt("currentIndex", 0).coerceIn(0, array.length() - 1)
+            val exactTrackSurvived = indexedTracks.any { it.first == requestedIndex }
+            val restoredIndex = indexedTracks.indexOfFirst { it.first >= requestedIndex }
+                .takeIf { it >= 0 } ?: indexedTracks.lastIndex
             SavedPlaybackState(
                 tracks = tracks,
-                currentIndex = state.optInt("currentIndex", 0).coerceIn(0, tracks.lastIndex),
-                positionMs = state.optLong("positionMs", 0L).coerceAtLeast(0L),
+                currentIndex = restoredIndex,
+                // A playhead offset belongs to the original track only. If that
+                // item disappeared, start its replacement from the beginning.
+                positionMs = if (exactTrackSurvived) {
+                    state.optLong("positionMs", 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                },
                 shuffleEnabled = state.optBoolean("shuffleEnabled", false),
                 repeatMode = state.optInt("repeatMode", 0),
                 playWhenReady = state.optBoolean("playWhenReady", false)
