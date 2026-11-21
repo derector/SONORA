@@ -17,12 +17,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ota-upgrade:
-    # Linux hosted runners in this repository have no /dev/kvm access.
-    # Run the x86_64 emulator on macOS, where the Android emulator can use
-    # the host hypervisor instead of timing out under software CPU emulation.
-    runs-on: macos-15-intel
-    timeout-minutes: 50
+  build-upgrade-apk:
+    # Compile and verify on Ubuntu, matching the already-green Android APK CI runner.
+    # Keep emulator virtualization isolated on the Intel macOS runner below.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -59,7 +58,7 @@ jobs:
           export SONORA_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/sonora-release.jks"
           printf "%s" "$SONORA_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$SONORA_ANDROID_KEYSTORE_PATH"
           chmod 600 "$SONORA_ANDROID_KEYSTORE_PATH"
-          gradle --no-daemon :app:assembleRelease -PsonoraVersionCode=999 -PsonoraVersionName=0.1.999
+          gradle --no-daemon --console=plain :app:assembleRelease -PsonoraVersionCode=999 -PsonoraVersionName=0.1.999
           mkdir -p "$GITHUB_WORKSPACE/ota-test"
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/ota-test/new.apk"
 
@@ -94,6 +93,26 @@ jobs:
             echo "- Both APKs use the pinned SONORA release certificate and APK Signature Scheme v2."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload verified APKs for emulator test
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonora-ota-apks
+          path: ota-test/
+          if-no-files-found: error
+          retention-days: 3
+
+  ota-upgrade:
+    needs: build-upgrade-apk
+    # The Android x86_64 emulator requires Intel virtualization on this runner.
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    steps:
+      - name: Download verified APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: sonora-ota-apks
+          path: ota-test
+
       - name: Install old APK, update in place, and verify package state
         uses: reactivecircus/android-emulator-runner@v2
         timeout-minutes: 30
@@ -101,7 +120,6 @@ jobs:
           emulator-boot-timeout: 900
           api-level: 35
           target: google_apis
-          # macos-15-intel provides Intel virtualization for the x86_64 emulator.
           arch: x86_64
           profile: pixel_7
           cores: 2
@@ -109,7 +127,6 @@ jobs:
           disk-size: 4096M
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          # Start the host ADB daemon before the emulator process.
           pre-emulator-launch-script: |
             adb start-server
             adb devices
