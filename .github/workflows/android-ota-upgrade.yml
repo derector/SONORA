@@ -22,7 +22,7 @@ jobs:
     # Run the x86_64 emulator on macOS, where the Android emulator can use
     # the host hypervisor instead of timing out under software CPU emulation.
     runs-on: macos-15-intel
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -96,9 +96,9 @@ jobs:
 
       - name: Install old APK, update in place, and verify package state
         uses: reactivecircus/android-emulator-runner@v2
-        timeout-minutes: 15
+        timeout-minutes: 30
         with:
-          emulator-boot-timeout: 600
+          emulator-boot-timeout: 900
           api-level: 35
           target: google_apis
           # macos-15-intel provides Intel virtualization for the x86_64 emulator.
@@ -115,12 +115,12 @@ jobs:
             adb devices
           script: |
             set -euo pipefail
-            adb install ota-test/old.apk
+            adb install --no-streaming ota-test/old.apk
             adb shell am force-stop app.sonora.android
             adb shell monkey -p app.sonora.android 1
             sleep 8
             OLD_PACKAGE=$(adb shell dumpsys package app.sonora.android | tr -d '\r' | grep -m1 'versionCode=')
-            adb install -r ota-test/new.apk
+            adb install -r --no-streaming ota-test/new.apk
             adb shell am force-stop app.sonora.android
             adb shell monkey -p app.sonora.android 1
             sleep 8
