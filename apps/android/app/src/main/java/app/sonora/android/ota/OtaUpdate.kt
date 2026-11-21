@@ -143,6 +143,57 @@ object OtaUpdate {
         OtaPreferences.forgetRelease(context)
     }
 
+    /**
+     * Re-validates a cached APK immediately before every installer launch.
+     *
+     * WorkManager keeps the last successful output after completion. Without this second
+     * check, a file prepared for an older release can be reused after GitHub has advertised
+     * a newer tag. The saved tag, cached latest release, APK manifest and installed build
+     * must all agree before the Android package installer is opened.
+     */
+    fun validateReadyApk(context: Context, apk: File): String? {
+        if (!apk.isFile) return "Файл обновления не найден"
+
+        val registeredFile = OtaPreferences.readyApkFile(context)
+            ?: return "У APK отсутствует подтверждённая запись загрузки"
+        val sameFile = runCatching {
+            registeredFile.canonicalFile == apk.canonicalFile
+        }.getOrDefault(false)
+        if (!sameFile) return "Подготовлен другой файл обновления"
+
+        val readyTag = OtaPreferences.readyApkTag(context)?.trim().orEmpty()
+        if (readyTag.isBlank()) return "Не удалось определить версию скачанного APK"
+
+        val latestRelease = OtaPreferences.cachedRelease(context)
+            ?: return "Не удалось подтвердить текущий релиз"
+        if (latestRelease.tagName != readyTag) {
+            return "Скачанный APK относится к ${readyTag.removePrefix("v")}, а доступен релиз ${latestRelease.versionLabel}"
+        }
+
+        val archiveInfo = context.packageManager.getPackageArchiveInfo(
+            apk.absolutePath,
+            android.content.pm.PackageManager.GET_META_DATA
+        ) ?: return "Не удалось прочитать версию скачанного APK"
+        if (archiveInfo.packageName != context.packageName) {
+            return "Скачанный файл не является приложением SONORA"
+        }
+
+        val expectedVersion = parseVersion(readyTag)
+        val actualVersion = parseVersion(archiveInfo.versionName)
+        if (expectedVersion == null || actualVersion != expectedVersion) {
+            return "Версия APK не совпадает с релизом ${latestRelease.versionLabel}"
+        }
+
+        val downloadedCode = PackageInfoCompat.getLongVersionCode(archiveInfo)
+        val installedInfo = runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0)
+        }.getOrNull() ?: return "Не удалось проверить установленную версию SONORA"
+        val installedCode = PackageInfoCompat.getLongVersionCode(installedInfo)
+        if (downloadedCode <= installedCode) {
+            return "Этот APK не новее уже установленной версии"
+        }
+        return null
+    }
     fun apkFile(context: Context): File = File(File(context.cacheDir, "updates"), APK_FILE_NAME)
 
     /** Millis of the last completed check attempt, for the «Последняя проверка» line. */
@@ -156,14 +207,18 @@ object OtaUpdate {
      */
     fun startDownload(context: Context, release: ReleaseInfo) {
         val asset = release.apk ?: return
+        val request = OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
+            .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+            .build()
+        // Persist the exact request ID before enqueueing; the UI must never infer the
+        // current attempt from WorkManager's unordered list of historical work items.
+        OtaPreferences.rememberCurrentDownload(context, request.id.toString())
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_DOWNLOAD,
             ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
-                .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-                .build()
+            request
         )
     }
 

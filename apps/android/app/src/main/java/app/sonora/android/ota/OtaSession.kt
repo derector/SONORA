@@ -114,8 +114,28 @@ object OtaSession {
 
     /** The only place that talks to the system installer. */
     fun install(context: Context, apk: File) {
+        val invalidReason = OtaUpdate.validateReadyApk(context, apk)
+        if (invalidReason != null) {
+            OtaPreferences.clearReadyApk(context)
+            val latestRelease = OtaUpdate.availableRelease(context)
+            if (latestRelease != null) OtaUpdate.startDownload(context, latestRelease)
+            _state.update {
+                it.copy(
+                    pendingInstallFile = null,
+                    needsInstallPermission = false,
+                    toast = if (latestRelease != null) {
+                        "$invalidReason. Скачиваю актуальную версию ${latestRelease.versionLabel} заново."
+                    } else {
+                        "$invalidReason. Установлена последняя доступная версия или требуется новая проверка."
+                    }
+                )
+            }
+            return
+        }
         when (OtaInstaller.launch(context, apk)) {
-            OtaInstaller.Outcome.LAUNCHED -> OtaPreferences.clearReadyApk(context)
+            // Keep the verified APK metadata until Android reports the update installed.
+            // If the user cancels the system confirmation, the same file remains reusable.
+            OtaInstaller.Outcome.LAUNCHED -> Unit
             OtaInstaller.Outcome.NEEDS_PERMISSION ->
                 // The APK stays remembered: once the grant is given the user is back here.
                 _state.update { it.copy(pendingInstallFile = apk, needsInstallPermission = true) }
