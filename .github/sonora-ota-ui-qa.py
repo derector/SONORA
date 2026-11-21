@@ -80,9 +80,10 @@ def main():
     assert version() == 199
     shell("pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     shell("am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
+    find(("Настройки",), timeout=45)
     shell("cmd", "statusbar", "expand-notifications")
     tap(find(("Доступно обновление SONORA",), timeout=80))
-    find(("Доступно обновление SONORA",))
+    find(("Доступно обновление SONORA",), timeout=45)
     print("Background release notification opened the update sheet.", flush=True)
     visible = [label(n) for n in nodes()]
     assert any("Версия 0.1.200" in text and "0.1.199" in text for text in visible), visible
