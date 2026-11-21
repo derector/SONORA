@@ -11,7 +11,7 @@ export type ProfileRouteDeps = {
   requireUser: (
     request: FastifyRequest,
     reply: FastifyReply
-  ) => Promise<{ client: SupabaseClient; user: { id: string } } | null>;
+  ) => Promise<{ client: SupabaseClient; user: { id: string; email?: string | null } } | null>;
   authError: (statusCode: number, message: string) => { statusCode: number; error: string };
 };
 
