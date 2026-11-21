@@ -7,5 +7,5 @@
 <paths>
     <cache-path
         name="ota_apk"
-        path="sonora-update.apk" />
+        path="updates/" />
 </paths>
