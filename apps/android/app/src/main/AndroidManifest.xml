@@ -37,6 +37,9 @@
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync" />
         <receiver
             android:name="androidx.media3.session.MediaButtonReceiver"
             android:exported="true">

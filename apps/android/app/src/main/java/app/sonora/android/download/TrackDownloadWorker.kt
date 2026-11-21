@@ -4,6 +4,7 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -168,7 +169,9 @@ class TrackDownloadWorker(context: Context, params: WorkerParameters) : Coroutin
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel("sonora_downloads", "SONORA downloads", NotificationManager.IMPORTANCE_LOW))
         }
-        return ForegroundInfo(notificationId(), buildNotification(message))
+        return ForegroundInfo(
+            notificationId(), buildNotification(message), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        )
     }
 
     private fun buildNotification(message: String): Notification {
