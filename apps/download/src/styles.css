@@ -60,6 +60,11 @@
   box-shadow: var(--glass-rim);
 }
 
+.release-notes {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .site-header, .release-meta, .demo-panel {
     --glass-fill: linear-gradient(137deg, rgba(49, 41, 79, .74), rgba(18, 20, 35, .82) 60%, rgba(18, 42, 47, .72));

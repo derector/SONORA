@@ -34,7 +34,7 @@ function applyRelease(release, history = []) {
   $$("[data-release-title]").forEach((node) => node.textContent = release?.name || "SONORA для Android");
   $$("[data-release-date]").forEach((node) => node.textContent = release ? `Опубликовано: ${safeDate(release.published_at)}` : "Версия доступна на странице релиза");
   $$("[data-release-notes]").forEach((node) => {
-    const body = String(release?.body || "Список изменений доступен в GitHub Releases.");
+    const body = String(release?.body || "Список изменений доступен в GitHub Releases.").replaceAll("\\n", "\n");
     node.textContent = body.length > 420 ? body.slice(0, 417) + "…" : body;
   });
   $$("[data-sha]").forEach((node) => node.textContent = sha || "Контрольная сумма доступна в официальном релизе");
