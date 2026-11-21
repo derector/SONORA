@@ -76,7 +76,13 @@ object OtaPreferences {
     fun readyApkFile(context: Context): java.io.File? {
         val path = prefs(context).getString(KEY_READY_PATH, null) ?: return null
         val file = java.io.File(path)
-        if (!file.isFile) {
+        val updatesDirectory = java.io.File(context.cacheDir, "updates")
+        val isScopedUpdate = runCatching {
+            file.canonicalFile.parentFile == updatesDirectory.canonicalFile
+        }.getOrDefault(false)
+        if (!file.isFile || !isScopedUpdate) {
+            // Drop paths saved by older builds, which stored the APK outside the
+            // FileProvider's dedicated updates directory.
             clearReadyApk(context)
             return null
         }

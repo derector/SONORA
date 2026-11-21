@@ -648,7 +648,7 @@ private fun UpdateInfoRow(
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                if (update != null) "Доступно обновление ${'$'}{update.versionLabel}" else "Обновления SONORA",
+                if (update != null) "Доступно обновление ${update.versionLabel}" else "Обновления SONORA",
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -658,7 +658,7 @@ private fun UpdateInfoRow(
             Text(
                 when {
                     checking -> "Проверяем…"
-                    update != null -> "${'$'}{update.apkSizeLabel} · установка внутри приложения"
+                    update != null -> "${update.apkSizeLabel} · установка внутри приложения"
                     lastCheckedAt == 0L -> "Проверка ещё не выполнялась"
                     else -> "Последняя проверка: " + java.text.SimpleDateFormat(
                         "dd.MM HH:mm", java.util.Locale.getDefault()

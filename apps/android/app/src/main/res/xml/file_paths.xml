@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Files SONORA may hand to another app. Only the downloaded update APK is shareable:
-  the app-private cache directory stays private, so a stale track download can never be
-  exposed by accident. The name is an identifier; the path is the file inside cacheDir.
+  the provider is scoped to the dedicated cache/updates directory, so track downloads and
+  other cached files are never exposed by accident.
 -->
 <paths>
     <cache-path
         name="ota_apk"
-        path="sonora-update.apk" />
+        path="updates/" />
 </paths>
