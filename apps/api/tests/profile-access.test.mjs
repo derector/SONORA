@@ -71,11 +71,11 @@ test("verified owner can still read own private public-playlist listing", async 
   } finally { await app.close(); }
 });
 
-test("unknown visibility fails closed", async () => {
+test("unknown visibility is omitted from the public projection", async () => {
   const { app, queries } = fixture("invalid");
   try {
     const result = await app.inject({ method: "GET", url: "/api/v1/users/alex/playlists" });
-    assert.equal(result.statusCode, 403);
-    assert.deepEqual(queries, ["public_profiles", "users"]);
+    assert.equal(result.statusCode, 404);
+    assert.deepEqual(queries, ["public_profiles"]);
   } finally { await app.close(); }
 });
