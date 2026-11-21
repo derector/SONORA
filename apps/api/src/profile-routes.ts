@@ -968,8 +968,12 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         const ownColumn = direction === "followers" ? "followee_id" : "follower_id";
         const otherColumn = direction === "followers" ? "follower_id" : "followee_id";
         const offset = Math.min(5000, Math.max(0, Number(request.query.offset) || 0));
-        const client = authClient();
-        const { data, error } = await client.from("user_follows")
+        const authorization = request.headers.authorization;
+        const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
+        const isPrivateOwner = target.visibility !== "public" && Boolean(token);
+        const client = isPrivateOwner ? authClient(token) : authClient();
+        const followTable = isPrivateOwner ? "user_follows" : "public_follow_edges";
+        const { data, error } = await client.from(followTable)
           .select(`${otherColumn},created_at`).eq(ownColumn, target.id)
           .order("created_at", { ascending: false }).range(offset, offset + 49);
         if (error) {
