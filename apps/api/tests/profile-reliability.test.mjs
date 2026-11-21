@@ -9,18 +9,18 @@ function fixture({ failTable = "", privatePeople = false, failCards = false } = 
   const client = {
     auth: { getUser: async () => ({ data: { user: { id: "owner" } } }) },
     from(table) {
-      let single = false, count = false, cards = false, ranged = false;
+      let single = false, count = false, cards = false, ranged = false, rangeStart = 0;
       const chain = {
         select(_columns, options) { count = Boolean(options?.head); return this; },
         eq() { return this; }, gte() { return this; }, lt() { return this; }, order() { return this; },
-        limit() { return this; }, in() { cards = true; return this; }, range() { ranged = true; return this; },
+        limit() { return this; }, in() { cards = true; return this; }, range(start) { ranged = true; rangeStart = start; return this; },
         maybeSingle() { single = true; return this; },
         then(resolve, reject) {
           const failed = table === failTable || (failCards && table === "public_profiles" && cards);
           let data = [];
           if (single) data = owner;
           else if (table === "public_profiles" && cards) data = people;
-          else if (table === "user_follows" && ranged) data = people.map((p) => ({ follower_id: p.id, followee_id: p.id, created_at: "2026-11-20T00:00:00Z" }));
+          else if (table === "public_follow_edges" && ranged) data = privatePeople || rangeStart >= 5000 ? [] : people.map((p) => ({ follower_id: p.id, followee_id: "owner", created_at: "2026-11-20T00:00:00Z" }));
           return Promise.resolve({ data: failed ? null : data, error: failed ? { code: "42P01", message: "Fixture failure" } : null, count: count ? 0 : null }).then(resolve, reject);
         }
       };
@@ -66,10 +66,18 @@ for (const table of ["users", "track_feedback"]) {
   });
 }
 
-test("a full raw page of hidden people still offers the next page", async () => {
+test("private follow edges are excluded from public follower lists", async () => {
   const result = await get("/users/alex/followers", { privatePeople: true });
   assert.equal(result.statusCode, 200);
   assert.deepEqual(result.json().items, []);
+  assert.equal(result.json().hasMore, false);
+  assert.equal(result.json().nextOffset, null);
+});
+
+test("a full page of public followers still offers the next page", async () => {
+  const result = await get("/users/alex/followers");
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.json().items.length, 50);
   assert.equal(result.json().hasMore, true);
   assert.equal(result.json().nextOffset, 50);
 });
