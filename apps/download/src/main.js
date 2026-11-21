@@ -7,7 +7,7 @@ const FALLBACK = {
   tag_name: "v0.1.184",
   name: "SONORA Android v0.1.184",
   published_at: "2026-11-21T11:23:34Z",
-  body: "Автоматическая CI-сборка #182.\nSHA-256 APK: 795536f59aff4887f836b8aff34c4a698561cdce3806125c2a753a5ec7ac59ed\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
+  body: "Автоматическая CI-сборка #184.\nSHA-256 APK: 795536f59aff4887f836b8aff34c4a698561cdce3806125c2a753a5ec7ac59ed\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
   assets: [{
     name: "SONORA-latest.apk",
     size: 15892555,
