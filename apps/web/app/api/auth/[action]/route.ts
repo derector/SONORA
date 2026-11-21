@@ -69,7 +69,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         refreshCookieReceived: Boolean(refreshToken),
         upstreamStatus: upstream.status,
         upstreamSetCookieCount: upstreamCookies.length,
-        pathRewriteCandidateCount: upstreamCookies.filter((value) => /;\\s*Path=\\/api\\/v1\\/auth(?=;|$)/i.test(value)).length
+        pathRewriteCandidateCount: upstreamCookies.filter((value) => /;\s*Path=\/api\/v1\/auth(?=;|$)/i.test(value)).length
       }));
     }
 
