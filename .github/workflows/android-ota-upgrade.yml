@@ -7,12 +7,6 @@ on:
       - "apps/android/**"
       - ".github/workflows/android-ota-upgrade.yml"
       - ".github/workflows/android-apk.yml"
-  push:
-    branches: ["fix/**"]
-    paths:
-      - "apps/android/**"
-      - ".github/workflows/android-ota-upgrade.yml"
-      - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
 permissions:
@@ -127,7 +121,7 @@ jobs:
             echo "$NEW_PACKAGE" | grep -q 'versionCode=999'
             adb shell pm path app.sonora.android
             adb exec-out screencap -p > "$GITHUB_WORKSPACE/ota-test/updated-app.png"
-            echo "Installed v0.1.200 over v0.1.999 using adb install -r; package remained installed and launched." >> "$GITHUB_STEP_SUMMARY"
+            echo "Updated v0.1.200 to v0.1.999 using adb install -r; package remained installed and launched. This check does not yet seed/read an app-private data sentinel." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload OTA upgrade evidence
         if: always()
