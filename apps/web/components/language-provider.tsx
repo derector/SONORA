@@ -493,6 +493,11 @@ const ru: Record<string, string> = {
   "Grouped from your saved tracks, not a separate subscription list.": "Сгруппировано из сохранённых треков, а не из отдельного списка подписок.",
   "No saved collection here yet.": "Здесь пока нет сохранённых подборок.",
   "Save tracks with artist and album details to grow this collection.": "Сохраняй треки с данными об исполнителе и альбоме, чтобы пополнять коллекцию.",
+  "Profile privacy and account data": "Конфиденциальность профиля и данные аккаунта",
+  "Your profile visibility and listening-history sharing are controlled in Profile → Privacy. Private profiles are excluded from public profile, people-search and follower-list results.": "Видимость профиля и публикация истории прослушивания настраиваются в разделе «Профиль → Приватность». Закрытые профили исключаются из публичных страниц, поиска людей и списков подписчиков.",
+  "Account data": "Данные аккаунта",
+  "Your email is used for sign-in and is not part of your public profile. Favorites, playlists and listening history are associated with your SONORA account.": "Электронная почта используется для входа и не входит в публичный профиль. Избранное, плейлисты и история прослушивания связаны с аккаунтом SONORA.",
+  "Language and seasonal appearance preferences are stored on this device.": "Язык и сезонные эффекты оформления сохраняются на этом устройстве."
 };
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
