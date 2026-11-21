@@ -30,7 +30,7 @@ function fixture(visibility = "private") {
           return { data: [], error: null };
         },
         async range() {
-          assert.equal(table, "public_follow_edges");
+          assert.ok(["public_follow_edges", "user_follows"].includes(table));
           return { data: [], error: null };
         }
       };
@@ -82,6 +82,20 @@ test("verified owner can still read own private public-playlist listing", async 
     const result = await app.inject({ method: "GET", url: "/api/v1/users/alex/playlists", headers: { authorization: "Bearer owner-token" } });
     assert.equal(result.statusCode, 200);
     assert.deepEqual(result.json(), { username: "alex", items: [] });
+  } finally { await app.close(); }
+});
+
+test("verified owner can read their own private follow edges", async () => {
+  const { app, queries } = fixture();
+  try {
+    const result = await app.inject({
+      method: "GET",
+      url: "/api/v1/users/alex/followers",
+      headers: { authorization: "Bearer owner-token" }
+    });
+    assert.equal(result.statusCode, 200);
+    assert.deepEqual(result.json().items, []);
+    assert.ok(queries.includes("user_follows"));
   } finally { await app.close(); }
 });
 
