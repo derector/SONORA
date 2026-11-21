@@ -1337,7 +1337,8 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         : [track.artist, track.artistHandle].some((value) => catalogSearchKey(value) === queryKey);
     const playable = tracks.filter((track) =>
       track.playable === true && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") &&
-      (creditsMatch(track) || !exactArtist && matchesCatalogSearch(q, track.artist, track.title, track.album)));
+      (creditsMatch(track) || !exactArtist && !hasUncreditedArtistPrefix(queryKey, track.title) &&
+        matchesCatalogSearch(q, track.artist, track.title, track.album)));
     return {
       query: q, type, tracks: playable.slice(0, limit * 2), metadata: matchingMetadata.slice(0, limit),
       artists: matchingArtists.slice(0, limit), providers
@@ -1355,7 +1356,10 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
 import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
-import { PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, matchesCatalogSearch, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
+import {
+  PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
+  jamendoConfig, jamendoLicenseAllowed, matchesCatalogSearch, type JamendoCandidate
+} from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 // Universal Music Discovery & Import Engine: adapters, grouping, resolve.
 import { registerDiscoveryRoutes, runDiscoverySearch, validIsrc } from "./discovery.js";

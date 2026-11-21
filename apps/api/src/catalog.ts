@@ -20,6 +20,12 @@ export function matchesCatalogSearch(query: string, ...fields: unknown[]): boole
   return key !== "" && key.split(" ").every((word) => words.has(word));
 }
 
+export function hasUncreditedArtistPrefix(queryKey: string, title: unknown): boolean {
+  if (typeof title !== "string" || !queryKey) return false;
+  const [prefix, recording] = title.split(/\s+[-–—]\s+/, 2);
+  return Boolean(recording && catalogSearchKey(prefix) === queryKey);
+}
+
 export type JamendoCandidate = RecommendationTrack & {
   album: string | null; artworkUrl: string | null; audioUrl: string;
   licenseUrl: string; sourceUrl: string; providerTrackId: string;
