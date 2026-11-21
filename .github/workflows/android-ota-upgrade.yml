@@ -93,7 +93,9 @@ jobs:
 
       - name: Install old APK, update in place, and verify package state
         uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 15
         with:
+          emulator-boot-timeout: 600
           api-level: 35
           target: google_apis
           arch: x86_64
