@@ -197,7 +197,15 @@ export default function SearchPage() {
               <TrackRow
                 key={track.id}
                 track={track}
-                meta={track.provider === "SONORA" && track.rightsLabel ? `${track.artist} · ${track.rightsLabel}` : undefined}
+                meta={track.rightsLabel ? (
+                  track.provider === "Wikimedia Commons" ? (
+                    <>
+                      <a className="underline" href={track.sourceUrl} target="_blank" rel="noreferrer">{track.artist}</a>
+                      {" · "}
+                      <a className="underline" href={track.licenseUrl} target="_blank" rel="noreferrer">{track.rightsLabel}</a>
+                    </>
+                  ) : `${track.artist} · ${track.rightsLabel}`
+                ) : undefined}
                 isCurrent={currentTrack?.id === track.id}
                 isPlaying={isPlaying}
                 disabled={!track.playable || !track.audioUrl}

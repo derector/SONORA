@@ -359,6 +359,7 @@ object SonoraApi {
         val encodedId = java.net.URLEncoder.encode(providerTrackId, "UTF-8")
         val path = when (provider.lowercase()) {
             "sonora" -> "/api/v1/providers/sonora/tracks?id=$encodedId"
+            "wikimedia commons" -> "/api/v1/providers/commons/tracks?id=$encodedId"
             "audius" -> "/api/v1/providers/audius/tracks?id=$encodedId"
             "jamendo" -> "/api/v1/providers/jamendo/tracks?id=$encodedId"
             else -> return null
@@ -462,7 +463,7 @@ object SonoraApi {
                 // starting a playback attempt that can never succeed.
                 playable = audioUrl != null && item.optBoolean("playable", true),
                 rightsHolder = item.optString("rightsLabel").takeIf {
-                    item.optString("provider") == "SONORA" && it.isNotBlank() && it != "null"
+                    it.isNotBlank() && it != "null"
                 }
             )
         }

@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
 import { createLicensedCatalog } from "./licensed-catalog.js";
+import { createCommonsCatalog } from "./commons-catalog.js";
 import {
   ACCENT_PRESETS, PROFILE_AVATAR_BODY_LIMIT, PROFILE_ROLES, normalizeGenres, normalizeLinks,
   normalizePrivacy, readProfile, registerProfileRoutes
@@ -13,6 +14,7 @@ const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
 const licensedCatalog = createLicensedCatalog(process.env);
+const commonsCatalog = createCommonsCatalog();
 
 await app.register(cookie);
 await app.register(cors, {
@@ -95,6 +97,7 @@ app.get("/api/v1", async () => ({
     "/api/v1/discovery/resolve",
     "/api/v1/providers/jamendo/tracks",
     "/api/v1/providers/audius/tracks",
+    "/api/v1/providers/commons/tracks",
     "/api/v1/recommendations",
     "/api/v1/assistant",
     "/api/v1/import/link",
@@ -1110,6 +1113,15 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
+app.get<{ Querystring: { id?: string } }>("/api/v1/providers/commons/tracks", async (request, reply) => {
+  try {
+    const track = await commonsCatalog.lookup(request.query.id ?? "");
+    return { items: track ? [track] : [] };
+  } catch {
+    return reply.code(502).send(authError(502, "Wikimedia Commons is temporarily unavailable."));
+  }
+});
+
 app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
@@ -1167,6 +1179,17 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
     })());
   }
   if (type !== "artists") {
+    if (inApp) {
+      tasks.push((async () => {
+        try {
+          const matches = await commonsCatalog.search(q, limit);
+          tracks.push(...matches);
+          providers.commons = { ok: true, count: matches.length };
+        } catch {
+          providers.commons = { ok: false, count: 0, error: "Wikimedia Commons is temporarily unavailable." };
+        }
+      })());
+    }
     if (!inApp && process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
       tasks.push((async () => {
         const report = await runDiscoverySearch(q, limit, "commercial_streaming", process.env);

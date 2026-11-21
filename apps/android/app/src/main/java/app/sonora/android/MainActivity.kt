@@ -1184,6 +1184,7 @@ private fun FullPlayer(
                 // Attribution stays deliberately inside the track-info/legal area.
                 details.licenseUrl?.let { license ->
                     Text("Лицензия и атрибуция", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    details.rightsHolder?.let { Text(it, color = Muted, fontSize = 12.sp) }
                     Text(license, color = Violet, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(license) }.padding(vertical = 4.dp))
                 }

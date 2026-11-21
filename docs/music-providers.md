@@ -2,6 +2,14 @@
 
 Updated: 2026-11-21
 
+## Открытый каталог Wikimedia Commons
+
+Встроенный поиск сайта и Android запрашивает аудиозаписи через MediaWiki Action API. Запись попадает в выдачу, если Commons обозначает её как аудио, файл доступен на официальном медиа-сервере Wikimedia и у записи указана поддерживаемая лицензия. Поддерживаются CC0 1.0, CC BY 3.0/4.0 и CC BY-SA 3.0/4.0. При обязательной атрибуции требуется явное поле с авторским кредитом. Записи с дополнительными ограничениями, видео и MIDI исключаются.
+
+Для воспроизведения плеер получает оригинальный файл с Wikimedia. В поиске отображаются кредит и лицензия, а Android повторно проверяет метаданные и лицензию при восстановлении записи по ID. Общий поиск выдаёт доступные исполнения и записи Commons самостоятельно. При поиске версии коммерческого релиза SONORA не выдаёт одноимённую запись Commons за тот же мастер.
+
+Изучены открытые реализации Wikimedia MultimediaViewer и TimedMediaHandler, каталог Openverse, MusicBrainz API и примеры Feishin и Tempo. Для нового источника выбран MediaWiki Action API, поскольку он возвращает файл и атрибуцию от площадки, которая его хранит. [MultimediaViewer](https://github.com/wikimedia/mediawiki-extensions-MultimediaViewer) · [TimedMediaHandler](https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler) · [Openverse](https://github.com/WordPress/openverse) · [MusicBrainz API](https://github.com/Borewit/musicbrainz-api) · [Feishin](https://github.com/jeffvli/feishin) · [Tempo](https://github.com/CappielloAntonio/tempo) · [MediaWiki Imageinfo](https://www.mediawiki.org/wiki/API:Imageinfo/en)
+
 ## Каталог правообладателей SONORA
 
 LANE публично описывает метаданные Spotify и SoundCloud. Dotify описывает импорт плейлистов и воспроизведение через внешние площадки. Документация не раскрывает подробности выдачи аудио для каждого трека. Для воспроизведения в SONORA оператор может подключить отдельный каталог с записями, право на которые подтверждено. [LANE](https://sklane.com/ru/terms-of-service) · [Dotify FAQ](https://dotify.fun/faq) · [Dotify Terms](https://dotify.fun/tos)
