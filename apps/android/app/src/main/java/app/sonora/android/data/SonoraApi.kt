@@ -366,9 +366,26 @@ object SonoraApi {
             .firstOrNull { it.providerTrackId == providerTrackId || it.id == providerTrackId }
     }
 
-    fun search(query: String): List<Track> {
+    data class CatalogMatch(val id: String, val provider: String, val title: String, val artist: String, val url: String)
+    data class MusicSearch(val tracks: List<Track> = emptyList(), val matches: List<CatalogMatch> = emptyList())
+
+    fun search(query: String): MusicSearch {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
-        return parseTracks(result.optJSONArray("tracks")).filter { it.playable }
+        val metadata = result.optJSONArray("metadata")
+        val matches = buildList {
+            if (metadata == null) return@buildList
+            for (index in 0 until metadata.length()) {
+                val item = metadata.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                val title = item.optString("title")
+                val url = item.optString("sourceUrl")
+                val source = android.net.Uri.parse(url)
+                if (id.isBlank() || title.isBlank() || source.scheme != "https" ||
+                    source.host !in setOf("musicbrainz.org", "open.spotify.com")) continue
+                add(CatalogMatch(id, item.optString("provider"), title, item.optString("artist"), url))
+            }
+        }
+        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches)
     }
 
     private fun parseTracks(array: org.json.JSONArray?): List<Track> {

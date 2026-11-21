@@ -21,6 +21,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -145,7 +146,7 @@ private fun SonoraApp() {
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var searchResults by remember { mutableStateOf(SonoraApi.MusicSearch()) }
     var email by remember { mutableStateOf(SonoraApi.email()) }
     var username by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
@@ -589,17 +590,24 @@ private fun SonoraApp() {
             ) { screen ->
                 when (screen) {
                     "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") })
-                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
+                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = SonoraApi.MusicSearch(); message = "" }, searchResults, busy, message, {
                         val term = query.trim()
                         if (term.isBlank()) {
-                            searchResults = emptyList()
+                            searchResults = SonoraApi.MusicSearch()
                             message = "Введите название трека или исполнителя"
                         } else {
                             scope.launch {
                                 busy = true
                                 message = ""
-                                try { searchResults = withContext(Dispatchers.IO) { SonoraApi.search(term) } }
-                                catch (e: Exception) { searchResults = emptyList(); message = e.message ?: "Ошибка поиска" }
+                                try {
+                                    val results = withContext(Dispatchers.IO) { SonoraApi.search(term) }
+                                    if (query.trim() == term) searchResults = results
+                                } catch (e: Exception) {
+                                    if (query.trim() == term) {
+                                        searchResults = SonoraApi.MusicSearch()
+                                        message = e.message ?: "Ошибка поиска"
+                                    }
+                                }
                                 finally { busy = false }
                             }
                         }
@@ -789,7 +797,8 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
@@ -806,8 +815,28 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(items = tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
+            itemsIndexed(items = results.tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
                 TrackRow(track, index, { play(track) }, {})
+            }
+            if (results.matches.isNotEmpty()) {
+                item {
+                    Text("Совпадения в каталогах", color = Color.White, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 12.dp))
+                }
+                items(results.matches, key = { "catalog:${it.provider}:${it.id}" }) { match ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
+                            .clickable { runCatching { uriHandler.openUri(match.url) } }.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
+                                color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text("Источник ↗", color = Lime, fontSize = 12.sp)
+                    }
+                }
             }
         }
     }
@@ -916,7 +945,8 @@ private fun MiniPlayer(
             // gesture and dismisses; a plain tap still opens the full player.
             .swipeDownToDismiss(onDismiss = onDismiss)
             .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xFF2A1E4A), Color(0xFF171827))))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF40325D), Color(0xFF1C2032), Color(0xFF20343C))))
+            .border(1.dp, Color(0x39E1D6FF), RoundedCornerShape(18.dp))
             .clickable(onClick = onClick)
             .heightIn(min = 68.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),

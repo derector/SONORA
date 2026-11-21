@@ -2,53 +2,46 @@ import "./styles.css";
 
 const OWNER = "derector";
 const REPO = "SONORA";
-const RELEASES_API = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=5`;
-const FALLBACK = {
-  tag_name: "v0.1.187",
-  name: "SONORA Android v0.1.187",
-  published_at: "2026-11-21T12:05:18Z",
-  body: "Автоматическая CI-сборка #187.\nSHA-256 APK: 625b55444c6f02129e7357e2deef837913b81477b7a5bb55b511613b3e6dcec3\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
-  assets: [{
-    name: "SONORA-latest.apk",
-    size: 15892555,
-    digest: "sha256:625b55444c6f02129e7357e2deef837913b81477b7a5bb55b511613b3e6dcec3",
-    browser_download_url: "https://github.com/derector/SONORA/releases/download/v0.1.187/SONORA-latest.apk"
-  }]
-};
+const RELEASES_API = `https://api.github.com/repos/${OWNER}/${REPO}/releases`;
+const RELEASES_PAGE = `https://github.com/${OWNER}/${REPO}/releases`;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const apkUrl = (release) => release?.assets?.find((asset) => asset.name.toLowerCase().endsWith(".apk"))?.browser_download_url
-  || "https://github.com/derector/SONORA/releases/latest";
+function releaseApk(release) {
+  const tag = release?.tag_name;
+  if (!/^v\d+\.\d+\.\d+$/.test(tag ?? "")) return undefined;
+  const assets = (release.assets ?? []).filter(({ name, browser_download_url: url }) =>
+    name?.toLowerCase().endsWith(".apk") && url === `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(name)}`);
+  return assets.find(({ name }) => name === `SONORA-release-${tag}.apk`) ??
+    assets.find(({ name }) => name === "SONORA-latest.apk") ?? assets[0];
+}
 const sizeLabel = (bytes) => bytes ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : "Размер уточняется";
-const versionLabel = (release) => (release?.tag_name || "v0.1.187").replace(/^v/, "v");
 const safeDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(new Date(value)) : "Дата не указана";
-const getSha = (release, asset) => {
+const getSha = (asset) => {
   const digest = asset?.digest || "";
   if (/^sha256:[a-f0-9]{64}$/i.test(digest)) return digest.slice(7);
-  const match = String(release?.body || "").match(/SHA-?256[^a-f0-9]*([a-f0-9]{64})/i);
-  return match?.[1] || "";
+  return "";
 };
 
 function applyRelease(release, history = []) {
-  const asset = release.assets?.find((item) => item.name.toLowerCase().endsWith(".apk"));
-  const version = versionLabel(release);
-  const url = apkUrl(release);
-  const sha = getSha(release, asset);
+  const asset = releaseApk(release);
+  const version = release?.tag_name || "Смотри на GitHub";
+  const url = asset?.browser_download_url ?? `${RELEASES_PAGE}/latest`;
+  const sha = getSha(asset);
   $$("[data-version]").forEach((node) => node.textContent = version);
   $$("[data-size]").forEach((node) => node.textContent = sizeLabel(asset?.size));
   $$("[data-apk]").forEach((node) => node.href = url);
-  $$("[data-release-title]").forEach((node) => node.textContent = release.name || `SONORA Android ${version}`);
-  $$("[data-release-date]").forEach((node) => node.textContent = `Опубликовано: ${safeDate(release.published_at)}`);
+  $$("[data-release-title]").forEach((node) => node.textContent = release?.name || "SONORA для Android");
+  $$("[data-release-date]").forEach((node) => node.textContent = release ? `Опубликовано: ${safeDate(release.published_at)}` : "Версия доступна на странице релиза");
   $$("[data-release-notes]").forEach((node) => {
-    const body = String(release.body || "Список изменений будет опубликован в GitHub Releases.");
+    const body = String(release?.body || "Список изменений доступен в GitHub Releases.");
     node.textContent = body.length > 420 ? body.slice(0, 417) + "…" : body;
   });
   $$("[data-sha]").forEach((node) => node.textContent = sha || "Контрольная сумма доступна в официальном релизе");
   const historyNode = $("#releaseHistory");
   if (historyNode) {
     historyNode.replaceChildren();
-    history.slice(1, 5).forEach((item) => {
+    history.filter((item) => item.tag_name !== release?.tag_name).slice(0, 4).forEach((item) => {
       const row = document.createElement("a");
       row.className = "release-item";
       row.href = item.html_url || "https://github.com/derector/SONORA/releases";
@@ -75,17 +68,22 @@ async function loadReleases() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6500);
   try {
-    const response = await fetch(RELEASES_API, {
+    const options = {
       headers: { Accept: "application/vnd.github+json" },
       signal: controller.signal
-    });
+    };
+    const history = fetch(`${RELEASES_API}?per_page=5`, options)
+      .then((response) => response.ok ? response.json() : [])
+      .catch(() => []);
+    const response = await fetch(`${RELEASES_API}/latest`, options);
     if (!response.ok) throw new Error("Release API unavailable");
-    const releases = await response.json();
-    const latest = releases.find((item) => !item.draft && !item.prerelease && item.assets?.some((asset) => asset.name.toLowerCase().endsWith(".apk")));
-    if (!latest) throw new Error("No published APK release");
-    applyRelease(latest, releases.filter((item) => !item.draft && !item.prerelease));
+    const latest = await response.json();
+    if (latest.draft || latest.prerelease || !releaseApk(latest)) throw new Error("No published APK release");
+    applyRelease(latest);
+    const releases = await history;
+    if (Array.isArray(releases)) applyRelease(latest, releases.filter((item) => !item.draft && !item.prerelease));
   } catch {
-    applyRelease(FALLBACK, [FALLBACK]);
+    applyRelease(null);
   } finally {
     clearTimeout(timeout);
   }

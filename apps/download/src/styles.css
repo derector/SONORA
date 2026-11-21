@@ -22,3 +22,48 @@
 .screen-marquees{display:grid;gap:16px;overflow:hidden}.marquee{overflow:hidden;touch-action:pan-x}.marquee-track{display:flex;width:max-content;gap:16px;animation:marquee-left 38s linear infinite}.marquee:not(.reverse) .marquee-track{animation-name:marquee-right}.marquee:hover .marquee-track{animation-play-state:paused}.marquee-shot{width:230px;margin:0;padding:9px;border:1px solid var(--line);border-radius:20px;background:#141522}.marquee-shot img{display:block;width:100%;height:410px;object-fit:contain;border-radius:13px;background:#090a12}.marquee-shot figcaption{padding:9px 3px 2px;font-size:9px;color:var(--muted)}@keyframes marquee-left{to{transform:translateX(-50%)}}@keyframes marquee-right{from{transform:translateX(-50%)}to{transform:translateX(0)}}
 @media(pointer:coarse){.marquee{overflow-x:auto;scrollbar-width:none}.marquee::-webkit-scrollbar{display:none}.marquee-track{animation:none}.marquee-shot{width:190px}.marquee-shot img{height:340px}}
 @media(prefers-reduced-motion:reduce){.marquee-track{animation:none}}
+
+/* Shared glass treatment for the navigation and download controls. */
+:root {
+  --glass-edge: rgba(218, 215, 255, .19);
+  --glass-fill: linear-gradient(137deg, rgba(49, 41, 79, .92), rgba(18, 20, 35, .95) 60%, rgba(18, 42, 47, .91));
+  --glass-rim: inset 0 1px 0 rgba(246, 239, 255, .16), inset 0 -1px 0 rgba(121, 217, 216, .08);
+}
+
+.site-header {
+  background: var(--glass-fill);
+  border-bottom-color: var(--glass-edge);
+  box-shadow: var(--glass-rim);
+}
+
+.release-card, .demo-panel, .screen-caption-card, .final-cta {
+  background: var(--glass-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-rim), 0 18px 50px rgba(4, 5, 13, .34);
+}
+
+.release-meta {
+  align-items: center;
+  padding: 12px 15px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--glass-edge);
+  border-radius: 17px;
+  background: var(--glass-fill);
+  color: #ddd9ec;
+  font-size: 12px;
+  box-shadow: var(--glass-rim);
+}
+
+.button-ghost {
+  background: linear-gradient(145deg, #8c79c138, #79bbc419);
+  box-shadow: var(--glass-rim);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site-header, .release-meta, .demo-panel {
+    --glass-fill: linear-gradient(137deg, rgba(49, 41, 79, .74), rgba(18, 20, 35, .82) 60%, rgba(18, 42, 47, .72));
+    -webkit-backdrop-filter: blur(18px) saturate(135%);
+    backdrop-filter: blur(18px) saturate(135%);
+  }
+}
