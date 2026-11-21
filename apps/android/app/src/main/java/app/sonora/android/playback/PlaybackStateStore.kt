@@ -95,12 +95,19 @@ object PlaybackStateStore {
             if (indexedTracks.isEmpty()) return null
             val tracks = indexedTracks.map { it.second }
             val requestedIndex = state.optInt("currentIndex", 0).coerceIn(0, array.length() - 1)
+            val exactTrackSurvived = indexedTracks.any { it.first == requestedIndex }
             val restoredIndex = indexedTracks.indexOfFirst { it.first >= requestedIndex }
                 .takeIf { it >= 0 } ?: indexedTracks.lastIndex
             SavedPlaybackState(
                 tracks = tracks,
                 currentIndex = restoredIndex,
-                positionMs = state.optLong("positionMs", 0L).coerceAtLeast(0L),
+                // A playhead offset belongs to the original track only. If that
+                // item disappeared, start its replacement from the beginning.
+                positionMs = if (exactTrackSurvived) {
+                    state.optLong("positionMs", 0L).coerceAtLeast(0L)
+                } else {
+                    0L
+                },
                 shuffleEnabled = state.optBoolean("shuffleEnabled", false),
                 repeatMode = state.optInt("repeatMode", 0),
                 playWhenReady = state.optBoolean("playWhenReady", false)
