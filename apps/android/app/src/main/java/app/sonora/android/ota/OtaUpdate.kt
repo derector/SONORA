@@ -106,7 +106,19 @@ object OtaUpdate {
         val response = fetched.getOrThrow()
         val release = response.release
         OtaPreferences.rememberCheck(context, release, response.raw)
-        if (release == null) return@withContext CheckResult.UpToDate
+        if (release == null) {
+            // A blank payload is the documented GitHub 404: there is no published release.
+            // Remove the previous offer and its ready APK so an older release cannot linger
+            // in Settings or be reused by a notification after the release disappears.
+            if (response.raw.isBlank()) {
+                OtaPreferences.forgetRelease(context)
+                OtaPreferences.clearReadyApk(context)
+                return@withContext CheckResult.UpToDate
+            }
+            // A non-empty but unparseable response is not proof that no release exists.
+            // Preserve the last known good offer and surface a parse error instead.
+            return@withContext CheckResult.Failed("Не удалось распознать опубликованный релиз GitHub")
+        }
         if (release.apk == null) {
             return@withContext CheckResult.Failed("В релизе ${release.versionLabel} нет установочного APK")
         }
