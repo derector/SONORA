@@ -137,7 +137,11 @@ GRANT SELECT ON public.listening_stats TO authenticated;
 --    the only way other accounts see profile data: they never expose email or
 --    privacy settings, and the API refuses private profiles by visibility.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW public.public_profiles AS
+-- These views intentionally use the owner role to project public data,
+-- so their predicates must exclude private profiles before exposing any rows.
+-- security_barrier prevents caller filters from being pushed ahead of that gate.
+CREATE OR REPLACE VIEW public.public_profiles
+WITH (security_barrier = true) AS
 SELECT
   u.id,
   u.username,
@@ -152,13 +156,15 @@ SELECT
   u.favorite_genres,
   u.created_at,
   COALESCE(lower(u.privacy ->> 'profile'), 'public') AS visibility,
-  -- Project the same privacy document written by the API. Missing/invalid
-  -- history values fail closed rather than exposing listening history.
-  CASE WHEN lower(COALESCE(u.privacy ->> 'history', 'true')) = 'true'
+  -- Missing/invalid history values fail closed rather than exposing listening history.
+  CASE WHEN lower(COALESCE(u.privacy ->> 'history', 'false')) = 'true'
     THEN true ELSE false END AS show_history
-FROM public.users u;
+FROM public.users u
+WHERE lower(COALESCE(u.privacy ->> 'profile', 'public')) = 'public';
 
-CREATE OR REPLACE VIEW public.public_profile_stats AS
+-- Aggregate counts are exposed only for profiles that are explicitly public.
+CREATE OR REPLACE VIEW public.public_profile_stats
+WITH (security_barrier = true) AS
 SELECT
   u.id AS user_id,
   (SELECT count(*) FROM public.user_provider_favorites f WHERE f.user_id = u.id) AS provider_favorites,
@@ -168,7 +174,8 @@ SELECT
   (SELECT count(*) FROM public.user_follows fo WHERE fo.followee_id = u.id) AS followers,
   (SELECT count(*) FROM public.user_follows fo WHERE fo.follower_id = u.id) AS following,
   (SELECT count(DISTINCT e.artist_name) FROM public.provider_listening_events e WHERE e.user_id = u.id) AS artists_heard
-FROM public.users u;
+FROM public.users u
+WHERE lower(COALESCE(u.privacy ->> 'profile', 'public')) = 'public';
 
 GRANT SELECT ON public.public_profiles TO anon, authenticated;
 GRANT SELECT ON public.public_profile_stats TO anon, authenticated;
