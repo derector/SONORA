@@ -167,7 +167,14 @@ object OtaSession {
         scope.launch {
             when (val result = OtaUpdate.check(context, notify = false)) {
                 is OtaUpdate.CheckResult.UpToDate ->
-                    _state.update { it.copy(checking = false, toast = "Уже установлена последняя версия") }
+                    _state.update {
+                        it.copy(
+                            checking = false,
+                            release = null,
+                            sheetVisible = false,
+                            toast = "Уже установлена последняя версия"
+                        )
+                    }
                 is OtaUpdate.CheckResult.UpdateAvailable ->
                     _state.update {
                         it.copy(
