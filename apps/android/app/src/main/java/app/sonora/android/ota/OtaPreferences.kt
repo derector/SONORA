@@ -23,6 +23,7 @@ object OtaPreferences {
     private const val KEY_DISMISSED_TAGS = "dismissed_tags"
     private const val KEY_READY_TAG = "ready_apk_tag"
     private const val KEY_READY_PATH = "ready_apk_path"
+    private const val KEY_CURRENT_DOWNLOAD_ID = "current_download_id"
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -96,6 +97,14 @@ object OtaPreferences {
             .putString(KEY_READY_TAG, tag)
             .putString(KEY_READY_PATH, file.absolutePath)
             .apply()
+    }
+
+    /** Exact WorkManager request currently representing the selected release download. */
+    fun currentDownloadId(context: Context): String? =
+        prefs(context).getString(KEY_CURRENT_DOWNLOAD_ID, null)
+
+    fun rememberCurrentDownload(context: Context, id: String) {
+        prefs(context).edit().putString(KEY_CURRENT_DOWNLOAD_ID, id).apply()
     }
 
     fun clearReadyApk(context: Context) {
