@@ -78,13 +78,22 @@ def version():
 def main():
     adb("install", "-r", "apps/android/app/build/outputs/apk/release/app-release.apk", timeout=90)
     assert version() == 199
+    shell("pm", "grant", PACKAGE, "android.permission.POST_NOTIFICATIONS")
     shell("am", "start", "-W", "-n", f"{PACKAGE}/.MainActivity")
-    open_updates()
+    shell("cmd", "statusbar", "expand-notifications")
+    tap(find(("Доступно обновление SONORA",), timeout=80))
     find(("Доступно обновление SONORA",))
+    print("Background release notification opened the update sheet.", flush=True)
     visible = [label(n) for n in nodes()]
     assert any("Версия 0.1.200" in text and "0.1.199" in text for text in visible), visible
-    print("Manual check offered 0.1.200 over 0.1.199.", flush=True)
+    print("The update sheet offered 0.1.200 over 0.1.199.", flush=True)
     tap(find(("Обновить",)))
+    find(("APK скачан и готов к установке.",), timeout=100)
+    assert version() == 199
+    labels = [label(n) for n in nodes()]
+    assert "Открыть настройки" not in labels and "Установить" in labels, labels
+    print("The verified download waited for an explicit install tap.", flush=True)
+    tap(find(("Установить",)))
 
     action = find(("Открыть настройки", "Update", "Install", "Обновить приложение", "Установить"),
                   timeout=100)
