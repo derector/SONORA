@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Disc3, ExternalLink, Search } from "lucide-react";
+import { Disc3, Search } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
@@ -50,7 +50,7 @@ function RecordingMatch({ item }: { item: Metadata }) {
 
   return (
     <article className="surface min-w-0 rounded-card">
-      <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="track-row group min-w-0 max-w-full">
+      <div className="track-row min-w-0 max-w-full">
         <span className="artwork grid h-11 w-11 shrink-0 place-items-center rounded-tile">
           <Disc3 size={18} className="text-white/50" />
         </span>
@@ -58,8 +58,7 @@ function RecordingMatch({ item }: { item: Metadata }) {
           <span className="t-row block truncate">{item.title}</span>
           <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""} · {item.provider}</span>
         </span>
-        <ExternalLink size={15} className="shrink-0 text-[color:var(--fg-faint)]" />
-      </a>
+      </div>
       <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
         {candidate ? (
           <>
@@ -104,14 +103,14 @@ export default function SearchPage() {
     const sequence = ++searchSequence.current;
     setLoading(true); setError(""); setSearched(true);
     try {
-      const params = new URLSearchParams({ q: searchQuery.trim(), type: searchKind, limit: "15" });
+      const params = new URLSearchParams({ q: searchQuery.trim(), type: searchKind, limit: "15", inApp: "true" });
       const response = await fetch(`${API}/api/v1/search/music?${params.toString()}`);
       const data = await response.json() as SearchResponse;
       if (sequence !== searchSequence.current) return;
       if (!response.ok) throw new Error(data.error || "Music search is temporarily unavailable.");
-      setTracks(data.tracks ?? []);
+      setTracks((data.tracks ?? []).filter((track) => track.playable && track.audioUrl?.startsWith("https://")));
       setArtists(data.artists ?? []);
-      setMetadata(data.metadata ?? []);
+      setMetadata((data.metadata ?? []).filter((item) => item.provider === "MusicBrainz"));
       setProviders(data.providers ?? {});
     } catch (err) {
       if (sequence !== searchSequence.current) return;
@@ -180,6 +179,9 @@ export default function SearchPage() {
           />
         </div>
       )}
+      {!loading && searched && !error && kind !== "artists" && tracks.length === 0 && resultCount > 0 && (
+        <p className="t-meta mt-6" role="status">{t("No tracks available to play in SONORA for this search.")}</p>
+      )}
 
       {!loading && tracks.length > 0 && (
         <section className="mt-8" aria-labelledby="search-tracks-heading">
@@ -203,9 +205,6 @@ export default function SearchPage() {
                   const start = queue.findIndex((item) => item.id === track.id);
                   playTrack(track, start >= 0 ? queue.slice(start) : [track]);
                 }}
-                trailing={
-                  <a href={track.sourceUrl} target="_blank" rel="noreferrer" aria-label={t("Open source")} className="btn-icon"><ExternalLink size={16} /></a>
-                }
               />
             ))}
           </div>
@@ -217,14 +216,18 @@ export default function SearchPage() {
           <h2 id="search-artists-heading" className="t-h2 mb-4">{t("Artists")}</h2>
           <div ref={artistsList} className="rv rv-flat rv-stagger grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {artists.map((artist) => (
-              <a key={artist.id} href={artist.sourceUrl} target="_blank" rel="noreferrer" className="card-lift surface flex min-w-0 items-center gap-3 rounded-card p-3">
+              <button key={artist.id} type="button" className="card-lift surface flex min-w-0 items-center gap-3 rounded-card p-3 text-left" onClick={() => {
+                const artistQuery = artist.handle || artist.name;
+                setQuery(artistQuery);
+                setKind("tracks");
+                void runSearch(artistQuery, "tracks");
+              }}>
                 <Artwork src={artist.imageUrl} rounded="rounded-full" iconSize={20} className="h-12 w-12" />
                 <div className="min-w-0 flex-1">
                   <p className="t-row truncate">{artist.name}</p>
                   <p className="t-meta mt-0.5 truncate">{artist.followerCount ? `${artist.followerCount.toLocaleString()} ${t("followers")}` : t("Recording artist")}</p>
                 </div>
-                <ExternalLink size={15} className="shrink-0 text-[color:var(--fg-faint)]" />
-              </a>
+              </button>
             ))}
           </div>
         </section>

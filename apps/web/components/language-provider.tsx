@@ -315,6 +315,7 @@ const ru: Record<string, string> = {
   "Find a playable version": "Найти доступную версию",
   "Possible match": "Возможное совпадение",
   "No playable match was found.": "Доступная версия не найдена.",
+  "No tracks available to play in SONORA for this search.": "По этому запросу в SONORA нет треков, доступных для воспроизведения.",
   "The track lookup failed.": "Не удалось выполнить поиск трека.",
   "Recording matches": "Найденные записи",
   "SONORA · Federated discovery · Every playable result remains attributed to its source": "SONORA · Поиск по каталогам · У каждого трека сохраняется ссылка на источник",

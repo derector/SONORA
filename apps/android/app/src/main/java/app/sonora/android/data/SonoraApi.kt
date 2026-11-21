@@ -371,14 +371,17 @@ object SonoraApi {
         val provider: String,
         val title: String,
         val artist: String,
-        val url: String,
         val isrc: String?,
         val durationSeconds: Int?
     )
-    data class MusicSearch(val tracks: List<Track> = emptyList(), val matches: List<CatalogMatch> = emptyList())
+    data class MusicSearch(
+        val tracks: List<Track> = emptyList(),
+        val matches: List<CatalogMatch> = emptyList(),
+        val searched: Boolean = false
+    )
 
     fun search(query: String): MusicSearch {
-        val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
+        val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20&inApp=true")
         val metadata = result.optJSONArray("metadata")
         val matches = buildList {
             if (metadata == null) return@buildList
@@ -386,16 +389,14 @@ object SonoraApi {
                 val item = metadata.optJSONObject(index) ?: continue
                 val id = item.optString("id")
                 val title = item.optString("title")
-                val url = item.optString("sourceUrl")
-                val source = android.net.Uri.parse(url)
-                if (id.isBlank() || title.isBlank() || source.scheme != "https" ||
-                    source.host !in setOf("musicbrainz.org", "open.spotify.com")) continue
+                val provider = item.optString("provider")
+                if (id.isBlank() || title.isBlank() || provider != "MusicBrainz") continue
                 val isrc = item.optString("isrc").takeIf { it.isNotBlank() && it != "null" }
                 val duration = item.optInt("durationSeconds").takeIf { it > 0 }
-                add(CatalogMatch(id, item.optString("provider"), title, item.optString("artist"), url, isrc, duration))
+                add(CatalogMatch(id, provider, title, item.optString("artist"), isrc, duration))
             }
         }
-        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches)
+        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, searched = true)
     }
 
     fun findPlayableVersion(match: CatalogMatch): Track? {

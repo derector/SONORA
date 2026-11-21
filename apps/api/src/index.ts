@@ -1108,10 +1108,11 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
-app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
+app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
   const limit = Math.min(20, Math.max(1, Number(request.query.limit) || 12));
+  const inApp = request.query.inApp === "true";
   if (q.length < 2) return reply.code(400).send(authError(400, "Search query must contain at least two characters."));
   if (!["all", "tracks", "artists"].includes(type)) return reply.code(400).send(authError(400, "Search type must be all, tracks or artists."));
 
@@ -1120,10 +1121,33 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const spotifyMetadata: Array<Record<string, unknown>> = [];
   const artists: Array<Record<string, unknown>> = [];
   const providers: Record<string, { ok: boolean; count: number; error?: string }> = {};
+  const queryKey = catalogSearchKey(q);
+
+  const audiusUsers = (async () => {
+    if (!inApp && type === "tracks") return [];
+    try {
+      const params = new URLSearchParams({ query: q, limit: String(limit), app_name: "SONORA" });
+      const response = await fetch(`https://api.audius.co/v1/users/search?${params}`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(4500)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json() as { data?: Array<{
+        id: string; name?: string; handle?: string; follower_count?: number; track_count?: number;
+        profile_picture?: Record<string, string> | null;
+      }> };
+      const users = (payload.data ?? []).filter((user) => user.id && (user.name || user.handle) &&
+        (!inApp || matchesCatalogSearch(q, user.name) || matchesCatalogSearch(q, user.handle)));
+      providers.audiusArtists = { ok: true, count: users.length };
+      return users;
+    } catch (error) {
+      providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      return [];
+    }
+  })();
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
-    if (process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
+    if (!inApp && process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
       tasks.push((async () => {
         const report = await runDiscoverySearch(q, limit, "commercial_streaming", process.env);
         providers.spotify = report.providers.commercial_streaming;
@@ -1173,26 +1197,48 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     })());
     tasks.push((async () => {
       try {
-        const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { data?: Array<{
+        type AudiusTrack = {
           id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
           is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
-          user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
-        }> };
-        const before = tracks.length;
-        for (const track of payload.data ?? []) {
+          user?: { id?: string; name?: string; handle?: string }; album?: { playlist_name?: string };
+        };
+        async function fetchTracks(path: string, params: URLSearchParams): Promise<AudiusTrack[]> {
+          const response = await fetch(`https://api.audius.co/v1/${path}?${params}`, {
+            headers: { Accept: "application/json" }, signal: AbortSignal.timeout(4500)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json() as { data?: AudiusTrack[] };
+          return payload.data ?? [];
+        }
+        const queryResults = Promise.allSettled([
+          fetchTracks("tracks/search", new URLSearchParams({ query: q, limit: String(limit), app_name: "SONORA" }))
+        ]);
+        const exactAccounts = inApp && queryKey ? (await audiusUsers)
+          .filter((user) => [user.name, user.handle].some((name) => catalogSearchKey(name) === queryKey))
+          .filter((user) => user.track_count !== 0).slice(0, 2) : [];
+        const [search, uploads] = await Promise.all([
+          queryResults,
+          Promise.allSettled(exactAccounts.map(async (user) => {
+            const items = await fetchTracks(`users/${encodeURIComponent(user.id)}/tracks`,
+              new URLSearchParams({ limit: String(limit), app_name: "SONORA" }));
+            return items.filter((item) => item.user?.id === user.id);
+          }))
+        ]);
+        const resolved = [...uploads, ...search].flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+        if (!resolved.length) throw new Error("Audius track search unavailable");
+        const included = new Set<string>();
+        for (const track of resolved.flat()) {
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
           const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
           const streamable = track.is_streamable === true && track.is_stream_gated !== true &&
             (!track.duration || track.duration <= PLAYABLE_MAX_DURATION_SECONDS);
-         tracks.push({
+          if (included.has(track.id) || inApp && !streamable) continue;
+          included.add(track.id);
+          tracks.push({
             id: `audius:${track.id}`, providerTrackId: track.id, provider: "Audius",
-            title: track.title, artist, album: track.album?.playlist_name ?? null,
+            title: track.title, artist, artistId: track.user?.id, artistHandle: track.user?.handle,
+            album: track.album?.playlist_name ?? null,
             durationSeconds: track.duration ?? 0,
             artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
             audioUrl: streamable ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA` : "",
@@ -1200,7 +1246,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
             sourceUrl, playable: streamable, rightsLabel: track.license ?? "Audius platform terms"
           });
         }
-        providers.audius = { ok: true, count: tracks.length - before };
+        providers.audius = { ok: true, count: included.size };
       } catch (error) {
         providers.audius = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
@@ -1233,30 +1279,15 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
       }
     })());
   }
-  if (type !== "tracks") {
+  if (inApp || type !== "tracks") {
     tasks.push((async () => {
-      try {
-        const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/users/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+      for (const user of await audiusUsers) {
+        artists.push({
+          id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
+          handle: user.handle ?? null, followerCount: user.follower_count ?? null,
+          imageUrl: user.profile_picture?.["150x150"] ?? null,
+          sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { data?: Array<{
-          id: string; name?: string; handle?: string; follower_count?: number;
-          profile_picture?: Record<string, string> | null;
-        }> };
-        for (const user of payload.data ?? []) {
-          if (!user.id || !(user.name || user.handle)) continue;
-          artists.push({
-            id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
-            handle: user.handle ?? null, followerCount: user.follower_count ?? null,
-            imageUrl: user.profile_picture?.["150x150"] ?? null,
-            sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
-          });
-        }
-        providers.audiusArtists = { ok: true, count: artists.length };
-      } catch (error) {
-        providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
     if (type === "artists") {
@@ -1289,6 +1320,26 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   await Promise.all(tasks);
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
+  if (inApp) {
+    const matchingArtists = artists.filter((artist) => matchesCatalogSearch(q, artist.name) || matchesCatalogSearch(q, artist.handle));
+    const matchingMetadata = metadata.filter((item) => matchesCatalogSearch(q, item.artist, item.title, item.album));
+    const exactProfiles = matchingArtists.filter((artist) =>
+      [artist.name, artist.handle].some((value) => catalogSearchKey(value) === queryKey));
+    const exactAudiusIds = new Set(exactProfiles.filter((artist) => artist.provider === "Audius").map((artist) => artist.id));
+    const exactArtist = exactProfiles.length > 0 ||
+      matchingMetadata.some((item) => catalogSearchKey(item.artist) === queryKey);
+    const creditsMatch = (track: Record<string, unknown>) =>
+      track.provider === "Audius" && exactAudiusIds.size > 0
+        ? exactAudiusIds.has(`audius-user:${track.artistId}`)
+        : [track.artist, track.artistHandle].some((value) => catalogSearchKey(value) === queryKey);
+    const playable = tracks.filter((track) =>
+      track.playable === true && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") &&
+      (creditsMatch(track) || !exactArtist && matchesCatalogSearch(q, track.artist, track.title, track.album)));
+    return {
+      query: q, type, tracks: playable.slice(0, limit * 2), metadata: matchingMetadata.slice(0, limit),
+      artists: matchingArtists.slice(0, limit), providers
+    };
+  }
   return {
     query: q, type, tracks: tracks.slice(0, limit * 2), metadata: [...spotifyMetadata, ...metadata].slice(0, limit),
     artists: artists.slice(0, limit), providers
@@ -1301,7 +1352,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
-import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
+import { PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, matchesCatalogSearch, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 // Universal Music Discovery & Import Engine: adapters, grouping, resolve.
 import { registerDiscoveryRoutes, runDiscoverySearch, validIsrc } from "./discovery.js";

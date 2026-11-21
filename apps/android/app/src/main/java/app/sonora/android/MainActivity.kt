@@ -813,6 +813,10 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+        if (!busy && results.searched && results.tracks.isEmpty()) {
+            Text("По этому запросу в SONORA нет треков, доступных для воспроизведения.",
+                color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+        }
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(items = results.tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
                 TrackRow(track, index, { play(track) }, {})
@@ -832,23 +836,14 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
 
 @Composable
 private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> Unit) {
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     val scope = rememberCoroutineScope()
     var finding by remember(match) { mutableStateOf(false) }
     var status by remember(match) { mutableStateOf("") }
     var candidate by remember(match) { mutableStateOf<Track?>(null) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
-        Row(
-            Modifier.fillMaxWidth().clickable { runCatching { uriHandler.openUri(match.url) } },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
-                    color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            Text("Источник ↗", color = Lime, fontSize = 12.sp)
-        }
+        Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
+            color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val found = candidate
         if (found == null) {
             TextButton(enabled = !finding, onClick = {

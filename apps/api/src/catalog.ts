@@ -8,6 +8,18 @@ import type { RecommendationTrack } from "./recommendation-core.js";
 // Long Audius uploads are frequently multi-hour playlist dumps, not songs.
 export const PLAYABLE_MAX_DURATION_SECONDS = 2700;
 
+export function catalogSearchKey(value: unknown): string {
+  return typeof value === "string"
+    ? value.normalize("NFKC").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim()
+    : "";
+}
+
+export function matchesCatalogSearch(query: string, ...fields: unknown[]): boolean {
+  const key = catalogSearchKey(query);
+  const words = new Set(catalogSearchKey(fields.join(" ")).split(" "));
+  return key !== "" && key.split(" ").every((word) => words.has(word));
+}
+
 export type JamendoCandidate = RecommendationTrack & {
   album: string | null; artworkUrl: string | null; audioUrl: string;
   licenseUrl: string; sourceUrl: string; providerTrackId: string;
