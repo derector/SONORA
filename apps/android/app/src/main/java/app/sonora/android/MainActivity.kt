@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
@@ -50,6 +51,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -303,6 +305,11 @@ private fun SonoraApp() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) recordTransition(previousMediaId, "complete")
             }
+            override fun onPlayerError(error: PlaybackException) {
+                Log.e("SONORA_PLAYBACK", "Media3 could not play the current track", error)
+                message = "Не удалось воспроизвести трек. Попробуйте другой источник."
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            }
         }
         player.addListener(listener)
         isPlaying = player.isPlaying
@@ -311,6 +318,15 @@ private fun SonoraApp() {
             player.removeListener(listener)
         }
     }
+
+    fun isSupportedAudioUrl(value: String): Boolean = runCatching {
+        val uri = android.net.Uri.parse(value)
+        when (uri.scheme?.lowercase()) {
+            "https", "http" -> !uri.host.isNullOrBlank()
+            "file", "content" -> true
+            else -> false
+        }
+    }.getOrDefault(false)
 
     fun mediaItem(track: Track, url: String): MediaItem {
         val metadata = MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
@@ -414,32 +430,43 @@ private fun SonoraApp() {
     fun startTrack(track: Track, local: Boolean = false) {
         val player = controller
         if (player == null) { message = "Плеер ещё запускается"; return }
-        val url = if (local) track.audioUrl else track.audioUrl
+        val url = track.audioUrl
         if (url.isNullOrBlank()) { message = "У этого трека нет доступного источника"; return }
-        // First user-initiated playback of the session: make sure the media
-        // notification can be shown. Non-blocking by design; the request is a no-op
-        // on Android 12 and older and is only ever issued once.
-        ensurePlaybackNotificationPermission()
-        if (local) {
-            activeQueue = listOf(track)
-            player.setMediaItem(mediaItem(track, url))
+        if (!isSupportedAudioUrl(url)) {
+            message = "У этого трека неподдерживаемый адрес аудиоисточника"
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            return
+        }
+        try {
+            // First user-initiated playback of the session: make sure the media
+            // notification can be shown. Non-blocking by design; the request is a no-op
+            // on Android 12 and older and is only ever issued once.
+            ensurePlaybackNotificationPermission()
+            if (local) {
+                activeQueue = listOf(track)
+                player.setMediaItem(mediaItem(track, url))
+                player.prepare()
+                player.play()
+                current = track
+                return
+            }
+            val queue = (tracks.filter { it.playable && it.audioUrl?.let(::isSupportedAudioUrl) == true } + track)
+                .distinctBy { "${it.provider}:${it.id}" }
+            activeQueue = queue
+            val selectedIndex = queue.indexOfFirst { "${it.provider}:${it.id}" == "${track.provider}:${track.id}" }.coerceAtLeast(0)
+            player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
             player.prepare()
             player.play()
             current = track
-            return
-        }
-        val queue = (tracks.filter { it.playable && !it.audioUrl.isNullOrBlank() } + track)
-            .distinctBy { "${it.provider}:${it.id}" }
-        activeQueue = queue
-        val selectedIndex = queue.indexOfFirst { "${it.provider}:${it.id}" == "${track.provider}:${track.id}" }.coerceAtLeast(0)
-        player.setMediaItems(queue.map { mediaItem(it, it.audioUrl!!) }, selectedIndex, 0L)
-        player.prepare()
-        player.play()
-        current = track
-        if (track.provider.equals("Jamendo", ignoreCase = true) && authStep == "signed") {
-            scope.launch(Dispatchers.IO) {
-                runCatching { SonoraApi.recordProviderHistory(track, "play", 0) }
+            if (track.provider.equals("Jamendo", ignoreCase = true) && authStep == "signed") {
+                scope.launch(Dispatchers.IO) {
+                    runCatching { SonoraApi.recordProviderHistory(track, "play", 0) }
+                }
             }
+        } catch (error: Exception) {
+            Log.e("SONORA_PLAYBACK", "Failed to start ${track.provider}:${track.id}", error)
+            message = "Не удалось запустить воспроизведение. Попробуйте другой трек."
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
 
