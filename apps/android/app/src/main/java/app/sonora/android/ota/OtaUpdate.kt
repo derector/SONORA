@@ -1,6 +1,7 @@
 package app.sonora.android.ota
 
 import android.content.Context
+import android.content.pm.ServiceInfo
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -415,7 +416,8 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
 
     private fun foregroundInfo(message: String, downloaded: Long, total: Long) = ForegroundInfo(
         OtaNotifications.ID_DOWNLOAD,
-        OtaNotifications.buildDownloadNotification(applicationContext, message, downloaded, total)
+        OtaNotifications.buildDownloadNotification(applicationContext, message, downloaded, total),
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
     )
 
     /** An APK is a ZIP archive: the file must start with the "PK" signature. */
