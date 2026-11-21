@@ -42,6 +42,10 @@ fun main() {
         "## Что нового\n\n- **исправлено** воспроизведение\n", "2026-11-20T00:02:39Z", assets)
     check(rel.versionLabel == "0.1.157") { "label" }
     check(rel.apkSizeLabel == "20 Б") { rel.apkSizeLabel }
+    val versioned = ReleaseAsset("SONORA-release-v0.1.157.apk", "https://gh/versioned.apk", 30L)
+    val unrelated = ReleaseAsset("SONORA-release-v0.1.158.apk", "https://gh/unrelated.apk", 30L)
+    check(rel.copy(assets = assets + versioned).apk == versioned) { "prefer the exact release asset" }
+    check(rel.copy(assets = assets + unrelated).apk == assets[1]) { "retain the legacy asset fallback" }
     check(rel.isNewerThan(currentName, currentCode)) { "release is newer" }
     val notes = chopNotes((1..80).joinToString(" ") { "item$it" })
     check(notes.length <= NOTES_LIMIT + 1 && notes.endsWith("…")) { "notes clipped: ${notes.length}" }
@@ -49,5 +53,5 @@ fun main() {
     check(formatBytes(45L * 1024 * 1024) == "45,0 МБ") { formatBytes(45L * 1024 * 1024) }
     check(formatBytes(0L) == "размер неизвестен") { "zero size" }
     check(formatPublishedAt("2026-11-20T00:02:39Z") == "20.11.2026") { "date" }
-    println("OtaCore smoke: all ${23} checks passed (current=$currentName/$currentCode)")
+    println("OtaCore smoke: all checks passed (current=$currentName/$currentCode)")
 }

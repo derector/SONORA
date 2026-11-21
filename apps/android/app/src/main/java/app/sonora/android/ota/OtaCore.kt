@@ -20,7 +20,8 @@ const val NOTES_LIMIT = 300
 data class ReleaseAsset(
     val name: String,
     val url: String,
-    val size: Long
+    val size: Long,
+    val sha256: String? = null
 )
 
 /**
@@ -44,7 +45,8 @@ data class ReleaseInfo(
 
     /** The APK the update flow would download, or null when the release ships none. */
     val apk: ReleaseAsset?
-        get() = selectApkAsset(assets)
+        get() = assets.firstOrNull { it.name.equals("SONORA-release-$tagName.apk", ignoreCase = true) }
+            ?: selectApkAsset(assets)
 
     /**
      * True when this release is newer than the running build. See [isNewerVersion] for the

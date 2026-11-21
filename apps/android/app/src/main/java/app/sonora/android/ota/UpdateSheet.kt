@@ -71,7 +71,10 @@ fun UpdateSheet(
     // WorkManager's list may contain historical requests in unspecified order.
     // Only render the request explicitly recorded when this release was enqueued.
     val currentDownloadId = OtaPreferences.currentDownloadId(context)
-    val info = infos.firstOrNull { it.id.toString() == currentDownloadId }
+    val info = infos.firstOrNull {
+        it.id.toString() == currentDownloadId &&
+            (it.state != WorkInfo.State.SUCCEEDED || it.outputData.getString(UpdateDownloadWorker.TAG) == release.tagName)
+    }
     val workState = info?.state
     val progress = info?.progress?.getInt(UpdateDownloadWorker.PROGRESS, -1) ?: -1
     val downloaded = info?.progress?.getLong(UpdateDownloadWorker.DOWNLOADED, 0L) ?: 0L
@@ -79,7 +82,7 @@ fun UpdateSheet(
     val failure = info?.outputData?.getString(UpdateDownloadWorker.ERROR).orEmpty()
     val readyPath = info?.outputData?.getString(UpdateDownloadWorker.APK_PATH)
     val readyFile = remember(readyPath, workState) {
-        readyPath?.let(::File)?.takeIf { it.isFile } ?: OtaPreferences.readyApkFile(context)
+        readyPath?.let(::File)?.takeIf { it.isFile }
     }
 
     // A finished download goes on to the installer by itself, but only once per attempt,
@@ -87,9 +90,7 @@ fun UpdateSheet(
     var installRequestedFor by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(workState, readyFile, release.tagName, info?.id) {
         val file = readyFile
-        // The APK cache path is intentionally stable across releases. Key the automatic
-        // installer launch to the actual WorkManager attempt and release, not just that path,
-        // otherwise a rejected stale success can suppress the replacement download's install.
+        // Each completed attempt can launch the installer automatically once.
         val key = info?.id?.let { "${release.tagName}:$it:${file?.absolutePath}" }
         if (workState == WorkInfo.State.SUCCEEDED && file != null && key != null && installRequestedFor != key) {
             installRequestedFor = key

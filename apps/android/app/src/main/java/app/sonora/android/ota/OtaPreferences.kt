@@ -92,18 +92,27 @@ object OtaPreferences {
 
     fun readyApkTag(context: Context): String? = prefs(context).getString(KEY_READY_TAG, null)
 
-    fun rememberReadyApk(context: Context, tag: String, file: java.io.File) {
+    @Synchronized
+    fun rememberReadyApk(
+        context: Context, requestId: String, tag: String, url: String, sha256: String?, file: java.io.File
+    ): Boolean {
+        if (currentDownloadId(context) != requestId) return false
+        val release = cachedRelease(context) ?: return false
+        val asset = release.apk ?: return false
+        if (release.tagName != tag || asset.url != url || asset.sha256 != sha256) return false
         prefs(context).edit()
             .putString(KEY_READY_TAG, tag)
             .putString(KEY_READY_PATH, file.absolutePath)
             .apply()
+        return true
     }
 
     /** Exact WorkManager request currently representing the selected release download. */
     fun currentDownloadId(context: Context): String? =
         prefs(context).getString(KEY_CURRENT_DOWNLOAD_ID, null)
 
-    fun rememberCurrentDownload(context: Context, id: String) {
+    @Synchronized
+    fun rememberCurrentDownload(context: Context, id: String?) {
         prefs(context).edit().putString(KEY_CURRENT_DOWNLOAD_ID, id).apply()
     }
 

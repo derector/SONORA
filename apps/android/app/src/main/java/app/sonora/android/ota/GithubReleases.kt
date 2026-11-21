@@ -23,6 +23,7 @@ object GithubReleases {
 
     /** GitHub rejects API calls without a User-Agent. */
     private const val USER_AGENT = "SONORA-Android"
+    private val sha256Digest = Regex("sha256:([0-9a-fA-F]{64})")
 
     /** The release plus the payload it came from, so the cache needs no own serializer. */
     data class Response(val raw: String, val release: ReleaseInfo?)
@@ -89,7 +90,8 @@ object GithubReleases {
             result += ReleaseAsset(
                 name = name.ifBlank { url.substringAfterLast('/') },
                 url = url,
-                size = asset.optLong("size")
+                size = asset.optLong("size"),
+                sha256 = sha256Digest.matchEntire(asset.optString("digest"))?.groupValues?.get(1)
             )
         }
         return result

@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 /**
@@ -36,9 +37,6 @@ object OtaUpdate {
     const val UNIQUE_PERIODIC_CHECK = "sonora-release-check"
     const val UNIQUE_STARTUP_CHECK = "sonora-release-check-startup"
     const val UNIQUE_DOWNLOAD = "sonora-update-download"
-
-    /** Name of the streamed APK inside the cache dir, shared by FileProvider paths xml. */
-    const val APK_FILE_NAME = "sonora-update.apk"
 
     private const val CHECK_PERIOD_HOURS = 12L
     private const val STARTUP_DELAY_SECONDS = 25L
@@ -210,21 +208,24 @@ object OtaUpdate {
         }
         return null
     }
-    fun apkFile(context: Context): File = File(File(context.cacheDir, "updates"), APK_FILE_NAME)
-
     /** Millis of the last completed check attempt, for the «Последняя проверка» line. */
     fun lastCheckedAt(context: Context): Long = OtaPreferences.lastCheckedAt(context)
 
     /**
      * Starts, or restarts, the APK download.
      *
-     * REPLACE is deliberate: re-tapping «Обновить» cancels the running attempt and starts a
-     * clean one rather than queueing a second writer onto the same temporary file.
+     * REPLACE cancels the running attempt when the user restarts a download.
      */
     fun startDownload(context: Context, release: ReleaseInfo) {
         val asset = release.apk ?: return
         val request = OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
-            .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
+            .setInputData(workDataOf(
+                "url" to asset.url,
+                "tag" to release.tagName,
+                "version" to release.versionLabel,
+                "expectedBytes" to asset.size,
+                "sha256" to asset.sha256
+            ))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
             .build()
@@ -239,6 +240,7 @@ object OtaUpdate {
     }
 
     fun cancelDownload(context: Context) {
+        OtaPreferences.rememberCurrentDownload(context, null)
         WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_DOWNLOAD)
     }
 }
@@ -259,11 +261,8 @@ class ReleaseCheckWorker(context: Context, params: WorkerParameters) : Coroutine
 /**
  * Streams the release APK into the cache dir and reports determinate progress.
  *
- * File handling follows the precedent of [TrackDownloadWorker]: one temporary `.part`
- * file, renamed only once the payload is proven complete, deleted on every failure path.
- * GitHub's own `size` for the asset is cross-checked against Content-Length, and the first
- * bytes must be a ZIP signature, so a truncated or HTML-error answer never reaches the
- * installer.
+ * Each attempt owns its staging and installation files. Alongside the size and ZIP checks
+ * used by [TrackDownloadWorker], verify the GitHub digest when available before publishing.
  */
 class UpdateDownloadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -272,18 +271,17 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
         val tag = inputData.getString("tag").orEmpty()
         val expectedVersion = inputData.getString("version").orEmpty()
         val expectedBytes = inputData.getLong("expectedBytes", 0L)
+        val expectedSha256 = inputData.getString("sha256")
         if (!url.startsWith("https://")) {
             return@withContext Result.failure(workDataOf(ERROR to "Ссылка на обновление небезопасна"))
         }
 
         val updateDirectory = File(applicationContext.cacheDir, "updates")
-        if (!updateDirectory.exists() && !updateDirectory.mkdirs()) {
+        if (!updateDirectory.isDirectory && !updateDirectory.mkdirs() && !updateDirectory.isDirectory) {
             return@withContext Result.failure(workDataOf(ERROR to "Не удалось подготовить папку обновления"))
         }
-        val target = File(updateDirectory, OtaUpdate.APK_FILE_NAME)
-        val partial = File(updateDirectory, "${OtaUpdate.APK_FILE_NAME}.part")
-        deleteStaleApks(target, updateDirectory)
-        runCatching { partial.delete() }
+        val target = File(updateDirectory, "sonora-update-$id.apk")
+        val partial = File(updateDirectory, "sonora-update-$id.part.apk")
         setForeground(foregroundInfo("Готовим загрузку обновления…", 0L, expectedBytes))
 
         val client = SonoraApi.sharedClient.newBuilder()
@@ -317,6 +315,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
 
                 var written = 0L
                 var lastReported = 0L
+                val digest = expectedSha256?.let { MessageDigest.getInstance("SHA-256") }
                 body.byteStream().use { input ->
                     FileOutputStream(partial).use { output ->
                         val buffer = ByteArray(64 * 1024)
@@ -324,6 +323,7 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                             val count = input.read(buffer)
                             if (count < 0) break
                             output.write(buffer, 0, count)
+                            digest?.update(buffer, 0, count)
                             written += count
                             if (written - lastReported >= 256 * 1024) {
                                 lastReported = written
@@ -337,12 +337,16 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                 }
 
                 if (partial.length() != declared) {
-                    partial.delete()
                     return@withContext Result.failure(workDataOf(ERROR to "Загрузка оборвалась, файл неполный"))
                 }
                 if (!isZipApk(partial)) {
-                    partial.delete()
                     return@withContext Result.failure(workDataOf(ERROR to "Скачанный файл не является APK"))
+                }
+                if (digest != null) {
+                    val actualSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+                    if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+                        return@withContext Result.failure(workDataOf(ERROR to "SHA-256 файла не совпадает с релизом"))
+                    }
                 }
 
                 // Validate the embedded APK identity and version before handing it to
@@ -352,14 +356,12 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                     android.content.pm.PackageManager.GET_META_DATA
                 )
                 if (archiveInfo == null || archiveInfo.packageName != applicationContext.packageName) {
-                    partial.delete()
                     return@withContext Result.failure(workDataOf(ERROR to "APK не принадлежит приложению SONORA"))
                 }
                 val expectedTuple = parseVersion(expectedVersion)
                 val actualTuple = parseVersion(archiveInfo.versionName)
                 if (expectedTuple == null || actualTuple != expectedTuple) {
                     val actualVersionLabel = archiveInfo.versionName ?: "неизвестна"
-                    partial.delete()
                     return@withContext Result.failure(
                         workDataOf(ERROR to "Версия APK ($actualVersionLabel) не совпадает с релизом $expectedVersion")
                     )
@@ -368,35 +370,33 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
                 val installedInfo = applicationContext.packageManager.getPackageInfo(applicationContext.packageName, 0)
                 val installedVersionCode = PackageInfoCompat.getLongVersionCode(installedInfo)
                 if (downloadedVersionCode <= installedVersionCode) {
-                    partial.delete()
                     return@withContext Result.failure(
                         workDataOf(ERROR to "Скачан APK не новее установленной версии. Обновление отменено.")
                     )
                 }
 
-                if (target.exists() && !target.delete()) return@withContext Result.retry()
                 if (!partial.renameTo(target)) {
                     return@withContext Result.failure(workDataOf(ERROR to "Не удалось сохранить файл"))
                 }
 
-                // A release check may have invalidated this download while the bytes
-                // were streaming. Never publish an APK for a release that is no longer cached.
-                if (isStopped || OtaPreferences.cachedRelease(applicationContext)?.tagName != tag) {
+                if (isStopped || !OtaPreferences.rememberReadyApk(
+                        applicationContext, id.toString(), tag, url, expectedSha256, target
+                    )
+                ) {
                     target.delete()
                     return@withContext Result.failure(workDataOf(ERROR to "Релиз обновления больше не актуален"))
                 }
-                OtaPreferences.rememberReadyApk(applicationContext, tag, target)
                 setProgress(workDataOf(PROGRESS to 100, DOWNLOADED to target.length(), TOTAL to target.length()))
                 OtaNotifications.postUpdateReady(applicationContext, tag)
                 Result.success(workDataOf(APK_PATH to target.absolutePath, TAG to tag, PROGRESS to 100))
             }
         } catch (cancelled: CancellationException) {
-            runCatching { partial.delete() }
             throw cancelled
         } catch (_: Exception) {
-            runCatching { partial.delete() }
             if (runAttemptCount < 2) Result.retry()
             else Result.failure(workDataOf(ERROR to "Не удалось скачать обновление. Проверь подключение"))
+        } finally {
+            runCatching { partial.delete() }
         }
     }
 
@@ -425,18 +425,6 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
             stream.read(magic) == magic.size && magic[0] == 'P'.code.toByte() && magic[1] == 'K'.code.toByte()
         }
     }.getOrDefault(false)
-
-    /** An APK of a superseded tag would otherwise sit in the cache for good. */
-    private fun deleteStaleApks(current: File, directory: File) {
-        runCatching {
-            directory.listFiles()?.forEach { file ->
-                if (file.absolutePath != current.absolutePath &&
-                    file.name.startsWith("sonora-update") &&
-                    (file.name.endsWith(".apk") || file.name.endsWith(".apk.part"))
-                ) file.delete()
-            }
-        }
-    }
 
     companion object {
         const val PROGRESS = "progress"
