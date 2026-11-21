@@ -1,0 +1,1 @@
+User-agent: *\nAllow: /\nSitemap: https://sonora-download-site-production.up.railway.app/sitemap.xml\n
