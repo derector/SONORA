@@ -51,15 +51,44 @@ jobs:
             export SONORA_ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/sonora-release.jks"
             printf "%s" "$SONORA_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$SONORA_ANDROID_KEYSTORE_PATH"
             chmod 600 "$SONORA_ANDROID_KEYSTORE_PATH"
-            gradle --no-daemon :app:assembleRelease -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
+            gradle --no-daemon :app:testReleaseUnitTest :app:assembleRelease -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
             echo "variant=release" >> "$GITHUB_OUTPUT"
-            echo "Built with the persistent SONORA release signing key." >> "$GITHUB_STEP_SUMMARY"
+            echo "Release OTA unit tests passed; built with the persistent SONORA release signing key." >> "$GITHUB_STEP_SUMMARY"
           else
-            gradle --no-daemon :app:assembleDebug -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
+            gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug -PsonoraVersionCode="$GITHUB_RUN_NUMBER" -PsonoraVersionName="0.1.$GITHUB_RUN_NUMBER"
             echo "variant=debug" >> "$GITHUB_OUTPUT"
             echo "::warning::Stable signing secrets are not configured. This debug APK is for QA only and may not update an already-installed SONORA app."
             echo "QA-only debug APK: not guaranteed to update an existing installation. Configure the four SONORA_ANDROID_* GitHub Actions secrets for update-safe release builds." >> "$GITHUB_STEP_SUMMARY"
           fi
+      - name: Verify stable release signing certificate
+        if: steps.build.outputs.variant == 'release'
+        env:
+          EXPECTED_CERT_SHA256: "23cb9f56b3a5fcaaceaddb9b2008d097138dfbc275327cb80a84cb023b26542a"
+        run: |
+          set -euo pipefail
+          APK=apps/android/app/build/outputs/apk/release/app-release.apk
+          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          VERIFY_OUTPUT=$("$APKSIGNER" verify --verbose --print-certs "$APK")
+          printf '%s\n' "$VERIFY_OUTPUT"
+          mapfile -t CERT_DIGESTS < <(
+            printf '%s\n' "$VERIFY_OUTPUT" |
+              sed -n 's/.*certificate SHA-256 digest: //p' |
+              tr -d ':' |
+              tr '[:upper:]' '[:lower:]'
+          )
+          if [ "${#CERT_DIGESTS[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one APK signing certificate, found ${#CERT_DIGESTS[@]}."
+            exit 1
+          fi
+          if [ "${CERT_DIGESTS[0]}" != "$EXPECTED_CERT_SHA256" ]; then
+            echo "::error::APK signing certificate does not match the established SONORA release key."
+            exit 1
+          fi
+          if ! grep -Fq 'Verified using v2 scheme (APK Signature Scheme v2): true' <<< "$VERIFY_OUTPUT"; then
+            echo "::error::APK is not verified with APK Signature Scheme v2."
+            exit 1
+          fi
+          echo "Stable SONORA signing certificate and APK Signature Scheme v2 verified." >> "$GITHUB_STEP_SUMMARY"
       - name: Upload stable-signed release APK
         if: steps.build.outputs.variant == 'release'
         uses: actions/upload-artifact@v4
