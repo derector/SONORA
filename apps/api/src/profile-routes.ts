@@ -465,17 +465,51 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       await reply.code(503).send(authError(503, "Profiles are temporarily unavailable."));
       return null;
     }
-    if (!data) {
-      await reply.code(404).send(authError(404, "No such profile."));
-      return null;
+    if (data) {
+      return data as Record<string, unknown> & { id: string; username: string; visibility: string };
     }
-    // The same gate must cover nested playlists/followers endpoints, not just
-    // GET /users/:username. Missing/unknown visibility fails closed.
-    if (data.visibility !== "public" && await viewerId(request) !== String(data.id)) {
-      await reply.code(403).send(authError(403, "This profile is private."));
-      return null;
+
+    // The public projection deliberately omits private profiles. A verified owner
+    // may still open their own private profile through the users table's owner RLS
+    // policy; never use the public API key to fetch another user's private row.
+    const authorization = request.headers.authorization;
+    const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : "";
+    if (token) {
+      const viewer = await viewerId(request);
+      if (viewer) {
+        const { data: own, error: ownError } = await authClient(token).from("users")
+          .select("id,username,display_name,avatar_url,cover_url,accent,role,status,bio,links,favorite_genres,created_at,privacy")
+          .eq("username", username).maybeSingle();
+        if (ownError) {
+          request.log.error({ code: ownError.code, message: ownError.message }, "Private owner profile lookup failed");
+          await reply.code(503).send(authError(503, "Profiles are temporarily unavailable."));
+          return null;
+        }
+        if (own && String(own.id) === viewer) {
+          const privacy = (own.privacy ?? {}) as Record<string, unknown>;
+          return {
+            id: own.id,
+            username: own.username,
+            display_name: own.display_name,
+            avatar_url: own.avatar_url,
+            cover_url: own.cover_url,
+            accent: own.accent,
+            role: own.role,
+            status: own.status,
+            bio: own.bio,
+            links: own.links,
+            favorite_genres: own.favorite_genres,
+            created_at: own.created_at,
+            visibility: privacy.profile === "public" ? "public" : "private",
+            show_history: privacy.history === true
+          } as Record<string, unknown> & { id: string; username: string; visibility: string };
+        }
+      }
     }
-    return data as Record<string, unknown> & { id: string; username: string; visibility: string };
+
+    // Do not reveal whether a private profile exists to anonymous or other users.
+    await reply.code(404).send(authError(404, "No such profile."));
+    return null;
   }
 
   // ----- cover upload / remove -------------------------------------------
