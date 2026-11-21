@@ -101,7 +101,7 @@ private const val WEB = "https://sonora-web-production-fb072d10.up.railway.app"
  *    request (the server honours it as soon as API-lane lands the parameter);
  *  - data saver → same 96 kbit ceiling plus smaller artwork loading in the rails;
  *  - downloads over cellular → the network constraint of the download worker;
- *  - update notifications → whether SONORA schedules the release check at all;
+ *  - update notifications → whether SONORA alerts the user about a new release;
  *  - interface animations → MotionSettings, which gates every transition in the app.
  */
 @Composable
@@ -262,9 +262,9 @@ fun SettingsCenter(
 
                             "notifications" -> {
                                 ToggleRow(
-                                    0, Icons.Default.Notifications, "Пуш о новых версиях",
-                                    if (notifyUpdates) "Проверка релизов работает в фоне примерно раз в 12 часов."
-                                    else "Фоновая проверка выключена. Проверить вручную можно ниже.",
+                                    0, Icons.Default.Notifications, "Уведомления о новых версиях",
+                                    if (notifyUpdates) "SONORA сообщает о новом релизе после фоновой проверки."
+                                    else "Новые релизы по-прежнему видны в разделе обновлений.",
                                     notifyUpdates
                                 ) {
                                     notifyUpdates = it
@@ -281,11 +281,11 @@ fun SettingsCenter(
                                     scope.launch(Dispatchers.IO) { ProfileApi.pushNotifications(it) }
                                 }
                                 if (!notificationsAllowed) {
-                                    NoteRow(
-                                        "Система запрещает SONORA показывать уведомления: открой Разрешения → " +
-                                            "Уведомления в настройках Android.",
-                                        tone = Warning
-                                    )
+                                    NoteRow("Уведомления SONORA выключены в настройках Android.", tone = Warning)
+                                    TextButton(onClick = {
+                                        context.startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName))
+                                    }) { Text("Настройки уведомлений Android") }
                                 }
                             }
 

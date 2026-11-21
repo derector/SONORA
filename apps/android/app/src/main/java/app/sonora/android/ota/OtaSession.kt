@@ -28,6 +28,7 @@ data class OtaUiState(
     val sheetVisible: Boolean = false,
     /** A manual check is in flight (spinner on the Настройки row). */
     val checking: Boolean = false,
+    val notificationsAllowed: Boolean = false,
     /** The install grant is missing, so the UI shows its explainer before Settings. */
     val needsInstallPermission: Boolean = false,
     /** The APK to hand to the installer once the user is back from Settings. */
@@ -47,6 +48,7 @@ object OtaSession {
         _state.update { current ->
             current.copy(
                 release = available,
+                notificationsAllowed = OtaNotifications.canPost(context),
                 // A release that stopped being an offer also closes its own sheet.
                 sheetVisible = current.sheetVisible && available != null
             )
@@ -54,19 +56,13 @@ object OtaSession {
     }
 
     /**
-     * Handles the intent a notification carried. SHOW_UPDATE opens the in-app sheet for the
-     * stored release; INSTALL_READY resumes straight into the installer for the downloaded
-     * APK. Anything else still refreshes the badge, so the row never lies.
+     * Both update notifications open the in-app sheet so the user can choose the next step.
      */
     fun handleIntent(context: Context, intent: Intent?) {
         when (intent?.action) {
-            MainActivity.ACTION_SHOW_UPDATE -> {
+            MainActivity.ACTION_SHOW_UPDATE, MainActivity.ACTION_INSTALL_READY -> {
                 refresh(context)
                 _state.update { it.copy(sheetVisible = it.release != null) }
-            }
-            MainActivity.ACTION_INSTALL_READY -> {
-                val apk = OtaPreferences.readyApkFile(context)
-                if (apk != null) install(context, apk) else refresh(context)
             }
             else -> refresh(context)
         }
