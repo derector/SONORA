@@ -204,7 +204,7 @@ fun ProfileCenter(
             ) {
                 Box(
                     Modifier
-                        .fillMaxSize()
+                        .matchParentSize()
                         .background(Color(0xFF0A0A0F).copy(alpha = veil * 0.85f))
                 )
                 Column(
