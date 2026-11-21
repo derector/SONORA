@@ -91,10 +91,13 @@ fun UpdateSheet(
     // A finished download goes on to the installer by itself, but only once per attempt,
     // and a cancelled/stale success must not fire the system sheet out of nowhere.
     var installRequestedFor by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(workState, readyFile, release.tagName) {
+    LaunchedEffect(workState, readyFile, release.tagName, info?.id) {
         val file = readyFile
-        val key = file?.absolutePath
-        if (workState == WorkInfo.State.SUCCEEDED && file != null && installRequestedFor != key) {
+        // The APK cache path is intentionally stable across releases. Key the automatic
+        // installer launch to the actual WorkManager attempt and release, not just that path,
+        // otherwise a rejected stale success can suppress the replacement download's install.
+        val key = info?.id?.let { "${release.tagName}:$it:${file?.absolutePath}" }
+        if (workState == WorkInfo.State.SUCCEEDED && file != null && key != null && installRequestedFor != key) {
             installRequestedFor = key
             onInstall(file)
         }
