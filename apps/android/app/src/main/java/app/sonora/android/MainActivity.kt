@@ -798,7 +798,6 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 
 @Composable
 private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
@@ -824,20 +823,55 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
                         modifier = Modifier.padding(top = 12.dp))
                 }
                 items(results.matches, key = { "catalog:${it.provider}:${it.id}" }) { match ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
-                            .clickable { runCatching { uriHandler.openUri(match.url) } }.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
-                                color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                        Text("Источник ↗", color = Lime, fontSize = 12.sp)
-                    }
+                    RecordingMatchCard(match, play)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> Unit) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val scope = rememberCoroutineScope()
+    var finding by remember(match) { mutableStateOf(false) }
+    var status by remember(match) { mutableStateOf("") }
+    var candidate by remember(match) { mutableStateOf<Track?>(null) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
+        Row(
+            Modifier.fillMaxWidth().clickable { runCatching { uriHandler.openUri(match.url) } },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
+                    color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("Источник ↗", color = Lime, fontSize = 12.sp)
+        }
+        val found = candidate
+        if (found == null) {
+            TextButton(enabled = !finding, onClick = {
+                finding = true
+                status = ""
+                scope.launch {
+                    try {
+                        candidate = withContext(Dispatchers.IO) { SonoraApi.findPlayableVersion(match) }
+                        if (candidate == null) status = "Доступная версия не найдена."
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        status = "Не удалось выполнить поиск трека."
+                    } finally {
+                        finding = false
+                    }
+                }
+            }) { Text(if (finding) "Ищем доступную версию…" else "Найти доступную версию", color = Lime) }
+            if (status.isNotBlank()) Text(status, color = Muted, fontSize = 12.sp)
+        } else {
+            Spacer(Modifier.height(8.dp))
+            Text("Возможное совпадение · ${found.title} · ${found.artist} · ${found.provider}", color = Muted, fontSize = 12.sp)
+            TextButton(onClick = { play(found) }) { Text("Воспроизвести", color = Lime) }
         }
     }
 }

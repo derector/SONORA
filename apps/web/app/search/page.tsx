@@ -11,11 +11,75 @@ import { useReveal } from "../../lib/motion";
 
 type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; imageUrl?: string | null; sourceUrl: string };
-type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; releaseDate?: string | null; sourceUrl: string; playable: false };
+type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; isrc?: string | null; releaseDate?: string | null; sourceUrl: string; playable: false };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; providers?: Record<string, ProviderStatus>; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+function RecordingMatch({ item }: { item: Metadata }) {
+  const { t } = useLanguage();
+  const { playTrack } = usePlayer();
+  const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
+  const [candidate, setCandidate] = useState<Track | null>(null);
+
+  async function findPlayableVersion() {
+    setStatus("loading");
+    setCandidate(null);
+    try {
+      const response = await fetch(`${API}/api/v1/discovery/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: item.title, artist: item.artist, isrc: item.isrc,
+          durationSeconds: item.durationSeconds, playbackOnly: true
+        })
+      });
+      if (!response.ok) throw new Error("Track lookup failed");
+      const { playableTrack } = await response.json() as { playableTrack?: Track | null };
+      if (playableTrack?.playable && playableTrack.audioUrl?.startsWith("https://")) {
+        setCandidate(playableTrack);
+        setStatus("idle");
+      } else {
+        setStatus("empty");
+      }
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  return (
+    <article className="surface min-w-0 rounded-card">
+      <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="track-row group min-w-0 max-w-full">
+        <span className="artwork grid h-11 w-11 shrink-0 place-items-center rounded-tile">
+          <Disc3 size={18} className="text-white/50" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="t-row block truncate">{item.title}</span>
+          <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""} · {item.provider}</span>
+        </span>
+        <ExternalLink size={15} className="shrink-0 text-[color:var(--fg-faint)]" />
+      </a>
+      <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
+        {candidate ? (
+          <>
+            <p className="t-meta min-w-0 break-words">{t("Possible match")} · {candidate.title} · {candidate.artist} · {candidate.provider}</p>
+            <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => playTrack(candidate)}>{t("Play")}</button>
+          </>
+        ) : (
+          <button type="button" className="btn-ghost !min-h-9 !px-3" disabled={status === "loading"} onClick={() => void findPlayableVersion()}>
+            {t(status === "error" ? "Try again" : "Find a playable version")}
+          </button>
+        )}
+        <span role="status" className="t-meta">
+          {status === "loading" ? t("Searching connected catalogs…") :
+            status === "empty" ? t("No playable match was found.") :
+            status === "error" ? t("The track lookup failed.") : ""}
+        </span>
+      </div>
+    </article>
+  );
+}
 
 export default function SearchPage() {
   const { t } = useLanguage();
@@ -174,19 +238,7 @@ export default function SearchPage() {
             <p className="t-meta mt-1">{t("Catalog records identify recordings and releases. They do not provide audio playback.")}</p>
           </div>
           <div ref={metaList} className="rv rv-flat rv-stagger-x min-w-0 space-y-0.5">
-            {metadata.map((item) => (
-              <a key={item.id} href={item.sourceUrl} target="_blank" rel="noreferrer" className="track-row group min-w-0 max-w-full">
-                <span className="artwork grid h-11 w-11 shrink-0 place-items-center rounded-tile">
-                  <Disc3 size={18} className="text-white/50" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="t-row block truncate">{item.title}</span>
-                  <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""} · {item.provider}</span>
-                </span>
-                <span className="chip hidden !py-1 text-xs sm:inline-flex">{t("Metadata only")}</span>
-                <ExternalLink size={15} className="shrink-0 text-[color:var(--fg-faint)]" />
-              </a>
-            ))}
+            {metadata.map((item) => <RecordingMatch key={`${item.provider}:${item.id}`} item={item} />)}
           </div>
         </section>
       )}

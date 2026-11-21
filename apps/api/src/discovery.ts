@@ -1154,6 +1154,7 @@ export class DiscoveryInputError extends Error {
 
 export type ResolveInput = {
   artist?: unknown; title?: unknown; isrc?: unknown; durationSeconds?: unknown;
+  playbackOnly?: unknown;
 };
 
 export type ResolvedTrack = {
@@ -1189,44 +1190,51 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
   const isrc = validIsrc(input.isrc);
   const duration = finiteNumber(input.durationSeconds);
   if (!title && !isrc) throw new DiscoveryInputError("Provide at least a title or an ISRC.");
-  const query = (isrc ? `isrc:${isrc}` : [artist, title].filter(Boolean).join(" ")).slice(0, 100);
-  if (!query.trim()) throw new DiscoveryInputError("Provide at least a title or an ISRC.");
+  const playbackOnly = input.playbackOnly === true;
 
   const openAdapters = OPEN_RESOLVE_ADAPTER_IDS
+    .filter((id) => !playbackOnly || id === "independent_collection" || id === "platform_stream_catalog")
     .map((id) => ADAPTER_BY_ID.get(id))
     .filter((adapter): adapter is SourceAdapter => Boolean(adapter && adapter.available(env)));
   const graphAdapter = ADAPTER_BY_ID.get("metadata_graph");
   const previewAdapter = ADAPTER_BY_ID.get("platform_preview");
 
-  const wanted = { artist, title: title ?? "", durationSeconds: duration };
-  const pool = async (adapter: SourceAdapter | undefined): Promise<DiscoveryResult[]> =>
+  const pool = async (adapter: SourceAdapter | undefined, query: string): Promise<DiscoveryResult[]> =>
     adapter && adapter.available(env)
       ? await withinBudget(adapter.search(query, { limit: 8 })).catch(() => [] as DiscoveryResult[])
       : [];
-  const fanOut = await Promise.all([
-    pool(graphAdapter),
-    ...openAdapters.map((adapter) => pool(adapter)),
-    pool(previewAdapter)
-  ]);
-  const graphHits = fanOut[0] ?? [];
-  const openResults = fanOut.slice(1, 1 + openAdapters.length).flat();
-  const previewResults = fanOut[1 + openAdapters.length] ?? [];
+  const graphQuery = isrc ?? [artist, title].filter(Boolean).join(" ").slice(0, 100);
+  const graph = !playbackOnly || !title ? pool(graphAdapter, graphQuery) : Promise.resolve([]);
+  const anchor = title ? undefined : (await graph).find((result) => result.isrc === isrc);
+  const wanted = { artist: artist || anchor?.artist || "", title: title ?? anchor?.title ?? "", durationSeconds: duration ?? anchor?.durationSeconds ?? null };
+  const query = [wanted.artist, wanted.title].filter(Boolean).join(" ").slice(0, 100) || graphQuery;
+  const [graphHits, open, previewResults] = await Promise.all([
+    graph,
+    Promise.allSettled(openAdapters.map((adapter) => withinBudget(adapter.search(query, { limit: 8 })))),
+    playbackOnly ? Promise.resolve([]) : pool(previewAdapter, query)
+  ] as const);
+  if (playbackOnly && !open.some((result) => result.status === "fulfilled")) {
+    throw new Error("Playback catalogs are temporarily unavailable.");
+  }
+  const openResults = open.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 
-  // ISRC first: an exact ISRC hit on an open result is the strongest evidence.
+  // A metadata hit can guide the search, but only an audio candidate's own
+  // identifier confirms that the candidate is the same recording.
   const verifiedByGraph = isrc !== null && graphHits.some((hit) => hit.isrc === isrc);
   const scoredOpen = openResults
-    .filter((result) => result.access === "open" && result.audioUrl)
+    .filter((result) => result.access === "open" && result.audioUrl &&
+      (!playbackOnly || result.audioUrl.startsWith("https://") && (!isrc || !result.isrc || result.isrc === isrc)))
     .map((result) => ({
       result,
       score: isrc && result.isrc === isrc ? Math.max(scoreMatch(toCandidateShape(result), wanted), 0.95)
         : scoreMatch(toCandidateShape(result), wanted),
-      via: (isrc && result.isrc === isrc) || verifiedByGraph && scoreMatch(toCandidateShape(result), wanted) >= 0.8
+      via: isrc && result.isrc === isrc
         ? "isrc" as const
-        : durationAgrees(duration, result.durationSeconds ?? null) && scoreMatch(toCandidateShape(result), wanted) >= 0.7
+        : durationAgrees(wanted.durationSeconds, result.durationSeconds ?? null) && scoreMatch(toCandidateShape(result), wanted) >= 0.7
           ? "meta+duration" as const
           : "title-only" as const
     }))
-    .filter((entry) => entry.score >= RESOLVE_MATCH_THRESHOLD)
+    .filter((entry) => entry.score >= (playbackOnly && wanted.artist ? 0.8 : RESOLVE_MATCH_THRESHOLD))
     .sort((a, b) => b.score - a.score || ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access]);
 
   const bestOpen = scoredOpen[0];
@@ -1313,7 +1321,14 @@ export function registerDiscoveryRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: ResolveInput }>("/api/v1/discovery/resolve", discoveryRateLimit, async (request, reply) => {
     try {
-      return await resolveBestTrack(request.body ?? {}, process.env);
+      const result = await resolveBestTrack(request.body ?? {}, process.env);
+      if (request.body?.playbackOnly !== true) return result;
+      const track = result.track ? licensedCandidate(result.track) : null;
+      const provider = track?.provider === "audius" ? "Audius" : "Jamendo";
+      return {
+        playableTrack: track ? { ...track, id: `${track.provider}:${track.providerTrackId}`, provider } : null,
+        matchedVia: result.matched_via
+      };
     } catch (error) {
       if (error instanceof DiscoveryInputError) return reply.code(400).send({ statusCode: 400, error: error.message });
       request.log.error({ err: error }, "Discovery resolve failed");

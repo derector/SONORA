@@ -366,7 +366,15 @@ object SonoraApi {
             .firstOrNull { it.providerTrackId == providerTrackId || it.id == providerTrackId }
     }
 
-    data class CatalogMatch(val id: String, val provider: String, val title: String, val artist: String, val url: String)
+    data class CatalogMatch(
+        val id: String,
+        val provider: String,
+        val title: String,
+        val artist: String,
+        val url: String,
+        val isrc: String?,
+        val durationSeconds: Int?
+    )
     data class MusicSearch(val tracks: List<Track> = emptyList(), val matches: List<CatalogMatch> = emptyList())
 
     fun search(query: String): MusicSearch {
@@ -382,10 +390,24 @@ object SonoraApi {
                 val source = android.net.Uri.parse(url)
                 if (id.isBlank() || title.isBlank() || source.scheme != "https" ||
                     source.host !in setOf("musicbrainz.org", "open.spotify.com")) continue
-                add(CatalogMatch(id, item.optString("provider"), title, item.optString("artist"), url))
+                val isrc = item.optString("isrc").takeIf { it.isNotBlank() && it != "null" }
+                val duration = item.optInt("durationSeconds").takeIf { it > 0 }
+                add(CatalogMatch(id, item.optString("provider"), title, item.optString("artist"), url, isrc, duration))
             }
         }
         return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches)
+    }
+
+    fun findPlayableVersion(match: CatalogMatch): Track? {
+        val body = JSONObject()
+            .put("title", match.title)
+            .put("artist", match.artist)
+            .put("isrc", match.isrc)
+            .put("durationSeconds", match.durationSeconds)
+            .put("playbackOnly", true)
+        val result = request("/api/v1/discovery/resolve", method = "POST", body = body)
+        val candidate = result.optJSONObject("playableTrack") ?: return null
+        return parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable }
     }
 
     private fun parseTracks(array: org.json.JSONArray?): List<Track> {

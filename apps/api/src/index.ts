@@ -1131,7 +1131,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
           spotifyMetadata.push({
             id: `spotify:${best.externalId}`, provider: "Spotify", title: best.title,
             artist: best.artist, album: best.album, durationSeconds: best.durationSeconds,
-            sourceUrl: best.sourcePageUrl, playable: false
+            sourceUrl: best.sourcePageUrl, isrc: best.isrc, playable: false
           });
         }
       })());
@@ -1214,7 +1214,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { recordings?: Array<{
-          id: string; title: string; length?: number; "first-release-date"?: string;
+          id: string; title: string; length?: number; isrcs?: string[]; "first-release-date"?: string;
           "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
           releases?: Array<{ title?: string }>;
         }> };
@@ -1224,7 +1224,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
             artist: (item["artist-credit"] ?? []).map((credit) => credit.name ?? credit.artist?.name ?? "").filter(Boolean).join(" "),
             album: item.releases?.[0]?.title ?? null, durationSeconds: item.length ? Math.round(item.length / 1000) : null,
             releaseDate: item["first-release-date"] ?? null,
-            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, playable: false
+            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, isrc: validIsrc(item.isrcs?.[0]), playable: false
           });
         }
         providers.musicbrainz = { ok: true, count: metadata.length };
@@ -1304,7 +1304,7 @@ import { rankRecommendations, type TasteSignal } from "./recommendation-core.js"
 import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 // Universal Music Discovery & Import Engine: adapters, grouping, resolve.
-import { registerDiscoveryRoutes, runDiscoverySearch } from "./discovery.js";
+import { registerDiscoveryRoutes, runDiscoverySearch, validIsrc } from "./discovery.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
   const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));
