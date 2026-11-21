@@ -4,6 +4,7 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
+import { createLicensedCatalog } from "./licensed-catalog.js";
 import {
   ACCENT_PRESETS, PROFILE_AVATAR_BODY_LIMIT, PROFILE_ROLES, normalizeGenres, normalizeLinks,
   normalizePrivacy, readProfile, registerProfileRoutes
@@ -11,6 +12,7 @@ import {
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
+const licensedCatalog = createLicensedCatalog(process.env);
 
 await app.register(cookie);
 await app.register(cors, {
@@ -1146,6 +1148,24 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
   })();
 
   const tasks: Array<Promise<void>> = [];
+  if (licensedCatalog.configured) {
+    tasks.push((async () => {
+      try {
+        const matches = await licensedCatalog.search(q, limit, type === "artists");
+        if (type !== "artists") tracks.unshift(...matches);
+        if (inApp || type !== "tracks") {
+          const artistNames = new Map(matches.filter((item) => matchesCatalogSearch(q, item.artist))
+            .map((item) => [catalogSearchKey(item.artist), item.artist]));
+          for (const [key, name] of artistNames) {
+            artists.push({ id: `sonora-artist:${key}`, provider: "SONORA", name });
+          }
+        }
+        providers.sonora = { ok: true, count: matches.length };
+      } catch {
+        providers.sonora = { ok: false, count: 0, error: "Licensed catalog temporarily unavailable." };
+      }
+    })());
+  }
   if (type !== "artists") {
     if (!inApp && process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
       tasks.push((async () => {
@@ -1584,7 +1604,8 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
 // Server-side music import from other platforms (public links + export files).
 registerImportRoutes(app);
 // Multi-source discovery (GET /discovery/search, POST /discovery/resolve).
-registerDiscoveryRoutes(app);
+licensedCatalog.register(app);
+registerDiscoveryRoutes(app, licensedCatalog);
 
 try {
   registerProfileRoutes(app, { authClient, authError, requireUser });

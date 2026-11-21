@@ -13,5 +13,6 @@ data class Track(
     val downloadUrl: String? = null,
     val licenseUrl: String? = null,
     val sourceUrl: String? = null,
-    val playable: Boolean = false
+    val playable: Boolean = false,
+    val rightsHolder: String? = null
 )

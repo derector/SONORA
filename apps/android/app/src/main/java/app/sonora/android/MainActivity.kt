@@ -927,8 +927,7 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         enqueueDownload()
     }
-    // The provider field stays internal (routing, resolve, download eligibility); a row
-    // only ever shows title, artist, artwork and duration. Tracks whose source cannot be
+    // Rows can show a licensed recording's attribution. Tracks whose source cannot be
     // delivered (for example a cleartext stream URL rejected by the manifest policy) are
     // labelled and tinted as unavailable instead of offering a playback attempt.
     val available = track.playable && !track.audioUrl.isNullOrBlank()
@@ -941,6 +940,9 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            track.rightsHolder?.let {
+                Text(it, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             if (isDownloading) {
                 Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
             } else if (workState == WorkInfo.State.FAILED) {

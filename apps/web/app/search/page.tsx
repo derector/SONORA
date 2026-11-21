@@ -197,6 +197,7 @@ export default function SearchPage() {
               <TrackRow
                 key={track.id}
                 track={track}
+                meta={track.provider === "SONORA" && track.rightsLabel ? `${track.artist} · ${track.rightsLabel}` : undefined}
                 isCurrent={currentTrack?.id === track.id}
                 isPlaying={isPlaying}
                 disabled={!track.playable || !track.audioUrl}

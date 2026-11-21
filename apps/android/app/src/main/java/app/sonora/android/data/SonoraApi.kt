@@ -358,6 +358,7 @@ object SonoraApi {
     fun resolveTrack(provider: String, providerTrackId: String): Track? {
         val encodedId = java.net.URLEncoder.encode(providerTrackId, "UTF-8")
         val path = when (provider.lowercase()) {
+            "sonora" -> "/api/v1/providers/sonora/tracks?id=$encodedId"
             "audius" -> "/api/v1/providers/audius/tracks?id=$encodedId"
             "jamendo" -> "/api/v1/providers/jamendo/tracks?id=$encodedId"
             else -> return null
@@ -406,7 +407,7 @@ object SonoraApi {
                 val id = item.optString("id")
                 val name = item.optString("name")
                 val handle = item.optString("handle").takeIf { it.isNotBlank() && it != "null" }
-                if (id.isBlank() || name.isBlank() || item.optString("provider") != "Audius") continue
+                if (id.isBlank() || name.isBlank() || item.optString("provider") !in setOf("Audius", "SONORA")) continue
                 add(CatalogArtist(id, name, handle ?: name, item.optInt("trackCount", -1).takeIf { it >= 0 }))
             }
         }
@@ -459,7 +460,10 @@ object SonoraApi {
                 // The track keeps all of its metadata but is reported through the existing
                 // availability flag, so every screen shows it as unavailable instead of
                 // starting a playback attempt that can never succeed.
-                playable = audioUrl != null && item.optBoolean("playable", true)
+                playable = audioUrl != null && item.optBoolean("playable", true),
+                rightsHolder = item.optString("rightsLabel").takeIf {
+                    item.optString("provider") == "SONORA" && it.isNotBlank() && it != "null"
+                }
             )
         }
         return tracks

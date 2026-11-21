@@ -15,6 +15,7 @@
 // must never construct a full-track URL for commercial platforms.
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { createLicensedCatalog } from "./licensed-catalog.js";
 import { createPrivateKey, createSign } from "node:crypto";
 import {
   jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
@@ -1300,7 +1301,7 @@ export function licensedCandidate(result: DiscoveryResult): JamendoCandidate | n
 // HTTP registration (called from index.ts)
 // ---------------------------------------------------------------------------
 
-export function registerDiscoveryRoutes(app: FastifyInstance): void {
+export function registerDiscoveryRoutes(app: FastifyInstance, licensedCatalog: ReturnType<typeof createLicensedCatalog>): void {
   const discoveryRateLimit = {
     config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 30, timeWindow: "1 minute" } }
   };
@@ -1321,6 +1322,10 @@ export function registerDiscoveryRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: ResolveInput }>("/api/v1/discovery/resolve", discoveryRateLimit, async (request, reply) => {
     try {
+      if (request.body?.playbackOnly === true && licensedCatalog.configured) {
+        const licensed = await licensedCatalog.match(request.body).catch(() => null);
+        if (licensed) return licensed;
+      }
       const result = await resolveBestTrack(request.body ?? {}, process.env);
       if (request.body?.playbackOnly !== true) return result;
       const track = result.track ? licensedCandidate(result.track) : null;
