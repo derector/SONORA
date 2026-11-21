@@ -26,7 +26,7 @@ CREATE UNIQUE INDEX public_profiles_username_lower_idx
   ON public.public_profiles (lower(username));
 
 ALTER TABLE public.public_profiles ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE public.public_profiles FROM anon, authenticated;
+REVOKE ALL ON TABLE public.public_profiles FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE public.public_profiles TO anon, authenticated;
 CREATE POLICY "Public profiles are readable"
   ON public.public_profiles FOR SELECT TO anon, authenticated USING (true);
