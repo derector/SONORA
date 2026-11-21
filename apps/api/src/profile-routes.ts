@@ -11,7 +11,7 @@ export type ProfileRouteDeps = {
   requireUser: (
     request: FastifyRequest,
     reply: FastifyReply
-  ) => Promise<{ client: SupabaseClient; user: { id: string } } | null>;
+  ) => Promise<{ client: SupabaseClient; user: { id: string; email?: string | null } } | null>;
   authError: (statusCode: number, message: string) => { statusCode: number; error: string };
 };
 
@@ -19,7 +19,7 @@ export type ProfileRouteDeps = {
 export const ACCENT_PRESETS = ["aurora", "violet", "ocean", "sunset", "forest", "mono"] as const;
 export const PROFILE_ROLES = ["listener", "creator", "curator", "dj"] as const;
 export const PROFILE_COLUMNS =
-  "id,email,username,display_name,avatar_url,cover_url,bio,accent,role,status,links,privacy,favorite_genres,created_at,updated_at";
+  "id,username,display_name,avatar_url,cover_url,bio,accent,role,status,links,privacy,favorite_genres,created_at,updated_at";
 export const PROFILE_AVATAR_BODY_LIMIT = 3_000_000;
 export const PROFILE_COVER_BODY_LIMIT = 4_500_000;
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -108,9 +108,9 @@ function genresOr(value: unknown): string[] {
   return "genres" in result ? result.genres : [];
 }
 
-export function mapProfile(row: Record<string, unknown>, includeExtended = true) {
+export function mapProfile(row: Record<string, unknown>, includeExtended = true, email?: string | null) {
   const profile = {
-    id: row.id, email: row.email, username: row.username,
+    id: row.id, email: email ?? null, username: row.username,
     displayName: row.display_name, avatarUrl: row.avatar_url ?? null,
     createdAt: row.created_at
   };
@@ -126,20 +126,20 @@ export function mapProfile(row: Record<string, unknown>, includeExtended = true)
   };
 }
 
-const BASE_PROFILE_COLUMNS = "id,email,username,display_name,avatar_url,created_at";
+const BASE_PROFILE_COLUMNS = "id,username,display_name,avatar_url,created_at";
 
 /**
  * Reads one profile row, tolerating deployments where migration 010 has not
  * landed yet: the Profile Center columns are simply reported as defaults.
  */
-export async function readProfile(client: SupabaseClient, userId: string) {
+export async function readProfile(client: SupabaseClient, userId: string, email?: string | null) {
   const full = await client.from("users").select(PROFILE_COLUMNS).eq("id", userId).single();
   if (!full.error && full.data) {
-    return { user: mapProfile(full.data as unknown as Record<string, unknown>), partial: false };
+    return { user: mapProfile(full.data as unknown as Record<string, unknown>, true, email), partial: false };
   }
   const base = await client.from("users").select(BASE_PROFILE_COLUMNS).eq("id", userId).single();
   if (base.error || !base.data) return { user: null, partial: true };
-  return { user: mapProfile(base.data as unknown as Record<string, unknown>, false), partial: true };
+  return { user: mapProfile(base.data as unknown as Record<string, unknown>, false, email), partial: true };
 }
 
 // ---------------------------------------------------------------------------
@@ -546,7 +546,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         request.log.error({ code: error?.code }, "Cover profile update failed");
         return reply.code(400).send(authError(400, "Cover uploaded but the profile could not be updated."));
       }
-      return { user: mapProfile(data as Record<string, unknown>) };
+      return { user: mapProfile(data as Record<string, unknown>, true, auth.user.email) };
     }
   );
 
@@ -559,7 +559,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       .update({ cover_url: null, updated_at: new Date().toISOString() })
       .eq("id", auth.user.id).select(PROFILE_COLUMNS).single();
     if (error || !data) return reply.code(400).send(authError(400, "Could not remove the cover image."));
-    return { user: mapProfile(data as Record<string, unknown>) };
+    return { user: mapProfile(data as Record<string, unknown>, true, auth.user.email) };
   });
 
   app.delete("/api/v1/profile/avatar", uploadLimit, async (request, reply) => {
@@ -572,7 +572,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       .update({ avatar_url: null, updated_at: new Date().toISOString() })
       .eq("id", auth.user.id).select(PROFILE_COLUMNS).single();
     if (error || !data) return reply.code(400).send(authError(400, "Could not remove the avatar."));
-    return { user: mapProfile(data as Record<string, unknown>) };
+    return { user: mapProfile(data as Record<string, unknown>, true, auth.user.email) };
   });
 
   // ----- own stats --------------------------------------------------------
@@ -811,7 +811,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       const items = (found.data ?? []) as Array<Record<string, unknown>>;
       const ids = items.map((item) => String(item.id));
       const stats = ids.length
-        ? await client.from("public_profile_stats").select("user_id,followers").in("user_id", ids)
+        ? await client.rpc("get_public_profile_stats", { target_ids: ids })
         : { data: [] };
       const followers = new Map<string, number>(
         ((stats.data ?? []) as Array<{ user_id: string; followers: number }>)
@@ -839,7 +839,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
       }
       const client = authClient();
       const [stats, playlists] = await Promise.all([
-        client.from("public_profile_stats").select("*").eq("user_id", target.id).maybeSingle(),
+        client.rpc("get_public_profile_stats", { target_ids: [target.id] }),
         client.from("playlists").select("id,title,description,updated_at")
           .eq("owner_id", target.id).eq("is_public", true)
           .order("updated_at", { ascending: false }).limit(6)
@@ -871,7 +871,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRouteDe
         isFollowing = Boolean(outgoing.data);
         followsViewer = Boolean(incoming.data);
       }
-      const counts = (stats.data ?? {}) as Record<string, number>;
+      const counts = (((stats.data ?? []) as Array<Record<string, number>>)[0] ?? {}) as Record<string, number>;
       return {
         profile: {
           id: target.id,
