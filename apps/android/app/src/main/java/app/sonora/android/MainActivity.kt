@@ -620,7 +620,7 @@ private fun SonoraApp() {
                         update = ota.release,
                         checking = ota.checking,
                         lastCheckedAt = OtaUpdate.lastCheckedAt(context),
-                        notificationsAllowed = OtaNotifications.canPost(context),
+                        notificationsAllowed = ota.notificationsAllowed,
                         signedIn = authStep == "signed",
                         email = email,
                         onCheck = { OtaSession.checkNow(context) },

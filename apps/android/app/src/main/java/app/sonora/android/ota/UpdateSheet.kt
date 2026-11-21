@@ -22,12 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -80,22 +77,10 @@ fun UpdateSheet(
     val downloaded = info?.progress?.getLong(UpdateDownloadWorker.DOWNLOADED, 0L) ?: 0L
     val total = info?.progress?.getLong(UpdateDownloadWorker.TOTAL, 0L) ?: release.apk?.size ?: 0L
     val failure = info?.outputData?.getString(UpdateDownloadWorker.ERROR).orEmpty()
-    val readyPath = info?.outputData?.getString(UpdateDownloadWorker.APK_PATH)
-    val readyFile = remember(readyPath, workState) {
-        readyPath?.let(::File)?.takeIf { it.isFile }
-    }
-
-    // A finished download goes on to the installer by itself, but only once per attempt,
-    // and a cancelled/stale success must not fire the system sheet out of nowhere.
-    var installRequestedFor by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(workState, readyFile, release.tagName, info?.id) {
-        val file = readyFile
-        // Each completed attempt can launch the installer automatically once.
-        val key = info?.id?.let { "${release.tagName}:$it:${file?.absolutePath}" }
-        if (workState == WorkInfo.State.SUCCEEDED && file != null && key != null && installRequestedFor != key) {
-            installRequestedFor = key
-            onInstall(file)
-        }
+    val downloading = workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.ENQUEUED ||
+        workState == WorkInfo.State.BLOCKED
+    val readyFile = if (downloading) null else {
+        OtaPreferences.readyApkFile(context, release.tagName)
     }
 
     val notes = chopNotes(release.notes)
@@ -132,8 +117,7 @@ fun UpdateSheet(
             }
 
             when {
-                workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.ENQUEUED ||
-                    workState == WorkInfo.State.BLOCKED -> {
+                downloading -> {
                     LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp), color = SheetLime, trackColor = Color(0xFF26283B))
                     Text(
                         if (progress >= 0) "Загрузка обновления… $progress%"
@@ -143,10 +127,13 @@ fun UpdateSheet(
                         modifier = Modifier.padding(top = 8.dp)
                     )
                 }
+                readyFile != null -> {
+                    Text("APK скачан и готов к установке.", color = SheetLime, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                }
                 workState == WorkInfo.State.FAILED && failure.isNotBlank() -> {
                     Text(failure, color = SheetError, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                 }
-                workState == WorkInfo.State.SUCCEEDED && readyFile == null -> {
+                workState == WorkInfo.State.SUCCEEDED -> {
                     Text("Файл обновления потерян. Скачай его заново.", color = SheetError, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                 }
             }
@@ -156,14 +143,13 @@ fun UpdateSheet(
                     Text("Не сейчас", color = SheetMuted)
                 }
                 when {
-                    workState == WorkInfo.State.RUNNING || workState == WorkInfo.State.ENQUEUED ||
-                        workState == WorkInfo.State.BLOCKED ->
+                    downloading ->
                         Button(
                             onClick = onCancelDownload,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A2C44), contentColor = Color.White),
                             modifier = Modifier.weight(1f)
                         ) { Text("Отменить") }
-                    workState == WorkInfo.State.SUCCEEDED && readyFile != null ->
+                    readyFile != null ->
                         Button(
                             onClick = { onInstall(readyFile) },
                             colors = ButtonDefaults.buttonColors(containerColor = SheetLime, contentColor = Color(0xFF080910)),
@@ -172,7 +158,6 @@ fun UpdateSheet(
                     else ->
                         Button(
                             onClick = {
-                                installRequestedFor = null
                                 if (workState == WorkInfo.State.FAILED) onDownloadAgain() else onUpdate()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = SheetLime, contentColor = Color(0xFF080910)),

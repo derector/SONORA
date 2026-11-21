@@ -18,6 +18,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import app.sonora.android.BuildConfig
 import app.sonora.android.data.SonoraApi
 import app.sonora.android.download.TrackDownloadWorker
+import app.sonora.android.ui.SonoraPrefs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,7 +40,7 @@ object OtaUpdate {
     const val UNIQUE_STARTUP_CHECK = "sonora-release-check-startup"
     const val UNIQUE_DOWNLOAD = "sonora-update-download"
 
-    private const val CHECK_PERIOD_HOURS = 12L
+    private const val CHECK_PERIOD_HOURS = 1L
     private const val STARTUP_DELAY_SECONDS = 25L
 
     sealed interface CheckResult {
@@ -57,21 +58,16 @@ object OtaUpdate {
     }
 
     /**
-     * Registers the background schedule: a 12-hour lookup over an unmetered connection plus
-     * one quick pass shortly after a cold start.
-     *
-     * KEEP on both: relaunching the app must never stack checks, and the unauthenticated
-     * GitHub quota (60 requests per hour and IP) plus exponential backoff keeps the periodic
-     * work far from it. The startup pass uses CONNECTED because a user who just opened the
-     * app on mobile data should still be told about a fix; it is one request per cold start.
+     * Checks roughly hourly and shortly after a cold start, on Wi-Fi or mobile data.
+     * UPDATE migrates schedules installed by previous builds without stacking workers.
      */
     fun schedule(context: Context) {
         val workManager = WorkManager.getInstance(context)
         workManager.enqueueUniquePeriodicWork(
             UNIQUE_PERIODIC_CHECK,
-            ExistingPeriodicWorkPolicy.KEEP,
+            ExistingPeriodicWorkPolicy.UPDATE,
             PeriodicWorkRequestBuilder<ReleaseCheckWorker>(CHECK_PERIOD_HOURS, TimeUnit.HOURS)
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).build())
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
                 .build()
         )
@@ -130,7 +126,9 @@ object OtaUpdate {
             return@withContext CheckResult.UpToDate
         }
         if (OtaPreferences.isDismissed(context, release.tagName)) return@withContext CheckResult.Dismissed(release)
-        if (notify) OtaNotifications.postUpdateAvailable(context, release)
+        if (notify && SonoraPrefs.bool(context, SonoraPrefs.NOTIFY_UPDATES, true)) {
+            OtaNotifications.postUpdateAvailable(context, release)
+        }
         CheckResult.UpdateAvailable(release)
     }
 
@@ -248,15 +246,17 @@ object OtaUpdate {
 
 /** Background release lookup; posts the "update available" notification. */
 class ReleaseCheckWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
-    override suspend fun doWork(): Result =
-        when (val outcome = OtaUpdate.check(applicationContext, notify = true)) {
-            // 403/429 rate limits and transient network faults deserve a retry; after a few
-            // attempts the next scheduled pass in 12 hours is the retry anyway.
+    override suspend fun doWork(): Result {
+        val outcome = OtaUpdate.check(applicationContext, notify = true)
+        OtaSession.refresh(applicationContext)
+        return when (outcome) {
+            // Rate limits and transient network faults get a bounded retry.
             is OtaUpdate.CheckResult.Failed ->
                 if (runAttemptCount < 3) Result.retry()
                 else Result.failure(workDataOf(UpdateDownloadWorker.ERROR to outcome.reason))
             else -> Result.success()
         }
+    }
 }
 
 /**

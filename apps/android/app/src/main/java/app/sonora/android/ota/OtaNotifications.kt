@@ -65,8 +65,9 @@ object OtaNotifications {
     }
 
     /** Tapping this notification opens the in-app UpdateSheet — never a browser. */
+    @Synchronized
     fun postUpdateAvailable(context: Context, release: ReleaseInfo) {
-        if (!canPost(context)) return
+        if (!canPost(context) || OtaPreferences.notifiedTag(context) == release.tagName) return
         val notification = builder(context, CHANNEL_UPDATES, "Доступно обновление SONORA")
             .setContentText("Версия ${release.versionLabel} (${release.apkSizeLabel}). Нажми, чтобы обновить в приложении.")
             .setStyle(
@@ -79,13 +80,14 @@ object OtaNotifications {
             .setAutoCancel(true)
             .build()
         runCatching { NotificationManagerCompat.from(context).notify(ID_UPDATE_AVAILABLE, notification) }
+            .onSuccess { OtaPreferences.rememberNotifiedTag(context, release.tagName) }
     }
 
-    /** The APK is on disk; tapping resumes straight into the system installer. */
+    /** The APK is on disk; tapping opens the sheet with its install button. */
     fun postUpdateReady(context: Context, tag: String) {
         if (!canPost(context)) return
         val notification = builder(context, CHANNEL_UPDATES, "Обновление готово к установке")
-            .setContentText("SONORA ${tag.removePrefix("v")} скачана. Нажми, чтобы продолжить установку.")
+            .setContentText("SONORA ${tag.removePrefix("v")} скачана. Открой SONORA и нажми «Установить».")
             .setContentIntent(openApp(context, MainActivity.ACTION_INSTALL_READY, tag))
             .setCategory(Notification.CATEGORY_SYSTEM)
             .setAutoCancel(true)

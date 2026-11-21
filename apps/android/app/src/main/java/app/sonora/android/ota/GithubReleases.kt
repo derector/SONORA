@@ -12,7 +12,7 @@ import java.io.IOException
  * No token, no Firebase, no third-party service: the unauthenticated `releases/latest`
  * endpoint is enough, and it already excludes drafts and prereleases, which is exactly what
  * must reach a stable installation. Rate limiting (60 requests per hour per IP) is respected
- * by the caller: the check runs from WorkManager on a 12-hour schedule, plus one explicit
+ * by the caller: the check runs periodically through WorkManager, plus one explicit
  * request per tap on «Проверить обновления».
  *
  * Transport and JSON follow the existing data-layer style (plain OkHttp + org.json, see
