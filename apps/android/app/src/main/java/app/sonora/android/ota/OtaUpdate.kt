@@ -53,7 +53,7 @@ private fun hasCompatibleSigningCertificate(installed: PackageInfo, downloaded: 
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         val installedSigning = installed.signingInfo ?: return false
         val downloadedSigning = downloaded.signingInfo ?: return false
-        if (installedSigning.hasMultipleSigners || downloadedSigning.hasMultipleSigners) {
+        if (installedSigning.hasMultipleSigners() || downloadedSigning.hasMultipleSigners()) {
             sameSignerSet(installedSigning.apkContentsSigners, downloadedSigning.apkContentsSigners)
         } else {
             val installedCurrentSigner = installedSigning.apkContentsSigners.singleOrNull() ?: return false
