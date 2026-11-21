@@ -5,16 +5,25 @@ import { registerProfileRoutes } from "../dist/profile-routes.js";
 
 function fixture(visibility = "private") {
   const queries = [];
-  const target = { id: "owner", username: "alex", display_name: "Alex", visibility, show_history: false };
-  const client = {
-    auth: { getUser: async (token) => ({ data: { user: token === "owner-token" ? { id: "owner" } : { id: "other" } } }) },
+  const own = {
+    id: "owner", username: "alex", display_name: "Alex",
+    privacy: { profile: visibility, history: false },
+    bio: null, links: [], favorite_genres: [], created_at: "2026-01-01T00:00:00Z"
+  };
+  const publicTarget = visibility === "public"
+    ? { ...own, visibility: "public", show_history: false }
+    : null;
+  const clientFor = (token) => ({
+    auth: { getUser: async (value) => ({ data: { user: value === "owner-token" ? { id: "owner" } : { id: "other" } } }) },
     from(table) {
       queries.push(table);
       const chain = {
         select() { return this; }, eq() { return this; }, order() { return this; },
         async maybeSingle() {
-          if (table !== "public_profiles") throw new Error(`Unexpected private read: ${table}`);
-          return { data: target, error: null };
+          if (table === "public_profiles") return { data: publicTarget, error: null };
+          if (table === "users") return { data: token === "owner-token" ? own : null, error: null };
+          if (table === "playlists") return { data: null, error: null };
+          throw new Error(`Unexpected private read: ${table}`);
         },
         async limit() {
           assert.equal(table, "playlists");
@@ -23,10 +32,10 @@ function fixture(visibility = "private") {
       };
       return chain;
     }
-  };
+  });
   const app = Fastify();
   registerProfileRoutes(app, {
-    authClient: () => client,
+    authClient: (token) => clientFor(token),
     requireUser: async (_request, reply) => { reply.code(401).send({ error: "Sign in" }); return null; },
     authError: (statusCode, error) => ({ statusCode, error })
   });
@@ -38,9 +47,8 @@ for (const suffix of ["", "/playlists", "/followers", "/following"]) {
     const { app, queries } = fixture();
     try {
       const result = await app.inject({ method: "GET", url: `/api/v1/users/alex${suffix}` });
-      assert.equal(result.statusCode, 403);
-      assert.match(result.json().error, /private/i);
-      assert.deepEqual(queries, ["public_profiles"], "No history, follows or playlists query may run");
+      assert.equal(result.statusCode, 404);
+      assert.deepEqual(queries, ["public_profiles"], "No private profile, history, follows or playlists query may run");
     } finally { await app.close(); }
   });
 }
@@ -49,8 +57,8 @@ test("another signed-in viewer cannot read a private follower list", async () =>
   const { app, queries } = fixture();
   try {
     const result = await app.inject({ method: "GET", url: "/api/v1/users/alex/followers", headers: { authorization: "Bearer viewer-token" } });
-    assert.equal(result.statusCode, 403);
-    assert.deepEqual(queries, ["public_profiles"]);
+    assert.equal(result.statusCode, 404);
+    assert.deepEqual(queries, ["public_profiles", "users"]);
   } finally { await app.close(); }
 });
 
@@ -68,6 +76,6 @@ test("unknown visibility fails closed", async () => {
   try {
     const result = await app.inject({ method: "GET", url: "/api/v1/users/alex/playlists" });
     assert.equal(result.statusCode, 403);
-    assert.deepEqual(queries, ["public_profiles"]);
+    assert.deepEqual(queries, ["public_profiles", "users"]);
   } finally { await app.close(); }
 });
