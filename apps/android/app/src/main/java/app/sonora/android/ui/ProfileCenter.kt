@@ -359,10 +359,7 @@ fun ProfileCenter(
             }
 
             SectionLabel("Исполнители", 22.dp)
-            EmptyHint(
-                "Подписки на артистов ещё не подключены: как только /followed_artists появится " +
-                    "в API, новые релизы и подборки по любимым исполнителям встанут сюда."
-            )
+            EmptyHint("Подписки на исполнителей появятся здесь, когда эта функция станет доступна.")
 
             if (busy) {
                 Box(Modifier.fillMaxWidth().padding(18.dp), contentAlignment = Alignment.Center) {
