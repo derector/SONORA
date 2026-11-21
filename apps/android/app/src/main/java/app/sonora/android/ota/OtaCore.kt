@@ -139,6 +139,10 @@ fun selectApkAsset(assets: List<ReleaseAsset>, preferredName: String = PREFERRED
  */
 fun chopNotes(notes: String?, limit: Int = NOTES_LIMIT): String {
     val cleaned = notes.orEmpty()
+        // GitHub release bodies sometimes contain escaped newline characters literally.
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\r", "\n")
         .replace("\r\n", "\n")
         .split('\n')
         .joinToString(" ") { line ->
