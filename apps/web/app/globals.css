@@ -42,6 +42,9 @@
   --accent-teal: #14b8a6;
   --accent-grad: linear-gradient(120deg, #8b5cf6 0%, #7d6ef2 48%, #14b8a6 135%);
   --accent-ink: #0b0d14;
+  --glass-edge: rgba(220, 221, 255, .18);
+  --glass-fill: linear-gradient(145deg, rgba(43, 39, 68, .93), rgba(14, 17, 28, .96) 58%, rgba(16, 37, 43, .94));
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .13), inset 0 -1px 0 rgba(118, 210, 213, .08);
 
   /* Motion */
   --dur-fast: 180ms;
@@ -340,6 +343,31 @@ img, video, canvas, svg { max-width: 100%; }
    ========================================================================= */
 .sonora-workspace { isolation: isolate; }
 .sonora-sidebar { border-color: var(--border-soft); }
+
+.sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+  background: var(--glass-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-highlight), 0 12px 38px rgba(3, 5, 13, .36);
+}
+
+.sonora-topbar { border-radius: 0 0 var(--r-panel) var(--r-panel); }
+.sonora-sidebar a[aria-current="page"] {
+  background: linear-gradient(112deg, rgba(150, 113, 249, .23), rgba(128, 213, 219, .08));
+  box-shadow: inset 0 1px 0 rgba(226, 221, 255, .12);
+}
+
+.sonora-workspace .nav-pill {
+  background: linear-gradient(145deg, rgba(188, 157, 255, .34), rgba(89, 126, 170, .19));
+  box-shadow: var(--glass-highlight), inset 0 0 0 1px rgba(215, 201, 255, .14);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+    --glass-fill: linear-gradient(145deg, rgba(43, 39, 68, .78), rgba(14, 17, 28, .82) 58%, rgba(16, 37, 43, .76));
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    backdrop-filter: blur(20px) saturate(135%);
+  }
+}
 .sonora-sidebar a:focus-visible,
 .sonora-mobile-nav a:focus-visible,
 button:focus-visible,

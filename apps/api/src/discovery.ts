@@ -7,8 +7,7 @@
 //   open        — licensed full audio SONORA may stream (CC/PD catalogs,
 //                 Jamendo, Audius public streams, Internet Archive, Openverse,
 //                 ccMixter).
-//   preview     — official short platform preview (iTunes 30s AAC, Deezer
-//                 preview, Spotify preview_url when the API still provides one).
+//   preview     — official short preview where the provider permits this use.
 //   stream_only — playable only through the source's official player/embed.
 //   external    — we may only link to the source page.
 //   metadata    — identifiers/credits only, no audio at all.
@@ -668,37 +667,37 @@ async function spotifyAccessToken(clientId: string, clientSecret: string): Promi
 const spotifySearchAdapter: SourceAdapter = {
   id: "commercial_streaming",
   label: "commercial_streaming",
-  available: (env) => Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
-  async search(query, { limit }, ) {
+  available: (env) => Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET &&
+    /^[A-Z]{2}$/.test(env.SPOTIFY_CATALOG_MARKET ?? "")),
+  async search(query, { limit }) {
     const clientId = process.env.SPOTIFY_CLIENT_ID ?? "";
     const secret = process.env.SPOTIFY_CLIENT_SECRET ?? "";
     const token = await spotifyAccessToken(clientId, secret);
-    const params = new URLSearchParams({ q: query, type: "track", limit: String(Math.min(30, limit)) });
+    const params = new URLSearchParams({
+      q: query, type: "track", limit: String(Math.min(10, limit)), market: process.env.SPOTIFY_CATALOG_MARKET ?? ""
+    });
     const payload = await fetchJson<{ tracks?: { items?: Array<{
-      id: string; name: string; duration_ms?: number; preview_url?: string | null;
-      artists?: Array<{ name?: string }>; album?: { name?: string; images?: Array<{ url?: string }> };
-      external_urls?: { spotify?: string };
+      id: string; name: string; duration_ms?: number;
+      artists?: Array<{ name?: string }>;
+      album?: { name?: string; release_date?: string; images?: Array<{ url?: string }> };
+      external_ids?: { isrc?: string };
     }> } }>(`https://api.spotify.com/v1/search?${params.toString()}`, 8000, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return (payload.tracks?.items ?? []).flatMap((track) => {
       if (!track.id || !track.name) return [];
-      // Official 30s preview only when the API itself still hands one out.
-      // Full audio is NEVER surfaced: Playback SDK integration (out of scope
-      // here, see README note) is the only sanctioned playback path.
-      const preview = typeof track.preview_url === "string" && track.preview_url.startsWith("https://")
-        ? track.preview_url : null;
       return [{
         sourceId: this.id, externalId: track.id, title: track.name,
         artist: (track.artists ?? []).map((a) => a.name).filter(Boolean).join(", ") || "Unknown artist",
         album: track.album?.name ?? null,
         durationSeconds: track.duration_ms ? Math.round(track.duration_ms / 1000) : null,
         artworkUrl: track.album?.images?.[0]?.url ?? null,
-        audioUrl: null, previewUrl: preview,
-        sourcePageUrl: track.external_urls?.spotify ?? `https://open.spotify.com/track/${track.id}`,
+        audioUrl: null, previewUrl: null,
+        sourcePageUrl: `https://open.spotify.com/track/${encodeURIComponent(track.id)}`,
         licenseUrl: null,
-        access: preview ? "preview" as const : "external" as const,
-        isrc: null, releaseYear: null, versionTag: classifyVersionTag(track.name)
+        access: "external" as const,
+        isrc: validIsrc(track.external_ids?.isrc), releaseYear: yearOf(track.album?.release_date),
+        versionTag: classifyVersionTag(track.name)
       } satisfies DiscoveryResult];
     });
   }

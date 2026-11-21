@@ -7,6 +7,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,12 +71,13 @@ val NavTabs = listOf(
     NavTab("Профиль", "Профиль", Icons.Default.Person),
 )
 
-private val NavSurface = Color(0xFF0D0E18)
+private val NavSurface = Brush.verticalGradient(listOf(Color(0xFF222037), Color(0xFF10131F)))
+private val NavEdge = Color(0x35DDD6FE)
 private val NavLabel = Color(0xFFF1EDFF)
 private val NavMuted = Color(0xFF8E90A6)
 
 /**
- * Bottom navigation with the Spotify-style pill.
+ * Bottom navigation with a glass surface and a single active indicator.
  *
  * Two defects of Material's NavigationBar with six labels are fixed here:
  *  - captions no longer wrap onto two rows. Each label is one line and the type size
@@ -141,7 +143,9 @@ fun SonoraBottomBar(
         modifier
             .fillMaxWidth()
             .height(72.dp)
+            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .background(NavSurface)
+            .border(1.dp, NavEdge, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .onSizeChanged { barWidthPx.value = it.width.toFloat() }
     ) {
         // First child, therefore painted behind the row.
@@ -162,11 +166,12 @@ fun SonoraBottomBar(
                 .alpha(pillAlpha)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(
-                    Brush.horizontalGradient(
-                        listOf(Color(0xFF3B2C66), Color(0xFF27395C)),
-                        endX = widthPx
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF62558C), Color(0xFF3C3562), Color(0xFF263A55)),
+                        endY = heightPx.coerceAtLeast(1f)
                     )
                 )
+                .border(1.dp, Color(0x50E1D6FF), RoundedCornerShape(percent = 50))
         )
 
         Row(

@@ -1117,11 +1117,25 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 
   const tracks: Array<Record<string, unknown>> = [];
   const metadata: Array<Record<string, unknown>> = [];
+  const spotifyMetadata: Array<Record<string, unknown>> = [];
   const artists: Array<Record<string, unknown>> = [];
   const providers: Record<string, { ok: boolean; count: number; error?: string }> = {};
 
   const tasks: Array<Promise<void>> = [];
   if (type !== "artists") {
+    if (process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
+      tasks.push((async () => {
+        const report = await runDiscoverySearch(q, limit, "commercial_streaming", process.env);
+        providers.spotify = report.providers.commercial_streaming;
+        for (const { best } of report.groups) {
+          spotifyMetadata.push({
+            id: `spotify:${best.externalId}`, provider: "Spotify", title: best.title,
+            artist: best.artist, album: best.album, durationSeconds: best.durationSeconds,
+            sourceUrl: best.sourcePageUrl, playable: false
+          });
+        }
+      })());
+    }
     tasks.push((async () => {
       const jamendo = jamendoConfig();
       if (!jamendo) {
@@ -1276,7 +1290,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
   const anySuccess = Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   return {
-    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit),
+    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: [...spotifyMetadata, ...metadata].slice(0, limit),
     artists: artists.slice(0, limit), providers
   };
 });
@@ -1290,7 +1304,7 @@ import { rankRecommendations, type TasteSignal } from "./recommendation-core.js"
 import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 // Universal Music Discovery & Import Engine: adapters, grouping, resolve.
-import { registerDiscoveryRoutes } from "./discovery.js";
+import { registerDiscoveryRoutes, runDiscoverySearch } from "./discovery.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
   const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));

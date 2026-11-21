@@ -71,7 +71,6 @@ export default function SearchPage() {
     }
   }, [runSearch]);
 
-  // Sources stay internal: the interface shows one merged result count only.
   const resultCount = tracks.length + artists.length + metadata.length;
 
   return (
@@ -84,6 +83,7 @@ export default function SearchPage() {
           <Search className="ml-2 shrink-0 text-muted" size={18} />
           <input
             value={query}
+            aria-label={t("Track title, artist or album")}
             onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }}
             minLength={2}
             placeholder={t("Track title, artist or album")}
@@ -181,7 +181,7 @@ export default function SearchPage() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="t-row block truncate">{item.title}</span>
-                  <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""}</span>
+                  <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""} · {item.provider}</span>
                 </span>
                 <span className="chip hidden !py-1 text-xs sm:inline-flex">{t("Metadata only")}</span>
                 <ExternalLink size={15} className="shrink-0 text-[color:var(--fg-faint)]" />

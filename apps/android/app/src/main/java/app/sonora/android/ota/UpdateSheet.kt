@@ -46,8 +46,8 @@ private val SheetError = Color(0xFFFF9A8D)
  * The in-app update dialog: release notes, size, and the two answers the user has.
  *
  * Everything from here on stays inside SONORA — the download runs in WorkManager and its
- * progress is read back from the same unique work the sheet started, and the finished APK
- * goes straight to the installer. Nothing opens a browser or a website.
+ * progress is read back from the same unique work the sheet started. A verified APK stays
+ * ready in the sheet until the user taps Install.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
