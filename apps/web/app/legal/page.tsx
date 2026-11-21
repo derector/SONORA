@@ -35,6 +35,15 @@ export default function LegalPage() {
           <p className="mt-3">{t("Import matches titles you already own inside SONORA's licensed catalogs. SONORA never downloads audio from other services and never streams protected files it is not allowed to serve. Playback history and favorites are stored in your SONORA account; your language and seasonal effects choices stay on this device.")}</p>
         </div>
         <div className="surface p-6">
+          <h2 className="text-base font-semibold text-white">{t("Profile privacy and account data")}</h2>
+          <p className="mt-3">{t("Your profile visibility and listening-history sharing are controlled in Profile → Privacy. Private profiles are excluded from public profile, people-search and follower-list results.")}</p>
+        </div>
+        <div className="surface p-6">
+          <h2 className="text-base font-semibold text-white">{t("Account data")}</h2>
+          <p className="mt-3">{t("Your email is used for sign-in and is not part of your public profile. Favorites, playlists and listening history are associated with your SONORA account.")}</p>
+          <p className="mt-3">{t("Language and seasonal appearance preferences are stored on this device.")}</p>
+        </div>
+        <div className="surface p-6">
           <h2 className="text-base font-semibold text-white">{t("Rights holders")}</h2>
           <p className="mt-3">{t("If you hold rights to a recording and believe it is presented without a valid deed, contact the source that published it and use the license or report link on that source page. SONORA honors withdrawals received from its catalogs.")}</p>
         </div>
