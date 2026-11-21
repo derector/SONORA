@@ -62,8 +62,7 @@ RETURNS TABLE (
   playlists bigint,
   public_playlists bigint,
   followers bigint,
-  following bigint,
-  artists_heard bigint
+  following bigint
 )
 LANGUAGE sql
 STABLE
@@ -77,8 +76,7 @@ AS $function$
     (SELECT count(*) FROM public.playlists p WHERE p.owner_id = u.id) AS playlists,
     (SELECT count(*) FROM public.playlists p WHERE p.owner_id = u.id AND p.is_public) AS public_playlists,
     (SELECT count(*) FROM public.user_follows fo WHERE fo.followee_id = u.id) AS followers,
-    (SELECT count(*) FROM public.user_follows fo WHERE fo.follower_id = u.id) AS following,
-    (SELECT count(DISTINCT e.artist_name) FROM public.provider_listening_events e WHERE e.user_id = u.id) AS artists_heard
+    (SELECT count(*) FROM public.user_follows fo WHERE fo.follower_id = u.id) AS following
   FROM public.users u
   WHERE u.id = ANY(target_ids)
     AND u.profile_visibility = 'public';
