@@ -20,6 +20,8 @@ jobs:
   ota-upgrade:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      ANDROID_I_WANT_MY_TCG: "yes"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
