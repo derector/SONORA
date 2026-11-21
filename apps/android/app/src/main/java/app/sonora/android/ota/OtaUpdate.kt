@@ -207,14 +207,18 @@ object OtaUpdate {
      */
     fun startDownload(context: Context, release: ReleaseInfo) {
         val asset = release.apk ?: return
+        val request = OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
+            .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
+            .build()
+        // Persist the exact request ID before enqueueing; the UI must never infer the
+        // current attempt from WorkManager's unordered list of historical work items.
+        OtaPreferences.rememberCurrentDownload(context, request.id.toString())
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_DOWNLOAD,
             ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<UpdateDownloadWorker>()
-                .setInputData(workDataOf("url" to asset.url, "tag" to release.tagName, "version" to release.versionLabel, "expectedBytes" to asset.size))
-                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
-                .build()
+            request
         )
     }
 
