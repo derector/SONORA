@@ -142,7 +142,7 @@ object OtaUpdate {
         OtaPreferences.forgetRelease(context)
     }
 
-    fun apkFile(context: Context): File = File(context.cacheDir, APK_FILE_NAME)
+    fun apkFile(context: Context): File = File(File(context.cacheDir, "updates"), APK_FILE_NAME)
 
     /** Millis of the last completed check attempt, for the «Последняя проверка» line. */
     fun lastCheckedAt(context: Context): Long = OtaPreferences.lastCheckedAt(context)
@@ -203,9 +203,13 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
             return@withContext Result.failure(workDataOf(ERROR to "Ссылка на обновление небезопасна"))
         }
 
-        val target = File(applicationContext.cacheDir, OtaUpdate.APK_FILE_NAME)
-        val partial = File(applicationContext.cacheDir, "${OtaUpdate.APK_FILE_NAME}.part")
-        deleteStaleApks(target)
+        val updateDirectory = File(applicationContext.cacheDir, "updates")
+        if (!updateDirectory.exists() && !updateDirectory.mkdirs()) {
+            return@withContext Result.failure(workDataOf(ERROR to "Не удалось подготовить папку обновления"))
+        }
+        val target = File(updateDirectory, OtaUpdate.APK_FILE_NAME)
+        val partial = File(updateDirectory, "${OtaUpdate.APK_FILE_NAME}.part")
+        deleteStaleApks(target, updateDirectory)
         runCatching { partial.delete() }
         setForeground(foregroundInfo("Готовим загрузку обновления…", 0L, expectedBytes))
 
@@ -314,11 +318,12 @@ class UpdateDownloadWorker(context: Context, params: WorkerParameters) : Corouti
     }.getOrDefault(false)
 
     /** An APK of a superseded tag would otherwise sit in the cache for good. */
-    private fun deleteStaleApks(current: File) {
+    private fun deleteStaleApks(current: File, directory: File) {
         runCatching {
-            applicationContext.cacheDir.listFiles()?.forEach { file ->
+            directory.listFiles()?.forEach { file ->
                 if (file.absolutePath != current.absolutePath &&
-                    file.name.startsWith("sonora-update") && file.name.endsWith(".apk")
+                    file.name.startsWith("sonora-update") &&
+                    (file.name.endsWith(".apk") || file.name.endsWith(".apk.part"))
                 ) file.delete()
             }
         }
