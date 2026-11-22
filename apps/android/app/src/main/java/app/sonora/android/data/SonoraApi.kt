@@ -461,7 +461,9 @@ object SonoraApi {
         return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, artists, officialReleases, searched = true)
     }
 
-    fun findPlayableVersion(match: CatalogMatch): Track? {
+    data class PlayableVersion(val track: Track, val matchedVia: String)
+
+    fun findPlayableVersion(match: CatalogMatch): PlayableVersion? {
         val body = JSONObject()
             .put("title", match.title)
             .put("artist", match.artist)
@@ -470,7 +472,8 @@ object SonoraApi {
             .put("playbackOnly", true)
         val result = request("/api/v1/discovery/resolve", method = "POST", body = body)
         val candidate = result.optJSONObject("playableTrack") ?: return null
-        return parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable }
+        val track = parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable } ?: return null
+        return PlayableVersion(track, result.optString("matchedVia"))
     }
 
     data class AssistantAnswer(val reply: String, val tracks: List<Track>)

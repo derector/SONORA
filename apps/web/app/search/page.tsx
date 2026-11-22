@@ -55,7 +55,7 @@ function RecordingMatch({ item }: { item: Metadata }) {
   const { t } = useLanguage();
   const { playTrack } = usePlayer();
   const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error">("idle");
-  const [candidate, setCandidate] = useState<Track | null>(null);
+  const [candidate, setCandidate] = useState<{ track: Track; matchedVia?: string } | null>(null);
 
   async function findPlayableVersion() {
     setStatus("loading");
@@ -70,9 +70,9 @@ function RecordingMatch({ item }: { item: Metadata }) {
         })
       });
       if (!response.ok) throw new Error("Track lookup failed");
-      const { playableTrack } = await response.json() as { playableTrack?: Track | null };
+      const { playableTrack, matchedVia } = await response.json() as { playableTrack?: Track | null; matchedVia?: string };
       if (playableTrack?.playable && playableTrack.audioUrl?.startsWith("https://")) {
-        setCandidate(playableTrack);
+        setCandidate({ track: playableTrack, matchedVia });
         setStatus("idle");
       } else {
         setStatus("empty");
@@ -91,13 +91,14 @@ function RecordingMatch({ item }: { item: Metadata }) {
         <span className="min-w-0 flex-1">
           <span className="t-row block truncate">{item.title}</span>
           <span className="t-meta mt-0.5 block truncate">{item.artist}{item.album ? ` · ${item.album}` : ""} · {item.provider}</span>
+          {item.isrc && <span className="t-meta mt-0.5 block">ISRC {item.isrc}</span>}
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-2 px-3 pb-3">
         {candidate ? (
           <>
-            <p className="t-meta min-w-0 break-words">{t("Possible match")} · {candidate.title} · {candidate.artist} · {candidate.provider}</p>
-            <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => playTrack(candidate)}>{t("Play")}</button>
+            <p className="t-meta min-w-0 break-words">{t(candidate.matchedVia === "isrc" ? "ISRC confirmed" : "Possible match")} · {candidate.track.title} · {candidate.track.artist} · {candidate.track.provider}</p>
+            <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => playTrack(candidate.track)}>{t("Play")}</button>
           </>
         ) : (
           <button type="button" className="btn-ghost !min-h-9 !px-3" disabled={status === "loading"} onClick={() => void findPlayableVersion()}>
@@ -224,11 +225,11 @@ export default function SearchPage() {
           <Search className="ml-2 shrink-0 text-muted" size={18} />
           <input
             value={query}
-            aria-label={t("Track title, artist or album")}
+            aria-label={t("Title, artist, album or ISRC")}
             onChange={(event) => updateQuery(event.target.value)}
             maxLength={100}
             minLength={2}
-            placeholder={t("Track title, artist or album")}
+            placeholder={t("Title, artist, album or ISRC")}
             className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[color:var(--fg-faint)]"
           />
           {query && <button type="button" className="btn-icon shrink-0" aria-label={t("Clear search")} onClick={() => updateQuery("")}><X size={17}/></button>}

@@ -831,7 +831,7 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
             onValueChange = onQuery,
             modifier = Modifier.fillMaxWidth().sonoraGlass(CircleShape),
             shape = CircleShape,
-            placeholder = { Text("Трек, исполнитель, альбом") },
+            placeholder = { Text("Трек, исполнитель, альбом или ISRC") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { search(query) }),
@@ -940,11 +940,12 @@ private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> U
     val scope = rememberCoroutineScope()
     var finding by remember(match) { mutableStateOf(false) }
     var status by remember(match) { mutableStateOf("") }
-    var candidate by remember(match) { mutableStateOf<Track?>(null) }
+    var candidate by remember(match) { mutableStateOf<SonoraApi.PlayableVersion?>(null) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
         Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
             color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        match.isrc?.let { Text("ISRC $it", color = Muted, fontSize = 12.sp) }
         val found = candidate
         if (found == null) {
             TextButton(enabled = !finding, onClick = {
@@ -957,7 +958,7 @@ private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> U
                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
-                        status = "Не удалось выполнить поиск трека."
+                        status = "Поиск доступной версии временно недоступен. Попробуйте ещё раз."
                     } finally {
                         finding = false
                     }
@@ -966,8 +967,9 @@ private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> U
             if (status.isNotBlank()) Text(status, color = Muted, fontSize = 12.sp)
         } else {
             Spacer(Modifier.height(8.dp))
-            Text("Возможное совпадение · ${found.title} · ${found.artist} · ${found.provider}", color = Muted, fontSize = 12.sp)
-            TextButton(onClick = { play(found) }) { Text("Воспроизвести", color = Lime) }
+            val evidence = if (found.matchedVia == "isrc") "ISRC совпадает" else "Возможное совпадение"
+            Text("$evidence · ${found.track.title} · ${found.track.artist} · ${found.track.provider}", color = Muted, fontSize = 12.sp)
+            TextButton(onClick = { play(found.track) }) { Text("Воспроизвести", color = Lime) }
         }
     }
 }

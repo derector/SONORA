@@ -322,6 +322,8 @@ const ru: Record<string, string> = {
   "matches": "совпадений",
   "Metadata only": "Только информация",
   "Find a playable version": "Найти доступную версию",
+  "Title, artist, album or ISRC": "Трек, исполнитель, альбом или ISRC",
+  "ISRC confirmed": "ISRC совпадает",
   "Possible match": "Возможное совпадение",
   "No playable match was found.": "Доступная версия не найдена.",
   "No tracks available to play in SONORA for this search.": "По этому запросу в SONORA нет треков, доступных для воспроизведения.",
