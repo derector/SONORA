@@ -1,6 +1,14 @@
 # SONORA music provider policy and integration plan
 
-Updated: 2026-11-21
+Updated: 2026-11-22
+
+## Официальные релизы в поиске
+
+Редакционный список в `apps/api/src/official-releases.ts` связывает имя, подтверждённые варианты написания и название записи с ID публикации YouTube. Выдача сайта и Android показывает отдельные карточки этих релизов. Кнопка открывает официальный плеер внутри SONORA. Доступность, звук и ограничения записи определяет YouTube. Источники встраиваются только по явному нажатию пользователя. [Официальный iframe](https://developers.google.com/youtube/iframe_api_reference) · [Требования к встраиванию](https://developers.google.com/youtube/terms/required-minimum-functionality)
+
+- Кишлак, «11:11» и «Поцелуями». [11:11](https://www.youtube.com/watch?v=T55-Jowa6Lk) · [Поцелуями](https://www.youtube.com/watch?v=Z30z_Wrr8bY)
+- Молодой Рубль, «чисто гипотетически (prod. by arcadeonly)». [Страница релиза](https://band.link/young_ruble) · [Публикация дистрибьютора](https://www.youtube.com/watch?v=cwoPR0-liOI)
+- N01R, «Bad» и «Убежать». [Bad на Aurora Records](https://aurora-records.com/en/release/n01r-bad/) · [Убежать на канале Aurora Records](https://www.youtube.com/watch?v=1_8_42L7KVM)
 
 ## Открытый каталог Wikimedia Commons
 

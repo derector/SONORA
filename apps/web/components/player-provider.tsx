@@ -20,6 +20,7 @@ export type PlayerTrack = {
   audioUrl: string;
   licenseUrl: string;
   sourceUrl: string;
+  rightsLabel?: string;
 };
 
 type RepeatMode = "off" | "all" | "one";
@@ -776,6 +777,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   <dl className="mt-3 space-y-2 text-xs">
                     <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Album")}</dt><dd className="min-w-0 max-w-[65%] truncate text-slate-300">{currentTrack.album || t("Independent release")}</dd></div>
                     <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("License")}</dt><dd className="text-slate-300">{licenseLabel(currentTrack.licenseUrl) || t("Licensed catalog")}</dd></div>
+                    {currentTrack.rightsLabel ? <div className="flex flex-wrap items-baseline justify-between gap-2"><dt className="text-slate-500">{t("Credit")}</dt><dd className="text-slate-300">{currentTrack.rightsLabel}</dd></div> : null}
                   </dl>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {currentTrack.sourceUrl && <a href={currentTrack.sourceUrl} target="_blank" rel="noreferrer" className="btn-press inline-flex items-center gap-2 rounded-full bg-violet-200 px-4 py-2 text-xs font-semibold text-[#171323]">{t("Open source page")}</a>}

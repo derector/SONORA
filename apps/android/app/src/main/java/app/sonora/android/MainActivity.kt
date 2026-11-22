@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.media3.common.MediaItem
@@ -60,6 +64,9 @@ import androidx.work.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.sonora.android.data.OfflineDatabase
 import app.sonora.android.data.OfflineTrack
 import coil.compose.AsyncImage
@@ -615,7 +622,7 @@ private fun SonoraApp() {
                                 finally { busy = false }
                             }
                         }
-                    }, ::play)
+                    }, ::play, pauseNative = { controller?.pause() })
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
@@ -801,7 +808,9 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit, pauseNative: () -> Unit) {
+    var selectedRelease by remember { mutableStateOf<SonoraApi.OfficialRelease?>(null) }
+    selectedRelease?.let { release -> ReleasePlayerSheet(release) { selectedRelease = null } }
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
@@ -817,13 +826,26 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
-        if (!busy && results.searched && results.tracks.isEmpty()) {
+        if (!busy && results.searched && results.tracks.isEmpty() && results.officialReleases.isEmpty()) {
             Text("По этому запросу в SONORA нет треков, доступных для воспроизведения.",
                 color = Muted, modifier = Modifier.padding(vertical = 8.dp))
         }
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(items = results.tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
                 TrackRow(track, index, { play(track) }, {})
+            }
+            if (results.officialReleases.isNotEmpty()) {
+                item { Text("Официальные релизы", color = Color.White, fontWeight = FontWeight.SemiBold) }
+                items(results.officialReleases, key = { "release:${it.videoId}" }) { release ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
+                        Text(release.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text("${release.artist} · YouTube", color = Muted, fontSize = 12.sp)
+                        TextButton(onClick = {
+                            pauseNative()
+                            selectedRelease = release
+                        }) { Text("Включить в плеере YouTube", color = Lime) }
+                    }
+                }
             }
             if (results.artists.isNotEmpty()) {
                 item {
@@ -847,6 +869,51 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
                     RecordingMatchCard(match, play)
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReleasePlayerSheet(release: SonoraApi.OfficialRelease, close: () -> Unit) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val dismiss by rememberUpdatedState(close)
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) dismiss()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    ModalBottomSheet(onDismissRequest = close, containerColor = Panel, contentColor = Color.White) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 16.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(release.title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = close) { Text("Закрыть", color = Lime) }
+            }
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                request.isForMainFrame && (request.url.scheme != "https" || request.url.host != "www.youtube.com")
+                        }
+                        loadUrl(
+                            "https://www.youtube.com/embed/${release.videoId}?playsinline=1",
+                            mapOf("Referer" to "https://${context.packageName}")
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+                onReset = null,
+                onRelease = { it.destroy() }
+            )
         }
     }
 }

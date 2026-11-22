@@ -6,6 +6,7 @@ import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
 import { createLicensedCatalog } from "./licensed-catalog.js";
 import { createCommonsCatalog } from "./commons-catalog.js";
+import { searchOfficialReleases } from "./official-releases.js";
 import {
   ACCENT_PRESETS, PROFILE_AVATAR_BODY_LIMIT, PROFILE_ROLES, normalizeGenres, normalizeLinks,
   normalizePrivacy, readProfile, registerProfileRoutes
@@ -1136,6 +1137,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
   const artists: Array<Record<string, unknown>> = [];
   const providers: Record<string, { ok: boolean; count: number; error?: string }> = {};
   const queryKey = catalogSearchKey(q);
+  const officialReleases = inApp && type !== "artists" ? searchOfficialReleases(q, limit) : [];
 
   const audiusUsers = (async () => {
     if (!inApp && type === "tracks") return [];
@@ -1361,7 +1363,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
     }
   }
   await Promise.all(tasks);
-  const anySuccess = Object.values(providers).some((provider) => provider.ok);
+  const anySuccess = officialReleases.length > 0 || Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   if (inApp) {
     const matchingArtists = artists.filter((artist) => matchesCatalogSearch(q, artist.name) || matchesCatalogSearch(q, artist.handle));
@@ -1384,7 +1386,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         matchesCatalogSearch(q, track.artist, track.title, track.album)));
     return {
       query: q, type, tracks: playable.slice(0, limit * 2), metadata: matchingMetadata.slice(0, limit),
-      artists: matchingArtists.slice(0, limit), providers
+      artists: matchingArtists.slice(0, limit), officialReleases, providers
     };
   }
   return {

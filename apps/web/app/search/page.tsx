@@ -9,11 +9,12 @@ import { ErrorBlock, RowsSkeleton, StateBlock } from "../../components/ui/states
 import { Artwork } from "../../components/ui/artwork";
 import { useReveal } from "../../lib/motion";
 
-type Track = PlayerTrack & { provider: string; playable: boolean; rightsLabel?: string };
+type Track = PlayerTrack & { provider: string; playable: boolean };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; trackCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; isrc?: string | null; releaseDate?: string | null; sourceUrl: string; playable: false };
+type OfficialRelease = { id: string; title: string; artist: string; videoId: string };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
-type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; providers?: Record<string, ProviderStatus>; error?: string };
+type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; officialReleases?: OfficialRelease[]; providers?: Record<string, ProviderStatus>; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -82,17 +83,20 @@ function RecordingMatch({ item }: { item: Metadata }) {
 
 export default function SearchPage() {
   const { t } = useLanguage();
-  const { currentTrack, isPlaying, playTrack } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"all" | "tracks" | "artists">("all");
   const [tracks, setTracks] = useState<Track[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [metadata, setMetadata] = useState<Metadata[]>([]);
+  const [officialReleases, setOfficialReleases] = useState<OfficialRelease[]>([]);
+  const [officialRelease, setOfficialRelease] = useState<OfficialRelease | null>(null);
   const [providers, setProviders] = useState<Record<string, ProviderStatus>>({});
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const searchSequence = useRef(0);
+  const releaseDialog = useRef<HTMLDialogElement>(null);
   const tracksHead = useReveal<HTMLDivElement>();
   const tracksList = useReveal<HTMLDivElement>();
   const artistsList = useReveal<HTMLDivElement>();
@@ -111,11 +115,12 @@ export default function SearchPage() {
       setTracks((data.tracks ?? []).filter((track) => track.playable && track.audioUrl?.startsWith("https://")));
       setArtists(data.artists ?? []);
       setMetadata((data.metadata ?? []).filter((item) => item.provider === "MusicBrainz"));
+      setOfficialReleases((data.officialReleases ?? []).filter((item) => /^[\w-]{11}$/.test(item.videoId)));
       setProviders(data.providers ?? {});
     } catch (err) {
       if (sequence !== searchSequence.current) return;
       setError(err instanceof Error ? err.message : "Music search is temporarily unavailable.");
-      setTracks([]); setArtists([]); setMetadata([]); setProviders({});
+      setTracks([]); setArtists([]); setMetadata([]); setOfficialReleases([]); setProviders({});
     } finally {
       if (sequence === searchSequence.current) setLoading(false);
     }
@@ -134,7 +139,16 @@ export default function SearchPage() {
     }
   }, [runSearch]);
 
-  const resultCount = tracks.length + artists.length + metadata.length;
+  useEffect(() => {
+    if (!officialRelease) return;
+    const closeWhenHidden = () => {
+      if (document.hidden) releaseDialog.current?.close();
+    };
+    document.addEventListener("visibilitychange", closeWhenHidden);
+    return () => document.removeEventListener("visibilitychange", closeWhenHidden);
+  }, [officialRelease]);
+
+  const resultCount = tracks.length + artists.length + metadata.length + officialReleases.length;
 
   return (
     <main className="mx-auto w-full min-w-0 max-w-[1440px] overflow-x-clip px-4 py-6 pb-40 md:px-8">
@@ -147,7 +161,7 @@ export default function SearchPage() {
           <input
             value={query}
             aria-label={t("Track title, artist or album")}
-            onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setProviders({}); }}
+            onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setOfficialReleases([]); setProviders({}); }}
             minLength={2}
             placeholder={t("Track title, artist or album")}
             className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[color:var(--fg-faint)]"
@@ -179,7 +193,7 @@ export default function SearchPage() {
           />
         </div>
       )}
-      {!loading && searched && !error && kind !== "artists" && tracks.length === 0 && resultCount > 0 && (
+      {!loading && searched && !error && kind !== "artists" && tracks.length === 0 && officialReleases.length === 0 && resultCount > 0 && (
         <p className="t-meta mt-6" role="status">{t("No tracks available to play in SONORA for this search.")}</p>
       )}
 
@@ -197,15 +211,7 @@ export default function SearchPage() {
               <TrackRow
                 key={track.id}
                 track={track}
-                meta={track.rightsLabel ? (
-                  track.provider === "Wikimedia Commons" ? (
-                    <>
-                      <a className="underline" href={track.sourceUrl} target="_blank" rel="noreferrer">{track.artist}</a>
-                      {" · "}
-                      <a className="underline" href={track.licenseUrl} target="_blank" rel="noreferrer">{track.rightsLabel}</a>
-                    </>
-                  ) : `${track.artist} · ${track.rightsLabel}`
-                ) : undefined}
+                meta={track.rightsLabel ? `${track.artist} · ${track.rightsLabel}` : undefined}
                 isCurrent={currentTrack?.id === track.id}
                 isPlaying={isPlaying}
                 disabled={!track.playable || !track.audioUrl}
@@ -243,6 +249,40 @@ export default function SearchPage() {
           </div>
         </section>
       )}
+
+      {!loading && officialReleases.length > 0 && (
+        <section className="mt-10" aria-labelledby="official-releases-heading">
+          <h2 id="official-releases-heading" className="t-h2 mb-3">{t("Official releases")}</h2>
+          {officialReleases.map((item) => (
+            <article key={item.id} className="surface track-row my-1 rounded-card">
+              <div className="min-w-0 flex-1">
+                <p className="t-row">{item.title}</p>
+                <p className="t-meta">{item.artist} · YouTube</p>
+              </div>
+              <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => {
+                if (isPlaying) togglePlay();
+                setOfficialRelease(item);
+                releaseDialog.current?.showModal();
+              }}>{t("Play in YouTube player")}</button>
+            </article>
+          ))}
+        </section>
+      )}
+      <dialog ref={releaseDialog} onClose={() => setOfficialRelease(null)} aria-labelledby="official-release-title"
+        className="m-auto w-[calc(100%-2rem)] max-w-lg rounded-card bg-[#151329] p-4 text-white backdrop:bg-black/75">
+        {officialRelease && (
+          <>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 id="official-release-title" className="t-row">{officialRelease.title}</h2>
+              <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => releaseDialog.current?.close()}>{t("Close")}</button>
+            </div>
+            <iframe className="aspect-video min-h-[200px] w-full rounded-tile"
+              title={`${officialRelease.artist} · ${officialRelease.title} · YouTube`}
+              src={`https://www.youtube.com/embed/${officialRelease.videoId}?playsinline=1`}
+              referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+          </>
+        )}
+      </dialog>
 
       {!loading && metadata.length > 0 && (
         <section className="mt-10" aria-labelledby="search-meta-heading">
