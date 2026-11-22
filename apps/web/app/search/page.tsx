@@ -12,8 +12,8 @@ import { useReveal } from "../../lib/motion";
 type Track = PlayerTrack & { provider: string; playable: boolean };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; trackCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; isrc?: string | null; releaseDate?: string | null; sourceUrl: string; playable: false };
-type OfficialRelease = { id: string; title: string; artist: string; album?: string; videoId?: string; bandcamp?: { kind: "track" | "album"; id: string } };
-type OfficialPlayer = { provider: "Bandcamp" | "YouTube"; url: string; layout: "track" | "album" | "video" };
+type OfficialRelease = { id: string; title: string; artist: string; album?: string; videoId?: string; bandcamp?: { kind: "track" | "album"; id: string }; soundCloudTrackId?: string };
+type OfficialPlayer = { provider: "Bandcamp" | "SoundCloud" | "YouTube"; url: string; layout: "track" | "album" | "video" };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; officialReleases?: OfficialRelease[]; providers?: Record<string, ProviderStatus>; error?: string };
 
@@ -27,6 +27,11 @@ function playersForRelease(release: OfficialRelease): OfficialPlayer[] {
     players.push({ provider: "Bandcamp", layout: bandcamp.kind,
       url: `https://bandcamp.com/EmbeddedPlayer/v=2/${bandcamp.kind}=${bandcamp.id}/size=large/tracklist=${tracklist}/artwork=small/` });
   }
+  if (release.soundCloudTrackId && /^\d{1,12}$/.test(release.soundCloudTrackId)) {
+    const url = encodeURIComponent(`https://api.soundcloud.com/tracks/${release.soundCloudTrackId}`);
+    players.push({ provider: "SoundCloud", layout: "track",
+      url: `https://w.soundcloud.com/player/?visual=true&url=${url}&show_artwork=true&maxheight=166` });
+  }
   if (release.videoId && /^[\w-]{11}$/.test(release.videoId)) {
     players.push({ provider: "YouTube", layout: "video", url: `https://www.youtube.com/embed/${release.videoId}?playsinline=1` });
   }
@@ -34,9 +39,14 @@ function playersForRelease(release: OfficialRelease): OfficialPlayer[] {
 }
 
 const PLAYER_CLASS = {
-  track: "min-h-[150px]",
+  track: "min-h-[166px]",
   album: "h-[min(480px,60dvh)]",
   video: "aspect-video min-h-[200px]"
+};
+const PLAYER_LABEL = {
+  Bandcamp: "Play in Bandcamp player",
+  SoundCloud: "Play in SoundCloud player",
+  YouTube: "Play in YouTube player"
 };
 
 function RecordingMatch({ item }: { item: Metadata }) {
@@ -276,18 +286,19 @@ export default function SearchPage() {
         <section className="mt-10" aria-labelledby="official-releases-heading">
           <h2 id="official-releases-heading" className="t-h2 mb-3">{t("Official releases")}</h2>
           {officialReleases.map((item) => (
-            <article key={item.id} className="surface track-row my-1 flex-wrap rounded-card">
-              <div className="min-w-0 flex-1">
+            <article key={item.id} className="surface my-1 flex flex-wrap items-center justify-between gap-3 rounded-card p-3">
+              <div className="min-w-0 flex-1 basis-32">
                 <p className="t-row">{item.title}</p>
                 <p className="t-meta">{item.artist}{item.album ? ` · ${item.album}` : ""}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {item.players.map((player) => (
-                  <button key={player.provider} type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => {
+                  <button key={player.provider} type="button" className="btn-ghost !min-h-9 !px-3"
+                    aria-label={t(PLAYER_LABEL[player.provider])} onClick={() => {
                     if (isPlaying) togglePlay();
                     setOfficialRelease({ title: item.title, artist: item.artist, player });
                     releaseDialog.current?.showModal();
-                  }}>{t(player.provider === "Bandcamp" ? "Play in Bandcamp player" : "Play in YouTube player")}</button>
+                  }}>{player.provider}</button>
                 ))}
               </div>
             </article>
@@ -305,7 +316,8 @@ export default function SearchPage() {
             <iframe className={`w-full rounded-tile ${PLAYER_CLASS[officialRelease.player.layout]}`}
               title={`${officialRelease.artist} · ${officialRelease.title} · ${officialRelease.player.provider}`}
               src={officialRelease.player.url}
-              referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
+              referrerPolicy="strict-origin-when-cross-origin"
+              allow={officialRelease.player.provider === "SoundCloud" ? "autoplay; encrypted-media" : undefined} allowFullScreen />
           </>
         )}
       </dialog>

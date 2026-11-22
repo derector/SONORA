@@ -912,7 +912,7 @@ private fun ReleasePlayerSheet(title: String, player: SonoraApi.OfficialPlayer, 
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(
-                    if (player.album) 390.dp else if (player.provider == "Bandcamp") 150.dp else 220.dp
+                    if (player.album) 390.dp else if (player.provider == "YouTube") 220.dp else 166.dp
                 ),
                 onReset = null,
                 onRelease = { it.destroy() }

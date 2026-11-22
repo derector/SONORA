@@ -444,6 +444,12 @@ object SonoraApi {
                                 album = tracklist))
                         }
                     }
+                    val soundCloudId = release.optString("soundCloudTrackId")
+                    if (validBandcampId.matches(soundCloudId)) {
+                        val track = java.net.URLEncoder.encode("https://api.soundcloud.com/tracks/$soundCloudId", "UTF-8")
+                        add(OfficialPlayer("SoundCloud",
+                            "https://w.soundcloud.com/player/?visual=true&url=$track&show_artwork=true&maxheight=166"))
+                    }
                     val videoId = release.optString("videoId")
                     if (validVideoId.matches(videoId)) {
                         add(OfficialPlayer("YouTube", "https://www.youtube.com/embed/$videoId?playsinline=1"))
