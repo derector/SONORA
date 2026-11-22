@@ -243,7 +243,11 @@ private fun SonoraApp() {
                 done(withContext(Dispatchers.IO) { SonoraApi.discoverCatalog() })
                 message = ""
             }
-            catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (e: Exception) {
+                Log.w("SONORA_CATALOG", "Catalog request failed", e)
+                message = "Не удалось загрузить музыку. Проверьте подключение и попробуйте ещё раз."
+            }
             finally { busy = false }
         }
     }
@@ -617,7 +621,7 @@ private fun SonoraApp() {
                                 } catch (e: Exception) {
                                     if (query.trim() == term) {
                                         searchResults = SonoraApi.MusicSearch()
-                                        message = e.message ?: "Ошибка поиска"
+                                        message = "Не удалось выполнить поиск. Проверьте подключение и повторите запрос."
                                     }
                                 }
                                 finally { busy = false }
@@ -782,7 +786,7 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
         Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
-        if (!busy && tracks.isEmpty() && message.isBlank()) {
+        if (!busy && tracks.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
