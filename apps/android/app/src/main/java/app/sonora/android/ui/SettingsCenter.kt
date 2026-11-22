@@ -623,8 +623,7 @@ private fun Card(
         .fillMaxWidth()
         .padding(horizontal = 18.dp)
         .staggerEnter(index)
-        .clip(shape)
-        .background(Panel)
+        .sonoraGlass(shape)
     val wrapped = if (clickable != null) base.then(Modifier.pressScale(onClick = clickable)) else base
     Box(wrapped.padding(14.dp)) {
         Row(

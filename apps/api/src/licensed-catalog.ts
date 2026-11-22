@@ -1,10 +1,10 @@
 import { readFile, stat } from "node:fs/promises";
 import type { FastifyInstance } from "fastify";
-import { catalogSearchKey, matchesCatalogSearch } from "./catalog.js";
+import { matchesCatalogSearch } from "./catalog.js";
+import { matchRecording, validIsrc } from "./recording-match.js";
 
 const TRACK_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const AUDIO_PATH = /^(?:[a-z0-9_-]+\/)*[a-z0-9_-][a-z0-9_.-]*\.(?:mp3|m4a|aac|ogg|opus|flac|wav)$/i;
-const ISRC = /^[A-Z]{2}[A-Z0-9]{3}\d{7}$/;
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
 const TRACKS_PATH = "/api/v1/providers/sonora/tracks";
 
@@ -53,13 +53,13 @@ function parseEntry(value: unknown) {
   if (!TRACK_ID.test(id) || !AUDIO_PATH.test(audioPath) || !title || !artist ||
       !rightsHolder || !text(data.licenseRef) || data.streamingAllowed !== true || Number.isNaN(expiry)) return null;
 
-  const isrc = text(data.isrc).toUpperCase().replaceAll("-", "");
+  const isrc = validIsrc(data.isrc);
   return {
     id, audioPath, expiry, title, artist, rightsHolder,
     album: text(data.album) || null,
     durationSeconds: typeof data.durationSeconds === "number" && Number.isFinite(data.durationSeconds)
       ? Math.max(0, Math.round(data.durationSeconds)) : 0,
-    isrc: ISRC.test(isrc) ? isrc : null,
+    isrc,
     artworkUrl: httpsUrl(data.artworkUrl),
     sourceUrl: httpsUrl(data.sourceUrl),
     licenseUrl: httpsUrl(data.licenseUrl)
@@ -127,19 +127,16 @@ export function createLicensedCatalog(env: NodeJS.ProcessEnv) {
         .map(track);
     },
     async match(input: { artist?: unknown; title?: unknown; isrc?: unknown; durationSeconds?: unknown }) {
-      const artist = catalogSearchKey(input.artist);
-      const title = catalogSearchKey(input.title);
-      const isrc = text(input.isrc).toUpperCase().replaceAll("-", "");
+      const wanted = { artist: text(input.artist), title: text(input.title), isrc: validIsrc(input.isrc),
+        durationSeconds: typeof input.durationSeconds === "number" ? input.durationSeconds : null };
       const now = Date.now();
-      const records = [...(await entries()).values()].filter((item) => item.expiry > now);
-      const exact = isrc ? records.find((item) => item.isrc === isrc) : undefined;
-      if (exact) return { playableTrack: track(exact), matchedVia: "isrc" };
-      if (!artist || !title) return null;
-      const duration = typeof input.durationSeconds === "number" ? input.durationSeconds : 0;
-      const matches = records.filter((item) => catalogSearchKey(item.artist) === artist &&
-        catalogSearchKey(item.title) === title && (!isrc || !item.isrc || item.isrc === isrc) &&
-        (!duration || !item.durationSeconds || Math.abs(duration - item.durationSeconds) <= 15));
-      return matches.length === 1 ? { playableTrack: track(matches[0]), matchedVia: "artist+title" } : null;
+      const matches = [...(await entries()).values()].flatMap((item) => {
+        const match = item.expiry > now ? matchRecording(wanted, item) : null;
+        return match ? [{ item, match }] : [];
+      });
+      const exact = matches.find(({ match }) => match === "isrc");
+      const selected = exact ?? (matches.length === 1 ? matches[0] : null);
+      return selected ? { playableTrack: track(selected.item), matchedVia: selected.match } : null;
     },
     register(app: FastifyInstance) {
       app.get<{ Querystring: { id?: string } }>(TRACKS_PATH, async (request, reply) => {

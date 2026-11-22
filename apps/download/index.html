@@ -20,40 +20,38 @@
   <header class="site-header" id="siteHeader">
     <div class="wrap nav">
       <a class="brand" href="#" aria-label="SONORA, главная"><span class="brand-mark">S</span><span>SONORA</span></a>
-      <button class="menu-toggle" id="menuToggle" aria-label="Открыть меню" aria-expanded="false">☰</button>
+      <button class="menu-toggle" id="menuToggle" type="button" aria-controls="navLinks" aria-label="Открыть меню" aria-expanded="false">☰</button>
       <nav class="nav-links" id="navLinks">
         <a href="#features">Возможности</a><a href="#moods">Настроения</a><a href="#screens">Экраны</a><a href="#updates">Обновления</a><a href="#demo">Демо</a><a href="#install">Установка</a><a href="#faq">Вопросы</a>
       </nav>
-      <a class="button button-small button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest">Скачать APK <span>↗</span></a>
+      <a class="button button-small button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest"><span class="button-label">Релиз APK</span> <span class="arrow-northeast" aria-hidden="true"></span></a>
     </div>
   </header>
 
   <main>
     <section class="hero wrap">
       <div class="hero-copy reveal">
-        <p class="eyebrow"><span class="pulse-dot"></span> ТВОЙ МУЗЫКАЛЬНЫЙ ПОТОК</p>
-        <h1>Музыка,<br><span class="gradient-text">которая слышит тебя.</span></h1>
-        <p class="lead">Открывай новые звучания, собирай свою медиатеку и возвращайся к любимым трекам. SONORA объединяет музыкальный опыт на телефоне и в браузере.</p>
+        <p class="eyebrow hero-platform">SONORA · ANDROID</p>
+        <h1>Музыка<br><span class="gradient-text">на твоей волне.</span></h1>
+        <p class="lead">Ищи треки, собирай плейлисты и открывай музыку под настроение. В приложении и в браузере.</p>
         <div class="hero-actions">
-          <a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest">Скачать для Android <span>↓</span></a>
-          <a class="button button-ghost" data-web href="https://sonora-web-production-fb072d10.up.railway.app/">Открыть веб-версию <span>↗</span></a>
+          <a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest"><span class="button-label">Открыть релиз для Android</span><span class="button-icon" aria-hidden="true">↓</span></a>
+          <a class="button button-ghost" data-web href="https://sonora-web-production-fb072d10.up.railway.app/"><span>Открыть веб-версию</span><span class="button-icon" aria-hidden="true"><span class="arrow-northeast"></span></span></a>
         </div>
-        <div class="release-meta" aria-live="polite">
-          <span><b data-version>Проверяем версию…</b></span><span>Android 8.0+</span><span data-size>Проверяем размер…</span>
-        </div>
-        <p class="rotating-line">Сейчас в настроении: <b id="moodLine">lofi для фокуса</b></p>
+        <dl class="release-meta" aria-live="polite">
+          <div><dt>Версия</dt><dd data-version>Уточняется</dd></div>
+          <div><dt>Совместимость</dt><dd>Android 8.0+</dd></div>
+          <div><dt>Размер</dt><dd data-size>Уточняется</dd></div>
+        </dl>
+        <a class="install-link" href="#install">Как установить <span class="arrow-northeast arrow-down-right" aria-hidden="true"></span></a>
       </div>
-      <div class="hero-art reveal" aria-label="Визуальная концепция приложения SONORA">
-        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
-        <div class="floating-note note-one">♫</div><div class="floating-note note-two">♪</div>
-        <div class="device" aria-label="Настоящие экраны приложения SONORA">
-          <div class="phone-stack">
-            <img class="active" src="/screens/home-real-0.1.167.webp" alt="Главный экран SONORA, снимок версии 0.1.167">
-            <img src="/screens/search.webp" alt="Экран поиска SONORA">
-          </div>
+      <figure class="hero-art reveal">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="hero-preview">
+          <img src="/screens/assistant-qa-243.png" alt="Экран голосового помощника SONORA на Android" width="1080" height="2400" fetchpriority="high">
         </div>
-        <div class="floating-chip"><span class="chip-dot"></span> Твой поток звучит</div>
-      </div>
+        <figcaption>Помощник SONORA в тестовой сборке 0.1.243</figcaption>
+      </figure>
     </section>
 
     <section class="section wrap" id="features">
@@ -126,9 +124,9 @@
       <div class="section-heading reveal"><p class="eyebrow">ВСЕГДА АКТУАЛЬНО</p><h2>Обновления SONORA</h2><p>Версия и данные APK загружаются напрямую из публичных GitHub Releases.</p></div>
       <div class="release-card reveal">
         <div><h3 data-release-title>SONORA для Android</h3><p data-release-date>Проверяем дату публикации…</p><p class="release-notes" data-release-notes>Получаем список изменений…</p></div>
-        <div class="release-side"><strong data-version>Проверяем версию…</strong><span data-size>Проверяем размер…</span><a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest">Скачать APK ↓</a></div>
+        <div class="release-side"><strong data-version>Проверяем версию…</strong><span data-size>Проверяем размер…</span><a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest"><span class="button-label">Открыть релиз</span> <span aria-hidden="true">↓</span></a></div>
       </div>
-      <div class="checksum"><span>SHA-256</span><code data-sha>Проверяем контрольную сумму…</code><button id="copySha" type="button">Копировать</button></div>
+      <div class="checksum"><span>SHA-256</span><code data-sha>Проверяем контрольную сумму…</code><button id="copySha" type="button" disabled>Копировать</button></div>
       <div class="release-history" id="releaseHistory"><p>Загружаем историю релизов…</p></div>
     </section>
 
@@ -155,7 +153,7 @@
 
     <section class="wrap final-cta reveal">
       <p class="eyebrow">ТВОЙ ЗВУК. ТВОЯ ВСЕЛЕННАЯ.</p><h2>Пусть музыка найдёт тебя.</h2><p>Открой SONORA на Android или продолжи в браузере.</p>
-      <div class="hero-actions centered"><a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest">Скачать SONORA <span>↓</span></a><a class="button button-ghost" data-web href="https://sonora-web-production-fb072d10.up.railway.app/">Открыть веб-версию <span>↗</span></a></div>
+      <div class="hero-actions centered"><a class="button button-primary" data-apk href="https://github.com/derector/SONORA/releases/latest"><span class="button-label">Открыть релиз</span> <span aria-hidden="true">↓</span></a><a class="button button-ghost" data-web href="https://sonora-web-production-fb072d10.up.railway.app/">Открыть веб-версию <span>↗</span></a></div>
     </section>
   </main>
 

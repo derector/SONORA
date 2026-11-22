@@ -24,7 +24,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -87,6 +86,9 @@ import app.sonora.android.ota.OtaUpdate
 import app.sonora.android.ota.ReleaseInfo
 import app.sonora.android.ota.UpdateSheet
 import app.sonora.android.ui.EaseOutBrand
+import app.sonora.android.ui.GlassBackdrop
+import app.sonora.android.ui.GlassTone
+import app.sonora.android.ui.sonoraGlass
 import app.sonora.android.ui.MotionSettings
 import app.sonora.android.ui.NavTab
 import app.sonora.android.ui.NavTabs
@@ -756,13 +758,13 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
                 Text("SONORA", color = Lime, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
                 Text("На твоей волне.", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             }
-            Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Lime, Color(0xFF7DD3FC)))), contentAlignment = Alignment.Center) { Text("S", color = Ink, fontWeight = FontWeight.Black, fontSize = 23.sp) }
+            Box(Modifier.size(42.dp).sonoraGlass(CircleShape, GlassTone.Primary), contentAlignment = Alignment.Center) { Text("S", color = Ink, fontWeight = FontWeight.Black, fontSize = 23.sp) }
         }
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF49385F), Color(0xFF242E49), Color(0xFF16434B))))
-                .clickable(onClick = openSearch).padding(20.dp)
+                .sonoraGlass(RoundedCornerShape(26.dp), GlassTone.Accent)
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = openSearch)
+                .padding(20.dp)
         ) {
             Box(Modifier.align(Alignment.TopEnd).size(116.dp).offset(x = 22.dp, y = (-28).dp)
                 .clip(CircleShape).background(Color.White.copy(alpha = 0.045f)))
@@ -776,13 +778,18 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
                 Text("Ищи исполнителей и треки. Открывай новое и собирай свою коллекцию.", color = Color(0xFFD0CDDC), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 15.dp)) {
                     Text("Открыть поиск", color = Color(0xFF171323), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD8CCFF)).clickable(onClick = openSearch).padding(horizontal = 15.dp, vertical = 9.dp))
+                        modifier = Modifier.sonoraGlass(CircleShape, GlassTone.Primary)
+                            .heightIn(min = 48.dp).wrapContentHeight().padding(horizontal = 15.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("Единый каталог", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
                 }
             }
         }
-        OutlinedButton(onClick = openAssistant, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { Text("Помощник SONORA · голос и миксы") }
+        TextButton(
+            onClick = openAssistant,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).sonoraGlass(CircleShape),
+            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF0E9FF))
+        ) { Text("Помощник SONORA · голос и миксы") }
         Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
@@ -817,18 +824,19 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit, pauseNative: () -> Unit) {
     var selectedPlayer by remember { mutableStateOf<Pair<String, SonoraApi.OfficialPlayer>?>(null) }
     selectedPlayer?.let { (title, player) -> ReleasePlayerSheet(title, player) { selectedPlayer = null } }
-    Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
+    Column(Modifier.fillMaxSize().background(GlassBackdrop).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
             value = query,
             onValueChange = onQuery,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().sonoraGlass(CircleShape),
+            shape = CircleShape,
             placeholder = { Text("Трек, исполнитель, альбом") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { search(query) }),
             trailingIcon = { IconButton(onClick = { search(query) }) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Color.Transparent, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
@@ -1009,7 +1017,7 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
     val available = track.playable && !track.audioUrl.isNullOrBlank()
     Row(
         Modifier.fillMaxWidth().staggerEnter(index)
-            .clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp),
+            .sonoraGlass(RoundedCornerShape(16.dp)).clickable(enabled = available, onClick = onPlay).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
@@ -1044,8 +1052,8 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
                 }
             }
         }
-        IconButton(onClick = onPlay) {
-            Icon(Icons.Default.PlayCircleFilled, null, tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
+        IconButton(onClick = onPlay, enabled = available) {
+            Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
         }
     }
 }
@@ -1068,9 +1076,7 @@ private fun MiniPlayer(
             // Declared before the clickable in the chain, so a vertical pull steals the
             // gesture and dismisses; a plain tap still opens the full player.
             .swipeDownToDismiss(onDismiss = onDismiss)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xFF40325D), Color(0xFF1C2032), Color(0xFF20343C))))
-            .border(1.dp, Color(0x39E1D6FF), RoundedCornerShape(18.dp))
+            .sonoraGlass(RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
             .heightIn(min = 68.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1089,7 +1095,9 @@ private fun MiniPlayer(
                 modifier = Modifier.size(22.dp).popOn(likeTick)
             )
         }
-        IconButton(onClick = onPlay) { PlayPauseIcon(playing = playing, tint = Lime) }
+        IconButton(onClick = onPlay, modifier = Modifier.sonoraGlass(CircleShape, GlassTone.Accent)) {
+            PlayPauseIcon(playing = playing, tint = Color.White)
+        }
     }
 }
 
@@ -1274,7 +1282,7 @@ private fun FullPlayer(
     }
 
     Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21183D), Color(0xFF11111B), Ink)))
+        Modifier.fillMaxSize().background(GlassBackdrop)
             .statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -1312,12 +1320,19 @@ private fun FullPlayer(
             Text(formatTime(duration.toLong()), color = Muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.fillMaxWidth().sonoraGlass(CircleShape).padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             IconButton(onClick = { shuffle = !shuffle; controller?.shuffleModeEnabled = shuffle }, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Shuffle, "Перемешать", tint = if (shuffle) Violet else Muted, modifier = Modifier.size(22.dp))
             }
             IconButton(onClick = previous, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipPrevious, "Предыдущий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }
-            FilledIconButton(onClick = { if (playing) pause() else resume() }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Ink), modifier = Modifier.size(72.dp)) {
+            IconButton(
+                onClick = { if (playing) pause() else resume() },
+                modifier = Modifier.size(64.dp).sonoraGlass(CircleShape, GlassTone.Primary)
+            ) {
                 PlayPauseIcon(playing = playing, size = 35.dp, tint = Ink)
             }
             IconButton(onClick = next, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipNext, "Следующий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }

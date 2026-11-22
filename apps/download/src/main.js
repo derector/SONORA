@@ -13,10 +13,17 @@ function releaseApk(release) {
   const assets = (release.assets ?? []).filter(({ name, browser_download_url: url }) =>
     name?.toLowerCase().endsWith(".apk") && url === `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(name)}`);
   return assets.find(({ name }) => name === `SONORA-release-${tag}.apk`) ??
-    assets.find(({ name }) => name === "SONORA-latest.apk") ?? assets[0];
+    assets.find(({ name }) => name === "SONORA-latest.apk");
 }
-const sizeLabel = (bytes) => bytes ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : "Размер уточняется";
-const safeDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(new Date(value)) : "Дата не указана";
+const sizeLabel = (bytes) => Number.isFinite(bytes) && bytes > 0
+  ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} МБ`
+  : "Уточняется";
+const safeDate = (value) => {
+  const date = new Date(value);
+  return value && Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(date)
+    : "Дата не указана";
+};
 const getSha = (asset) => {
   const digest = asset?.digest || "";
   if (/^sha256:[a-f0-9]{64}$/i.test(digest)) return digest.slice(7);
@@ -25,12 +32,18 @@ const getSha = (asset) => {
 
 function applyRelease(release, history = []) {
   const asset = releaseApk(release);
-  const version = release?.tag_name || "Смотри на GitHub";
+  const version = release?.tag_name || "См. релиз";
   const url = asset?.browser_download_url ?? `${RELEASES_PAGE}/latest`;
   const sha = getSha(asset);
   $$("[data-version]").forEach((node) => node.textContent = version);
   $$("[data-size]").forEach((node) => node.textContent = sizeLabel(asset?.size));
-  $$("[data-apk]").forEach((node) => node.href = url);
+  $$("[data-apk]").forEach((node) => {
+    node.href = url;
+    const label = node.querySelector(".button-label");
+    if (label) label.textContent = asset ? "Скачать APK" : "Открыть релиз";
+  });
+  const copy = $("#copySha");
+  if (copy) copy.disabled = !sha;
   $$("[data-release-title]").forEach((node) => node.textContent = release?.name || "SONORA для Android");
   $$("[data-release-date]").forEach((node) => node.textContent = release ? `Опубликовано: ${safeDate(release.published_at)}` : "Версия доступна на странице релиза");
   $$("[data-release-notes]").forEach((node) => {
@@ -44,7 +57,7 @@ function applyRelease(release, history = []) {
     history.filter((item) => item.tag_name !== release?.tag_name).slice(0, 4).forEach((item) => {
       const row = document.createElement("a");
       row.className = "release-item";
-      row.href = item.html_url || "https://github.com/derector/SONORA/releases";
+      row.href = `${RELEASES_PAGE}/tag/${item.tag_name}`;
       row.target = "_blank";
       row.rel = "noopener noreferrer";
       const name = document.createElement("b");
@@ -72,16 +85,21 @@ async function loadReleases() {
       headers: { Accept: "application/vnd.github+json" },
       signal: controller.signal
     };
-    const history = fetch(`${RELEASES_API}?per_page=5`, options)
-      .then((response) => response.ok ? response.json() : [])
-      .catch(() => []);
-    const response = await fetch(`${RELEASES_API}/latest`, options);
-    if (!response.ok) throw new Error("Release API unavailable");
-    const latest = await response.json();
-    if (latest.draft || latest.prerelease || !releaseApk(latest)) throw new Error("No published APK release");
-    applyRelease(latest);
-    const releases = await history;
-    if (Array.isArray(releases)) applyRelease(latest, releases.filter((item) => !item.draft && !item.prerelease));
+    const read = async (url) => {
+      try {
+        const response = await fetch(url, options);
+        return response.ok ? await response.json() : null;
+      } catch {
+        return null;
+      }
+    };
+    const [latest, rawHistory] = await Promise.all([
+      read(`${RELEASES_API}/latest`),
+      read(`${RELEASES_API}?per_page=5`)
+    ]);
+    const hasPublishedApk = (item) => item && !item.draft && !item.prerelease && Boolean(releaseApk(item));
+    const history = Array.isArray(rawHistory) ? rawHistory.filter(hasPublishedApk) : [];
+    applyRelease(hasPublishedApk(latest) ? latest : history[0] ?? null, history);
   } catch {
     applyRelease(null);
   } finally {
@@ -91,16 +109,19 @@ async function loadReleases() {
 
 const toggle = $("#menuToggle");
 const nav = $("#navLinks");
-toggle?.addEventListener("click", () => {
-  const open = nav.classList.toggle("open");
-  toggle.setAttribute("aria-expanded", String(open));
-  toggle.textContent = open ? "×" : "☰";
+function setMenuOpen(open) {
+  nav?.classList.toggle("open", open);
+  toggle?.setAttribute("aria-expanded", String(open));
+  toggle?.setAttribute("aria-label", open ? "Закрыть меню" : "Открыть меню");
+  if (toggle) toggle.textContent = open ? "×" : "☰";
+}
+toggle?.addEventListener("click", () => setMenuOpen(!nav?.classList.contains("open")));
+$$(".nav-links a").forEach((link) => link.addEventListener("click", () => setMenuOpen(false)));
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !nav?.classList.contains("open")) return;
+  setMenuOpen(false);
+  toggle?.focus();
 });
-$$(".nav-links a").forEach((link) => link.addEventListener("click", () => {
-  nav.classList.remove("open");
-  toggle?.setAttribute("aria-expanded", "false");
-  if (toggle) toggle.textContent = "☰";
-}));
 
 let lastY = 0;
 const header = $("#siteHeader");
@@ -109,7 +130,7 @@ window.addEventListener("scroll", () => {
   const max = document.documentElement.scrollHeight - window.innerHeight;
   $("#scrollProgress").style.width = `${max > 0 ? y / max * 100 : 0}%`;
   header?.classList.toggle("scrolled", y > 20);
-  if (y > 560 && y > lastY + 3) header?.classList.add("hidden");
+  if (y > 560 && y > lastY + 3 && !nav?.classList.contains("open")) header?.classList.add("hidden");
   else if (y < lastY - 3 || y < 560) header?.classList.remove("hidden");
   lastY = y;
 }, { passive: true });
@@ -124,29 +145,6 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
   $$(".reveal").forEach((element) => observer.observe(element));
 } else {
   $$(".reveal").forEach((element) => element.classList.add("is-visible"));
-}
-
-const moods = ["lofi для фокуса", "неон для пробежки", "джаз для вечера", "эмбиент для паузы", "новые музыкальные открытия"];
-let moodIndex = 0;
-const phoneShots = $(".phone-stack img");
-if (phoneShots.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  let phoneIndex = 0;
-  setInterval(() => {
-    phoneShots[phoneIndex].classList.remove("active");
-    phoneIndex = (phoneIndex + 1) % phoneShots.length;
-    phoneShots[phoneIndex].classList.add("active");
-  }, 5200);
-}
-
-const moodLine = $("#moodLine");
-if (!matchMedia("(prefers-reduced-motion: reduce)").matches && moodLine) {
-  setInterval(() => {
-    moodIndex = (moodIndex + 1) % moods.length;
-    moodLine.animate([{opacity:1,transform:"translateY(0)"},{opacity:0,transform:"translateY(-5px)"}],{duration:220}).onfinish = () => {
-      moodLine.textContent = moods[moodIndex];
-      moodLine.animate([{opacity:0,transform:"translateY(5px)"},{opacity:1,transform:"translateY(0)"}],{duration:260});
-    };
-  }, 3600);
 }
 
 $$(".demo-tab").forEach((button) => button.addEventListener("click", () => {

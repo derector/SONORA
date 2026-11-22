@@ -15,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -85,10 +84,10 @@ fun AssistantScreen(onBack: () -> Unit, onQuiet: () -> Unit, onResume: () -> Boo
             else status = "Речь не распознана. Попробуйте ещё раз."
         } else status = "Голосовой запрос отменён. Можно написать текст."
     }
-    LazyColumn(Modifier.fillMaxSize().background(Color(0xFF080B14)), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(Modifier.fillMaxSize().background(GlassBackdrop), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             TextButton(onClick = onBack) { Text("Назад") }
-            Column(Modifier.fillMaxWidth().background(Brush.linearGradient(listOf(Color(0xFF403257), Color(0xFF15343E))), RoundedCornerShape(26.dp)).padding(20.dp)) {
+            Column(Modifier.fillMaxWidth().sonoraGlass(RoundedCornerShape(26.dp), GlassTone.Accent).padding(20.dp)) {
                 Text("Помощник SONORA", color = Color.White, fontSize = 25.sp)
                 Text("Команды: слушать подборку, пауза, продолжить", color = Color(0xFFD8CCFF), modifier = Modifier.padding(top = 8.dp))
                 Row {

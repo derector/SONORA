@@ -6,9 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,9 +13,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
@@ -40,13 +40,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -71,10 +70,8 @@ val NavTabs = listOf(
     NavTab("Профиль", "Профиль", Icons.Default.Person),
 )
 
-private val NavSurface = Brush.verticalGradient(listOf(Color(0xFF39324F), Color(0xFF171E2D), Color(0xFF163039)))
-private val NavEdge = Color(0x55DDD6FE)
 private val NavLabel = Color(0xFFF1EDFF)
-private val NavMuted = Color(0xFF8E90A6)
+private val NavMuted = Color(0xFFC2BFD4)
 
 /**
  * Bottom navigation with a glass surface and a single active indicator.
@@ -144,9 +141,7 @@ fun SonoraBottomBar(
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .height(72.dp)
-            .clip(RoundedCornerShape(28.dp))
-            .background(NavSurface)
-            .border(1.dp, NavEdge, RoundedCornerShape(28.dp))
+            .sonoraGlass(RoundedCornerShape(28.dp))
             .onSizeChanged { barWidthPx.value = it.width.toFloat() }
     ) {
         // First child, therefore painted behind the row.
@@ -165,26 +160,20 @@ fun SonoraBottomBar(
                     height = with(density) { heightPx.toDp() }
                 )
                 .alpha(pillAlpha)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(
-                    Brush.verticalGradient(
-                        listOf(Color(0xFF62558C), Color(0xFF3C3562), Color(0xFF263A55)),
-                        endY = heightPx.coerceAtLeast(1f)
-                    )
-                )
-                .border(1.dp, Color(0x50E1D6FF), RoundedCornerShape(percent = 50))
+                .sonoraGlass(RoundedCornerShape(percent = 50), GlassTone.Accent)
         )
 
         Row(
             Modifier
                 .fillMaxWidth()
+                .selectableGroup()
                 .padding(top = 10.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             tabs.forEachIndexed { index, tab ->
                 val active = index == selectedIndex
                 val iconColor by animateColorAsState(
-                    if (active) Violet else NavMuted,
+                    if (active) Color(0xFFE7DFFF) else NavMuted,
                     if (motion) tween(180) else snap(),
                     label = "tab-icon-color"
                 )
@@ -196,13 +185,14 @@ fun SonoraBottomBar(
                 Column(
                     Modifier
                         .weight(1f)
-                        .clickable(onClick = { onSelect(tab.key) }),
+                        .heightIn(min = 48.dp)
+                        .selectable(selected = active, role = Role.Tab, onClick = { onSelect(tab.key) }),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
                         Icon(
                             tab.icon,
-                            contentDescription = tab.label,
+                            contentDescription = null,
                             modifier = Modifier.size(22.dp),
                             tint = iconColor
                         )

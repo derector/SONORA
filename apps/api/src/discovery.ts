@@ -20,7 +20,9 @@ import { createPrivateKey, createSign } from "node:crypto";
 import {
   jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
 } from "./catalog.js";
-import { normalizeForMatch, scoreMatch, type ImportListItem } from "./import-core.js";
+import { normalizeForMatch, type ImportListItem } from "./import-core.js";
+import { matchRecording, recordingTextKey, recordingTitleKey, validIsrc } from "./recording-match.js";
+export { validIsrc } from "./recording-match.js";
 import type { JamendoCandidate } from "./catalog.js";
 
 export type AccessStatus = "open" | "preview" | "stream_only" | "external" | "metadata";
@@ -60,12 +62,6 @@ export interface SourceAdapter {
 export const ACCESS_RANK: Record<AccessStatus, number> = {
   open: 0, preview: 1, stream_only: 2, external: 3, metadata: 4
 };
-
-const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{2}\d{5}$/;
-export function validIsrc(value: unknown): string | null {
-  const text = typeof value === "string" ? value.toUpperCase().replace(/[\s-]/g, "") : "";
-  return ISRC_PATTERN.test(text) ? text : null;
-}
 
 function clampLimit(value: unknown, fallback: number, max = 40): number {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -115,19 +111,12 @@ export function classifyVersionTag(rawTitle: unknown): VersionTag {
   return null;
 }
 
-const VERSION_NOISE_IN_KEY = /\b(?:remix|live|acoustic|instrumental|karaoke|vip|bootleg|mashup|nightcore|slowed|sped|speed|edit|version|original|cover|remake|rework)\b/gi;
-
-/** Group key without version noise so "Song (Remix)" merges with "Song". */
-function versionlessKeyArtistTitle(result: DiscoveryResult): string {
-  const title = normalizeForMatch(result.title).replace(VERSION_NOISE_IN_KEY, " ").replace(/\s+/g, " ").trim();
-  const artist = normalizeForMatch(result.artist);
-  return `mt:${artist}|${title}`;
-}
-
 function groupKeyOf(result: DiscoveryResult): string {
   const isrc = validIsrc(result.isrc);
   if (isrc) return `isrc:${isrc}`;
-  return versionlessKeyArtistTitle(result);
+  const artist = recordingTextKey(result.artist);
+  const title = recordingTitleKey(result.title);
+  return artist && artist !== "unknown artist" && title ? `mt:${artist}|${title}` : `source:${result.sourceId}:${result.externalId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +143,8 @@ function byAccessThenSource(a: DiscoveryResult, b: DiscoveryResult): number {
 
 /**
  * Dedupe/fold results into groups:
- *  - key = ISRC when present, else normalized artist+title with version noise
- *    stripped, so official/remix/slowed variants merge into one group;
+ *  - key = ISRC when present, else normalized artist+title preserving the
+ *    version text (remix, live, edit, alternate take, etc.);
  *  - within a group, members whose known durations differ by more than ±10s
  *    from the group anchor split into separate groups (a wrong-ISRC merge of
  *    different recordings must not present one as an alternative of the other);
@@ -624,7 +613,8 @@ const metadataGraphAdapter: SourceAdapter = {
         sourcePageUrl: `https://musicbrainz.org/recording/${recording.id}`,
         licenseUrl: null,
         access: "metadata" as const,
-        isrc: validIsrc((recording.isrcs ?? [])[0]),
+        isrc: (recording.isrcs ?? []).map(validIsrc).find((id) => id === isrc) ??
+          (recording.isrcs ?? []).map(validIsrc).find(Boolean) ?? null,
         releaseYear: null,
         versionTag: classifyVersionTag(recording.title)
       } satisfies DiscoveryResult];
@@ -1168,17 +1158,6 @@ export type ResolvedTrack = {
   providers?: Record<string, ProviderStatus>;
 };
 
-const RESOLVE_MATCH_THRESHOLD = 0.55;
-const DURATION_AGREEMENT_SECONDS = 15;
-
-function durationAgrees(want: number | null, have: number | null): boolean {
-  return want !== null && have !== null && Math.abs(want - have) <= DURATION_AGREEMENT_SECONDS;
-}
-
-function toCandidateShape(result: DiscoveryResult): { artist: string; title: string; durationSeconds?: number | null } {
-  return { artist: result.artist, title: result.title, durationSeconds: result.durationSeconds };
-}
-
 /**
  * Find the single best licensed full audio for {artist,title,isrc?,duration?}.
  * Only open-licensed adapters may produce found=true; previews and platform
@@ -1207,7 +1186,7 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
   const graphQuery = isrc ?? [artist, title].filter(Boolean).join(" ").slice(0, 100);
   const graph = !playbackOnly || !title ? pool(graphAdapter, graphQuery) : Promise.resolve([]);
   const anchor = title ? undefined : (await graph).find((result) => result.isrc === isrc);
-  const wanted = { artist: artist || anchor?.artist || "", title: title ?? anchor?.title ?? "", durationSeconds: duration ?? anchor?.durationSeconds ?? null };
+  const wanted = { isrc, artist: artist || anchor?.artist || "", title: title ?? anchor?.title ?? "", durationSeconds: duration ?? anchor?.durationSeconds ?? null };
   const query = [wanted.artist, wanted.title].filter(Boolean).join(" ").slice(0, 100) || graphQuery;
   const [graphHits, open, previewResults] = await Promise.all([
     graph,
@@ -1221,32 +1200,23 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
 
   // A metadata hit can guide the search, but only an audio candidate's own
   // identifier confirms that the candidate is the same recording.
-  const verifiedByGraph = isrc !== null && graphHits.some((hit) => hit.isrc === isrc);
-  const scoredOpen = openResults
-    .filter((result) => result.access === "open" && result.audioUrl &&
-      (!playbackOnly || result.audioUrl.startsWith("https://") && (!isrc || !result.isrc || result.isrc === isrc)))
-    .map((result) => ({
-      result,
-      score: isrc && result.isrc === isrc ? Math.max(scoreMatch(toCandidateShape(result), wanted), 0.95)
-        : scoreMatch(toCandidateShape(result), wanted),
-      via: isrc && result.isrc === isrc
-        ? "isrc" as const
-        : durationAgrees(wanted.durationSeconds, result.durationSeconds ?? null) && scoreMatch(toCandidateShape(result), wanted) >= 0.7
-          ? "meta+duration" as const
-          : "title-only" as const
-    }))
-    .filter((entry) => entry.score >= (playbackOnly && wanted.artist ? 0.8 : RESOLVE_MATCH_THRESHOLD))
-    .sort((a, b) => b.score - a.score || ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access]);
+  const verifiedByGraph = graphHits.some((hit) => matchRecording(wanted, hit) === "isrc");
+  const scores = { isrc: 0.99, "meta+duration": 0.9, "artist+title": 0.78 } as const;
+  const scoredOpen = openResults.flatMap((result) => {
+    if (result.access !== "open" || !result.audioUrl?.startsWith("https://")) return [];
+    const match = matchRecording(wanted, result);
+    if (!match) return [];
+    const difference = wanted.durationSeconds !== null && result.durationSeconds
+      ? Math.abs(wanted.durationSeconds - result.durationSeconds) : Number.MAX_VALUE;
+    return [{ result, match, score: scores[match], difference }];
+  }).sort((a, b) => b.score - a.score || a.difference - b.difference);
 
   const bestOpen = scoredOpen[0];
   if (bestOpen) {
-    let confidence = bestOpen.score;
-    if (bestOpen.via === "isrc") confidence = Math.max(confidence, 0.95);
-    else if (bestOpen.via === "meta+duration") confidence = Math.min(0.9, confidence + 0.05);
-    else if (!wanted.artist) confidence = Math.min(confidence, 0.75);
     return {
-      found: true, track: bestOpen.result, matched_via: bestOpen.via,
-      confidence: Math.round(Math.max(0, Math.min(1, confidence)) * 100) / 100
+      found: true, track: bestOpen.result,
+      matched_via: bestOpen.match === "artist+title" ? "title-only" : bestOpen.match,
+      confidence: bestOpen.score
     };
   }
 
@@ -1254,21 +1224,20 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
   // preview (iTunes/other adapters) or link-only result is reported as an
   // alternative — never as found=true.
   const previewCandidates = [...openResults.filter((r) => r.access !== "open"), ...previewResults]
-    .map((result) => ({ result, score: scoreMatch(toCandidateShape(result), wanted) }))
-    .filter((entry) => entry.score >= 0.6)
-    .sort((a, b) => ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access] || b.score - a.score);
-  const alternative = previewCandidates[0]?.result ?? null;
-  const graphAnchor = graphHits.find((hit) => scoreMatch(toCandidateShape(hit), wanted) >= 0.7);
-  const via: ResolvedTrack["matched_via"] = isrc && (verifiedByGraph || graphAnchor) ? "isrc"
-    : durationAgrees(duration, alternative?.durationSeconds ?? null) ? "meta+duration" : "title-only";
-  const confidence = alternative
-    ? Math.max(...previewCandidates.map((entry) => entry.score)) : (graphAnchor ? 0.4 : 0);
+    .flatMap((result) => {
+      const match = matchRecording(wanted, result);
+      return match ? [{ result, match, score: scores[match] }] : [];
+    })
+    .sort((a, b) => b.score - a.score || ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access]);
+  const alternative = previewCandidates[0];
+  const graphAnchor = graphHits.find((hit) => matchRecording(wanted, hit) === "isrc") ??
+    graphHits.find((hit) => matchRecording(wanted, hit) !== null);
   return {
     found: false, track: null,
-    matched_via: via,
-    confidence: Math.round(Math.max(0, Math.min(1, confidence)) * 100) / 100,
-    preview_alternative: via === "isrc" && graphAnchor
-      ? { ...graphAnchor, audioUrl: null, access: "metadata" } : alternative
+    matched_via: verifiedByGraph || alternative?.match === "isrc" ? "isrc"
+      : alternative?.match === "meta+duration" ? "meta+duration" : "title-only",
+    confidence: alternative?.score ?? (graphAnchor ? 0.4 : 0),
+    preview_alternative: alternative?.result ?? graphAnchor ?? null
   };
 }
 

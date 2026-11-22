@@ -512,8 +512,7 @@ private fun StatsCard(
             .fillMaxWidth()
             .padding(horizontal = 18.dp)
             .staggerEnter(index)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Panel)
+            .sonoraGlass(RoundedCornerShape(18.dp))
             .padding(16.dp)
     ) {
         Text("Статистика прослушивания", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold)

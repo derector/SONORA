@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Disc3, Search } from "lucide-react";
+import { Clock3, Disc3, Search, X } from "lucide-react";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
 import { TrackRow } from "../../components/ui/track-row";
@@ -16,6 +16,8 @@ type OfficialRelease = { id: string; title: string; artist: string; album?: stri
 type OfficialPlayer = { provider: "Bandcamp" | "SoundCloud" | "YouTube"; url: string; layout: "track" | "album" | "video" };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; officialReleases?: OfficialRelease[]; providers?: Record<string, ProviderStatus>; error?: string };
+
+const RECENT_SEARCHES_KEY = "sonora-recent-searches-v1";
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 
@@ -116,6 +118,7 @@ export default function SearchPage() {
   const { t } = useLanguage();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
   const [query, setQuery] = useState("");
+  const [recents, setRecents] = useState<string[]>([]);
   const [kind, setKind] = useState<"all" | "tracks" | "artists">("all");
   const [tracks, setTracks] = useState<Track[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
@@ -158,8 +161,37 @@ export default function SearchPage() {
     }
   }, []);
 
+  function updateQuery(next: string) {
+    setQuery(next);
+    searchSequence.current += 1;
+    setLoading(false);
+    setError("");
+    setSearched(false);
+    setTracks([]);
+    setArtists([]);
+    setMetadata([]);
+    setOfficialReleases([]);
+    setProviders({});
+  }
+
+  function rememberSearch(query: string) {
+    const term = query.trim().slice(0, 100);
+    if (term.length < 2) return;
+    const next = [term, ...recents.filter((item) => item.toLowerCase() !== term.toLowerCase())].slice(0, 6);
+    setRecents(next);
+    try { localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)); } catch { /* Storage may be disabled. */ }
+  }
+
+  useEffect(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(RECENT_SEARCHES_KEY) ?? "[]");
+      if (Array.isArray(stored)) setRecents(stored.filter((item): item is string => typeof item === "string" && item.length >= 2 && item.length <= 100).slice(0, 6));
+    } catch { /* Search works without local storage. */ }
+  }, []);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    rememberSearch(query);
     void runSearch(query, kind);
   }
 
@@ -188,16 +220,18 @@ export default function SearchPage() {
         <p className="t-eyebrow flex items-center gap-2 text-violet-200"><Search size={13} /> {t("Catalog search")}</p>
         <h1 className="t-display mt-4">{t("Search the catalog.")}</h1>
         <p className="t-meta mt-3 max-w-2xl leading-6">{t("Search tracks, artists and recordings in one place. Every playable result keeps its attribution and license information.")}</p>
-        <form onSubmit={submit} className="mt-7 flex max-w-3xl items-center gap-2 rounded-panel border border-white/10 bg-black/25 p-2">
+        <form onSubmit={submit} className="sonora-search-lens mt-7 flex max-w-3xl items-center gap-2 rounded-panel border border-white/10 bg-black/25 p-2">
           <Search className="ml-2 shrink-0 text-muted" size={18} />
           <input
             value={query}
             aria-label={t("Track title, artist or album")}
-            onChange={(event) => { const next = event.target.value; setQuery(next); searchSequence.current += 1; setLoading(false); setError(""); setSearched(false); setTracks([]); setArtists([]); setMetadata([]); setOfficialReleases([]); setProviders({}); }}
+            onChange={(event) => updateQuery(event.target.value)}
+            maxLength={100}
             minLength={2}
             placeholder={t("Track title, artist or album")}
             className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-[color:var(--fg-faint)]"
           />
+          {query && <button type="button" className="btn-icon shrink-0" aria-label={t("Clear search")} onClick={() => updateQuery("")}><X size={17}/></button>}
           <button disabled={loading || query.trim().length < 2} className="btn-press btn-primary !px-5 !py-2 text-sm">{t("Search")}</button>
         </form>
         <div className="mt-4 flex flex-wrap gap-2">
@@ -208,6 +242,25 @@ export default function SearchPage() {
           ))}
         </div>
       </section>
+
+      {!searched && !query.trim() && recents.length > 0 && (
+        <section className="surface mt-5 rounded-panel border border-white/10 p-4" aria-label={t("Recent searches")}>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold">{t("Recent searches")}</h2>
+            <button type="button" className="btn-ghost !min-h-9 !px-3 text-xs" onClick={() => {
+              setRecents([]);
+              try { localStorage.removeItem(RECENT_SEARCHES_KEY); } catch { /* Storage may be disabled. */ }
+            }}>{t("Clear search history")}</button>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {recents.map((term) => <button key={term} type="button" className="chip min-w-0 max-w-full !min-h-9" onClick={() => {
+              setQuery(term);
+              rememberSearch(term);
+              void runSearch(term, kind);
+            }}><Clock3 size={14} className="shrink-0" aria-hidden/><span className="min-w-0 truncate">{term}</span></button>)}
+          </div>
+        </section>
+      )}
 
       {!loading && searched && resultCount > 0 && <p className="t-meta mt-6">{resultCount} {t("results")}</p>}
 
