@@ -18,7 +18,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { createLicensedCatalog } from "./licensed-catalog.js";
 import { createPrivateKey, createSign } from "node:crypto";
 import {
-  jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
+  audiusPublicPage, jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
 } from "./catalog.js";
 import { normalizeForMatch, type ImportListItem } from "./import-core.js";
 import { matchRecording, recordingTextKey, recordingTitleKey, validIsrc } from "./recording-match.js";
@@ -310,7 +310,7 @@ const audiusPlatformAdapter: SourceAdapter = {
           ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`
           : null,
         previewUrl: null,
-        sourcePageUrl: track.permalink ?? "https://audius.co",
+        sourcePageUrl: audiusPublicPage(track.permalink, track.user?.handle),
         licenseUrl,
         access: streamable ? "open" as const : "external" as const,
         isrc: null,

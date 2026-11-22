@@ -653,7 +653,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
         album_name: track.album?.playlist_name ?? null, duration_seconds: track.duration ?? null,
         artwork_url: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         license_url: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        source_url: track.permalink ?? "https://audius.co", position: (last?.position ?? -1) + 1
+        source_url: audiusPublicPage(track.permalink), position: (last?.position ?? -1) + 1
       });
       if (error) return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
       return reply.code(201).send({ ok: true, provider: "audius", providerTrackId: track.id });
@@ -1104,7 +1104,7 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
         artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
         licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+        sourceUrl: audiusPublicPage(track.permalink), provider: "Audius", playable: true
       }];
     });
     return { provider: "Audius", sort, items, sourceCount: records.length };
@@ -1275,7 +1275,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         for (const track of resolved.flat()) {
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
-          const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
+          const sourceUrl = audiusPublicPage(track.permalink, track.user?.handle);
           const streamable = track.is_streamable === true && track.is_stream_gated !== true &&
             (!track.duration || track.duration <= PLAYABLE_MAX_DURATION_SECONDS);
           if (included.has(track.id) || inApp && !streamable) continue;
@@ -1402,7 +1402,7 @@ import { rankRecommendations, type TasteSignal } from "./recommendation-core.js"
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
 import {
-  PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
+  audiusPublicPage, PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
   jamendoConfig, jamendoLicenseAllowed, matchesCatalogSearch, type JamendoCandidate
 } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";

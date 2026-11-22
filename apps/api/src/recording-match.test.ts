@@ -32,7 +32,7 @@ test("search groups keep alternate takes separate from the original even at the 
 
 test("playback resolver skips gated tracks and mismatches and selects permitted matching audio", async (t) => {
   const track = (id: string, title: string, duration: number, is_stream_gated = false) => ({
-    id, title, duration, is_stream_gated, is_streamable: true, user: { name: recording.artist }
+    id, title, duration, permalink: "/artist/evening", is_stream_gated, is_streamable: true, user: { name: recording.artist }
   });
   let results = [
     track("gated", recording.title, 180, true),
@@ -46,6 +46,7 @@ test("playback resolver skips gated tracks and mismatches and selects permitted 
   });
   const resolved = await resolveBestTrack({ ...recording, playbackOnly: true }, {});
   assert.equal(resolved.track?.externalId, "right");
+  assert.equal(resolved.track?.sourcePageUrl, "https://audius.co/artist/evening");
   assert.equal(resolved.matched_via, "meta+duration");
   assert.equal(resolved.track?.audioUrl, "https://api.audius.co/v1/tracks/right/stream?app_name=SONORA");
   results = results.slice(0, -1);
