@@ -1335,7 +1335,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         });
       }
     })());
-    if (type === "artists") {
+    if (type === "artists" || type === "all") {
       tasks.push((async () => {
         try {
           const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
@@ -1464,56 +1464,10 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (r
   };
 });
 
-// SONORA music assistant. Works fully offline through a deterministic RU/EN
+// SONORA music assistant. Intent parsing works without an LLM via a deterministic RU/EN
 // intent parser over the licensed catalogs; upgrades to an LLM only when the
 // operator provides their own OPENAI_API_KEY (service stays free by default).
-const MOOD_QUERIES: Array<{ words: string[]; query: string; label: string }> = [
-  { words: ["relax", "calm", "chill", "релакс", "спокойн", "отдых", "медитац", "ambient"], query: "calm ambient relaxation", label: "Relaxation" },
-  { words: ["focus", "study", "work", "фокус", "работа", "учёб", "учеб", "концентр"], query: "lofi study focus", label: "Focus" },
-  { words: ["energy", "energetic", "workout", "run", "gym", "бодр", "энерг", "тренеровк", "пробежк", "спорт"], query: "upbeat electronic energy", label: "Energy" },
-  { words: ["party", "dance", "club", "вечеринк", "танц", "дискотек"], query: "party dance", label: "Party" },
-  { words: ["sleep", "night", "dream", "сон", "сном", "ночн", "расслабь и усни"], query: "sleep dreamy", label: "Sleep" },
-  { words: ["happy", "fun", "bright", "весел", "радост", "классн", "позитив"], query: "happy upbeat indie", label: "Happy" },
-  { words: ["sad", "melanchol", "груст", "печал", "минор"], query: "sad piano melancholic", label: "Melancholy" },
-  { words: ["jazz", "джаз", "swing", "свинг"], query: "jazz swing", label: "Jazz" },
-  { words: ["classical", "orchestral", "классич", "оркестр", "фортепиано", "piano"], query: "classical piano orchestral", label: "Classical" },
-  { words: ["rock", "гитар", "метал", "metal", "punk"], query: "rock guitar", label: "Rock" },
-  { words: ["electronic", "electro", "synth", "электрон", "синт", "techno", "house"], query: "electronic synth", label: "Electronic" }
-];
-type AssistantIntent = {
-  action: "search" | "create_playlist" | "similar" | "explain" | "greeting";
-  query: string; label: string; playlistName?: string;
-};
-function parseAssistantMessage(rawMessage: string): AssistantIntent {
-  const message = rawMessage.toLowerCase();
-  const wantsPlaylist = /(плейлист|playlist|собери|сделай|create|make|создай)/.test(message);
-  const wantsSimilar = /(похож|like|similar|в духе|рядом с|аналогичн)/.test(message);
-  const wantsExplain = /(почему|why|recommend|совет|что слушать|посоветуй|подбери)/.test(message);
-  const mood = MOOD_QUERIES.find((entry) => entry.words.some((word) => message.includes(word)));
-  const artistMatch = /(?:похож[ееа]? на|like|в духе|аналогичн[а-я]* )\s*([a-zа-яё0-9][a-zа-яё0-9 .+&_-]{1,59})/i.exec(rawMessage.trim());
-  if (wantsSimilar && artistMatch?.[1]) {
-    const query = artistMatch[1].trim();
-    return { action: "similar", query, label: query, playlistName: wantsPlaylist ? `Similar to ${query}` : undefined };
-  }
-  if (mood) {
-    return {
-      action: wantsPlaylist ? "create_playlist" : "search",
-      query: mood.query, label: mood.label,
-      playlistName: wantsPlaylist ? `${mood.label} mix` : undefined
-    };
-  }
-  if (wantsExplain && !wantsSimilar) {
-    return { action: "explain", query: "", label: "recommendations" };
-  }
-  if (/(привет|здравств|hello|hi|start)/.test(message) && message.length < 40) {
-    return { action: "greeting", query: "", label: "greeting" };
-  }
-  // Free text: strip command words and search the remainder.
-  const stripped = message
-    .replace(/(собери|создай|сделай|найди|поищем|плейлист|playlist|для|мне|пожалуйста|create|make|find|play|search|some|a|the)/gi, " ")
-    .replace(/\s+/g, " ").trim();
-  return { action: "search", query: stripped || rawMessage.trim().slice(0, 60), label: "search" };
-}
+import { parseAssistantMessage, type AssistantIntent } from "./assistant-core.js";
 async function assistantViaLlm(message: string): Promise<AssistantIntent | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -1525,7 +1479,7 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         messages: [
-          { role: "system", content: 'Classify a music assistant request. Reply ONLY with JSON {"action":"search|create_playlist|similar|explain|greeting","query":"catalog search terms","label":"short human label","playlistName":"only for create_playlist"}. Query must name genre/mood/artist in English.' },
+          { role: "system", content: 'Classify a music assistant request. Reply ONLY with JSON {"action":"search|create_playlist|similar|explain|greeting","query":"catalog search terms","label":"short human label","playlistName":"only for create_playlist"}. Use Russian for label and playlistName. Preserve artist and track names in their original language. Translate only generic mood/genre search terms.' },
           { role: "user", content: message }
         ],
         temperature: 0, max_tokens: 120, response_format: { type: "json_object" }
@@ -1540,7 +1494,7 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
       action: parsed.action,
       query: typeof parsed.query === "string" ? parsed.query.slice(0, 100) : "",
       label: typeof parsed.label === "string" ? parsed.label.slice(0, 60) : "assistant",
-      playlistName: typeof parsed.playlistName === "string" ? parsed.playlistName.slice(1, 80) : undefined
+      playlistName: typeof parsed.playlistName === "string" ? parsed.playlistName.slice(0, 80) : undefined
     };
   } catch {
     return null;
@@ -1548,17 +1502,17 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
 }
 app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, async (request, reply) => {
   const message = typeof request.body?.message === "string" ? request.body.message.trim().slice(0, 300) : "";
-  if (message.length < 2) return reply.code(400).send(authError(400, "Ask the assistant something about music."));
-  const intent = (await assistantViaLlm(message)) ?? parseAssistantMessage(message);
+  if (message.length < 2) return reply.code(400).send(authError(400, "Напишите настроение, название трека или исполнителя."));
   const bearer = request.headers.authorization;
   const auth = bearer ? await requireUser(request, reply) : null;
   if (bearer && !auth) return; // token was present but invalid
+  const intent = (await assistantViaLlm(message)) ?? parseAssistantMessage(message);
   if (intent.action === "greeting") {
-    return { reply: "I can find music by mood, artist or occasion, explain recommendations and build playlists. Try: 'собери плейлист для вечерней пробежки'.", intent, tracks: [] };
+    return { reply: "Подберу музыку по настроению и вашим вкусам. Попробуйте: «микс для пробежки» или «найди спокойное фортепиано».", intent, tracks: [] };
   }
   if (intent.action === "explain") {
     if (!auth) {
-      return { reply: "Recommendations explain themselves once you sign in and start listening — I learn from real plays, skips and favorites.", intent, tracks: [] };
+      return { reply: "Войдите в аккаунт: для персональной подборки нужны ваши прослушивания, пропуски и избранное. Пока попробуйте подборку по настроению.", intent, tracks: [] };
     }
     const { items } = await (async () => {
       const taste: TasteSignal[] = [];
@@ -1571,26 +1525,60 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
         else plays.set(event.artist_name, (plays.get(event.artist_name) ?? 0) + 1);
       }
       for (const [artist, count] of plays) taste.push({ artist, plays: count });
-      const pool = await jamendoCandidates([...plays.keys()].slice(0, 2).join(" "), 24);
-      return { items: rankRecommendations(pool, taste, 6) };
+      const favoriteArtists = (favorites ?? []).map((favorite) => favorite.artist_name as string);
+      const seeds = [...new Set([...favoriteArtists, ...[...plays.entries()].sort((a, b) => b[1] - a[1]).map(([artist]) => artist)])].slice(0, 4);
+      const pools = await Promise.allSettled([...seeds.map((artist) => jamendoCandidates(artist, 12)), jamendoCandidates("", 24, "popularity_total")]);
+      const pool = pools.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+      return { items: rankRecommendations(pool, taste, 15) };
     })();
-    const topReasons = items.slice(0, 3).map((item) => `“${item.title}” — ${item.reasons.join(", ") || "popular in licensed catalogs"}`);
+    const topReasons = items.slice(0, 3).map((item) => `“${item.title}” — ${item.reasons.join(", ") || "из доступного каталога"}`);
     return {
       reply: topReasons.length
-        ? `You picked these because of your listening story: ${topReasons.join("; ")}.`
-        : "Your listening history is still small. Play a few tracks and I will explain every suggestion.",
+        ? `Подборка с учётом ваших прослушиваний: ${topReasons.join("; ")}.`
+        : "Пока мало данных о ваших вкусах. Слушайте музыку и добавляйте любимые треки в избранное.",
       intent, tracks: items.map(({ score, reasons, ...track }) => ({ ...track, reasons }))
     };
   }
-  const candidates = await jamendoCandidates(intent.query, 24);
+  if (intent.action === "search") {
+    const [catalog, jamendo] = await Promise.allSettled([
+      app.inject({ method: "GET", url: `/api/v1/search/music?${new URLSearchParams({ q: intent.query, type: "tracks", inApp: "true" })}` }),
+      jamendoCandidates(intent.query, 15)
+    ]);
+    const catalogResult = catalog.status === "fulfilled"
+      ? catalog.value.json<{ tracks?: Array<Record<string, unknown>>; providers?: Record<string, { ok: boolean; count: number }> }>() : null;
+    const found = catalog.status === "fulfilled" && catalog.value.statusCode === 200 ? catalogResult?.tracks ?? [] : [];
+    const sources = Object.fromEntries(Object.entries(catalogResult?.providers ?? {}).map(([name, provider]) => [name, { ok: provider.ok, count: provider.count }]));
+    const partial = Object.values(sources).some((source) => !source.ok) || catalog.status === "rejected";
+    const tracks = [...found, ...(jamendo.status === "fulfilled" ? jamendo.value : [])]
+      .filter((track, index, all) => track.playable !== false && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") && all.findIndex((item) => item.id === track.id) === index).slice(0, 15);
+    const allUnavailable = !tracks.length && !Object.values(sources).some((source) => source.ok);
+    if (allUnavailable) return reply.code(503).send({ error: "Музыкальные источники сейчас недоступны. Попробуйте повторить запрос позже.", intent, tracks: [], sources, partial: true });
+    return { reply: tracks.length
+      ? `Нашёл треки для вас. Нажмите «Слушать подборку» или скажите «слушать».${partial ? " Часть источников недоступна, выдача может быть неполной." : ""}`
+      : partial ? "В доступных источниках звук не найден. Часть каталогов сейчас недоступна — можно повторить поиск позже."
+      : "В проверенных каталогах доступный звук не найден. Попробуйте уточнить название или выбрать другое настроение.", intent, tracks, sources, partial };
+
+  }
+  let candidates = await jamendoCandidates(intent.query, 24);
+  let personalized = false;
+  if (auth && candidates.length) {
+    const { data: favorites, error } = await auth.client.from("user_provider_favorites")
+      .select("artist_name").eq("user_id", auth.user.id).limit(100);
+    if (!error && favorites?.length) {
+      const taste: TasteSignal[] = favorites.map((favorite) => ({ artist: favorite.artist_name, liked: true }));
+      const byId = new Map(candidates.map((track) => [track.id, track]));
+      candidates = rankRecommendations(candidates, taste, 24).map((track) => byId.get(track.id)!);
+      personalized = true;
+    }
+  }
   if (candidates.length === 0) {
-    return { reply: "The catalogs are quiet right now — no licensed matches for that request. Try another mood or artist.", intent, tracks: [] };
+    return { reply: "Не удалось найти доступные треки. Попробуйте другое настроение или исполнителя; источник также может быть временно недоступен.", intent, tracks: [] };
   }
   let playlist: { id: string; name: string } | null = null;
   if (intent.action === "create_playlist") {
     if (!auth) {
       return {
-        reply: `Here is a ${intent.label.toLowerCase()} selection. Sign in and ask again and I will save it as a playlist “${intent.playlistName ?? intent.label}”.`,
+        reply: `Подборка «${intent.label}» готова. Чтобы сохранить её в медиатеке, войдите и повторите запрос.`,
         intent, tracks: candidates.slice(0, 15)
       };
     }
@@ -1599,7 +1587,7 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
       owner_id: auth.user.id, title: name, description: `Created by the SONORA assistant from: ${message.slice(0, 120)}`, is_public: false
     }).select("id,title").single();
     if (createError || !created) {
-      return { reply: "I found the tracks but could not save the playlist. Try again in a moment.", intent, tracks: candidates.slice(0, 15) };
+      return { reply: "Треки найдены, но сохранить плейлист не удалось. Попробуйте ещё раз.", intent, tracks: candidates.slice(0, 15) };
     }
     const chosen = candidates.slice(0, 15);
     const rows = chosen.map((track, index) => ({
@@ -1612,17 +1600,17 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
     const { error: addError } = await auth.client.from("provider_playlist_tracks").insert(rows);
     if (addError) {
       await auth.client.from("playlists").delete().eq("id", created.id).eq("owner_id", auth.user.id);
-      return { reply: "Tracks could not be attached to the new playlist. Try again later.", intent, tracks: chosen };
+      return { reply: "Не удалось сохранить треки в плейлист. Подборку можно прослушать здесь.", intent, tracks: chosen };
     }
     playlist = { id: created.id, name: created.title };
   }
   return {
     reply: playlist
-      ? `Saved playlist “${playlist.name}” with ${Math.min(15, candidates.length)} licensed tracks.`
+      ? `Сохранён плейлист «${playlist.name}». Треков: ${Math.min(15, candidates.length)}.`
       : intent.action === "similar"
-        ? `Tracks close to “${intent.label}” from Jamendo's licensed catalog:`
-        : `A ${intent.label.toLowerCase()} selection from the licensed catalogs:`,
-    intent, tracks: candidates.slice(0, 15), playlist
+        ? `Результаты по запросу «${intent.label}»:`
+        : `Подборка «${intent.label}» готова к прослушиванию:`,
+    intent, tracks: candidates.slice(0, 15), playlist, personalized
   };
 });
 

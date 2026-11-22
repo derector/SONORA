@@ -6,6 +6,8 @@ import { ArrowUpRight, LoaderCircle, MessageSquareText, Send, Sparkles } from "l
 import { useAuth } from "../../components/auth-provider";
 import { useLanguage } from "../../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../../components/player-provider";
+import { playbackCommand } from "../../lib/assistant-commands";
+import { VoiceInput } from "../../components/voice-input";
 import { TrackRow } from "../../components/ui/track-row";
 import { ErrorBlock, RowsSkeleton } from "../../components/ui/states";
 import { useReveal } from "../../lib/motion";
@@ -31,15 +33,41 @@ type Message = {
 };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
-const SUGGESTIONS = ["Make something for late-night focus", "Find calm piano", "Something upbeat for the drive"];
+const SUGGESTIONS = ["Мой микс по моим вкусам", "Микс для тренировки", "Подбери спокойную музыку", "Найди фортепиано"];
 
 export default function AssistantPage() {
   const { t } = useLanguage();
   const { accessToken, isAuthenticated } = useAuth();
-  const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayer();
+  const { currentTrack, isPlaying, playTrack, togglePlay, pausePlayback, resumePlayback } = usePlayer();
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const voiceModeRef = useRef(voiceMode);
+  voiceModeRef.current = voiceMode;
+  const mountedRef = useRef(true);
+  const requestRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; requestRef.current?.abort(); };
+  }, []);
+  const sendingRef = useRef(false);
+  function speak(text: string) {
+    if (!mountedRef.current) return;
+    if (!("speechSynthesis" in window)) { setVoiceStatus("Озвучивание недоступно в этом браузере."); return; }
+    quietMusic();
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ru-RU";
+    const voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("ru"));
+    if (voice) utterance.voice = voice;
+    utterance.onerror = () => setVoiceStatus("Не удалось озвучить ответ. Он доступен в чате.");
+    window.speechSynthesis.speak(utterance);
+  }
+  function quietMusic() { pausePlayback(); }
+  function stopSpeech() { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }
+  useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, []);
   const listRef = useRef<HTMLDivElement>(null);
   const emptyReveal = useReveal<HTMLDivElement>();
 
@@ -51,7 +79,28 @@ export default function AssistantPage() {
   // Sends an explicit question so suggestion chips and error retries can
   // reuse the same path without going through the input draft.
   async function sendText(text: string) {
-    if (!text || sending) return;
+    if (!text.trim() || sendingRef.current) return;
+    const command = playbackCommand(text);
+    if (command) {
+      stopSpeech();
+      let reply = "";
+      if (command === "pause") { pausePlayback(); reply = "Воспроизведение приостановлено."; }
+      if (command === "resume") {
+        if (currentTrack) { resumePlayback(); reply = "Возобновляю воспроизведение. Если браузер запросит действие, нажмите кнопку плеера."; }
+        else reply = "Сначала выберите трек или попросите подобрать музыку.";
+      }
+      if (command === "mix") {
+        const selection = [...messages].reverse().find((message) => message.tracks?.length)?.tracks;
+        if (selection?.length) { if (currentTrack?.id === selection[0].id) resumePlayback(); else playTrack(selection[0], selection); reply = "Запускаю последнюю подборку."; }
+        else reply = "Подборки пока нет. Назовите настроение или исполнителя.";
+      }
+      const id = crypto.randomUUID();
+      setMessages((items) => [...items, { id: `user-${id}`, role: "user", text }, { id, role: "assistant", text: reply }]);
+      // Playback commands use text confirmation so TTS does not pause the music it just resumed.
+      return;
+    }
+    sendingRef.current = true;
+    stopSpeech();
     const createdAt = Date.now();
     setMessages((items) => [
       ...items,
@@ -59,6 +108,8 @@ export default function AssistantPage() {
       { id: `pending-${createdAt}`, role: "assistant", text: "" }
     ]);
     setSending(true);
+    const controller = new AbortController();
+    requestRef.current = controller;
     try {
       const response = await fetch(`${API}/api/v1/assistant`, {
         method: "POST",
@@ -67,7 +118,8 @@ export default function AssistantPage() {
           "Content-Type": "application/json",
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {})
         },
-        body: JSON.stringify({ message: text })
+        body: JSON.stringify({ message: text }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(45000)])
       });
       const result = await response.json().catch(() => ({})) as AssistantResponse;
       const tracks: PlayerTrack[] = (result.tracks ?? []).filter((item) => item.audioUrl).map((item) => ({
@@ -86,6 +138,7 @@ export default function AssistantPage() {
           ? { ...item, id: `error-${createdAt}`, role: "error", query: text, text: result.error || t("The assistant could not answer right now. Try again in a moment.") }
           : item));
       } else {
+        if (voiceModeRef.current && result.reply) speak(result.reply);
         setMessages((items) => items.map((item) => item.id === `pending-${createdAt}`
           ? {
             ...item,
@@ -100,6 +153,7 @@ export default function AssistantPage() {
         ? { ...item, id: `error-${createdAt}`, role: "error", query: text, text: t("Connection failed. The assistant could not be reached.") }
         : item));
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -113,6 +167,7 @@ export default function AssistantPage() {
   }
 
   function playFromAnswer(message: Message, track: PlayerTrack) {
+    stopSpeech();
     if (currentTrack?.id === track.id) { togglePlay(); return; }
     playTrack(track, message.tracks ?? [track]);
   }
@@ -130,6 +185,7 @@ export default function AssistantPage() {
         {messages.length === 0 && (
           <div ref={emptyReveal} className="rv flex h-full flex-col items-start gap-3 rounded-3xl border border-dashed border-white/10 p-6">
             <MessageSquareText size={20} className="empty-float text-slate-500"/>
+            <p className="text-sm text-slate-300">Я — музыкальный помощник SONORA. Помогу найти треки и собрать микс под ваше настроение.</p>
             <p className="text-sm text-slate-400">{t("Start with one of these:")}</p>
             <div className="pop-stagger flex flex-wrap gap-2">
               {SUGGESTIONS.map((suggestion) => (
@@ -156,6 +212,7 @@ export default function AssistantPage() {
             )}
             {message.tracks?.length ? (
               <div className="rounded-card border border-white/[0.08] bg-surface p-1">
+                <button type="button" className="btn-primary m-2" onClick={() => { stopSpeech(); playTrack(message.tracks![0], message.tracks!); }}>Слушать подборку</button>
                 {message.tracks.map((track) => (
                   <TrackRow key={`${message.id}-${track.id}`} track={track}
                     onPlay={() => playFromAnswer(message, track)}
@@ -173,11 +230,24 @@ export default function AssistantPage() {
         ))}
       </div>
 
+      <div className="surface mt-4 space-y-3 rounded-2xl p-4">
+        <p className="text-xs text-slate-300">Команды: «слушать подборку», «пауза», «продолжить».</p>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-ghost" aria-pressed={voiceMode} onClick={() => {
+            setVoiceMode(!voiceMode); setVoiceStatus("");
+            if (!voiceMode) speak("Я — музыкальный помощник SONORA. Помогу найти треки, подобрать музыку под настроение и собрать ваш микс. Нажмите «Сказать голосом», чтобы обратиться ко мне.");
+            else stopSpeech();
+          }}>{voiceMode ? "Голосовой помощник включён" : "Включить голосового помощника"}</button>
+          <button type="button" className="btn-ghost" onClick={stopSpeech}>Остановить озвучивание</button>
+        </div>
+        <VoiceInput onStart={() => { stopSpeech(); quietMusic(); }} onText={(text) => { setDraft(text); if (voiceMode) void sendText(text); }} disabled={sending} autoSend={voiceMode}/>
+        {voiceStatus && <p role="status" className="text-xs text-violet-200">{voiceStatus}</p>}
+      </div>
       <form onSubmit={send} className="sticky bottom-24 mt-5 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#11121d]/95 p-2 backdrop-blur-xl md:bottom-6">
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
-          maxLength={400}
+          maxLength={300}
           placeholder={t("Describe a mood, an artist or a plan for the evening")}
           aria-label={t("Message")}
           className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-slate-500"

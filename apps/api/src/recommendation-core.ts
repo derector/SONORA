@@ -56,6 +56,9 @@ export function rankRecommendations(
     const reasons: string[] = [];
     let score = 0;
     if (likedArtists.has(artist)) { score += 4; reasons.push("любимый исполнитель"); }
+    const playCount = taste.filter((signal) => !signal.skipped && normalize(signal.artist ?? "") === artist)
+      .reduce((sum, signal) => sum + Math.max(0, signal.plays ?? 0), 0);
+    if (playCount > 0) { score += Math.min(3, Math.log2(1 + playCount)); reasons.push("часто слушаете исполнителя"); }
     if (dislikedArtists.has(artist)) score -= 5;
     const genreScore = genres.reduce((sum, genre) => sum + (genreWeights.get(genre) ?? 0), 0);
     if (genreScore > 0) reasons.push("любимые жанры");

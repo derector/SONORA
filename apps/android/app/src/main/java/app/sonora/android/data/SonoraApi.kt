@@ -473,6 +473,12 @@ object SonoraApi {
         return parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable }
     }
 
+    data class AssistantAnswer(val reply: String, val tracks: List<Track>)
+    fun askAssistant(message: String): AssistantAnswer {
+        val result = request("/api/v1/assistant", "POST", JSONObject().put("message", message.take(300)), authenticated = isSignedIn())
+        return AssistantAnswer(result.optString("reply", "Не удалось получить ответ."), parseTracks(result.optJSONArray("tracks")).filter { it.playable })
+    }
+
     private fun parseTracks(array: org.json.JSONArray?): List<Track> {
         val tracks = mutableListOf<Track>()
         if (array == null) return tracks

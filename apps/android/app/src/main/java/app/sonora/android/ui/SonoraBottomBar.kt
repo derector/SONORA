@@ -71,8 +71,8 @@ val NavTabs = listOf(
     NavTab("Профиль", "Профиль", Icons.Default.Person),
 )
 
-private val NavSurface = Brush.verticalGradient(listOf(Color(0xFF222037), Color(0xFF10131F)))
-private val NavEdge = Color(0x35DDD6FE)
+private val NavSurface = Brush.verticalGradient(listOf(Color(0xFF39324F), Color(0xFF171E2D), Color(0xFF163039)))
+private val NavEdge = Color(0x55DDD6FE)
 private val NavLabel = Color(0xFFF1EDFF)
 private val NavMuted = Color(0xFF8E90A6)
 
@@ -142,10 +142,11 @@ fun SonoraBottomBar(
     Box(
         modifier
             .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .height(72.dp)
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .clip(RoundedCornerShape(28.dp))
             .background(NavSurface)
-            .border(1.dp, NavEdge, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .border(1.dp, NavEdge, RoundedCornerShape(28.dp))
             .onSizeChanged { barWidthPx.value = it.width.toFloat() }
     ) {
         // First child, therefore painted behind the row.

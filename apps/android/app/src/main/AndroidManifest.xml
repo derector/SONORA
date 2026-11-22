@@ -11,6 +11,9 @@
       declaring it here is what makes that toggle appear for the app at all.
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <queries>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+    </queries>
     <application
         android:allowBackup="false"
         android:label="SONORA"

@@ -29,6 +29,8 @@ type PlayerContextValue = {
   isPlaying: boolean;
   playTrack: (track: PlayerTrack, queue?: PlayerTrack[]) => void;
   togglePlay: () => void;
+  pausePlayback: () => void;
+  resumePlayback: () => void;
 };
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
@@ -367,6 +369,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     else if (audio) { audio.currentTime = 0; setCurrentTime(0); }
   }
 
+  function pausePlayback() { audioRef.current?.pause(); }
+  function resumePlayback() { if (audioRef.current?.paused) togglePlay(); }
+
   function togglePlay() {
     const audio = audioRef.current;
     if (!audio || !currentRef.current) return;
@@ -699,7 +704,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(id);
   }, [playbackError]);
 
-  const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay }), [currentTrack, isPlaying]);
+  const value = useMemo(() => ({ currentTrack, isPlaying, playTrack, togglePlay, pausePlayback, resumePlayback }), [currentTrack, isPlaying]);
 
   return (
     <PlayerContext.Provider value={value}>

@@ -499,6 +499,42 @@ main > section:nth-of-type(5), main article:nth-child(5) { animation-delay: 170m
   55%, 100% { transform: translate3d(70%, 0, 0); }
 }
 
+/* Listening surfaces: static light refraction, motion only on interaction. */
+:root {
+  --glass-fill: linear-gradient(135deg, rgba(63, 54, 91, .86), rgba(18, 24, 38, .94) 62%, rgba(23, 55, 61, .88));
+  --glass-edge: rgba(222, 228, 255, .24);
+}
+.panel-hero {
+  border-radius: 32px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 24px 70px rgba(0,0,0,.24);
+}
+.listening-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 22px 0 30px; }
+.listening-shortcut {
+  display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 16px;
+  border: 1px solid var(--glass-edge); border-radius: 22px;
+  background: var(--glass-fill); box-shadow: var(--glass-highlight);
+  font-size: 14px; font-weight: 600;
+  transition: transform 220ms var(--ease-soft), border-color 220ms ease;
+}
+.listening-shortcut > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.shortcut-icon { display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0; border-radius: 14px; background: rgba(196,181,253,.13); color: #ddd6fe; }
+.listening-shortcut:nth-child(2) .shortcut-icon { color: #99f6e4; background: rgba(94,234,212,.10); }
+.listening-shortcut:nth-child(3) .shortcut-icon { color: #fbcfe8; background: rgba(249,168,212,.10); }
+@supports (backdrop-filter: blur(16px)) {
+  .listening-shortcut { backdrop-filter: blur(16px) saturate(130%); }
+}
+@media (hover: hover) {
+  .listening-shortcut:hover { transform: translateY(-3px); border-color: rgba(222,228,255,.45); }
+}
+.listening-shortcut:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 4px; }
+@media (max-width: 640px) {
+  .listening-shortcuts { gap: 8px; }
+  .listening-shortcut { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; font-size: 12px; border-radius: 18px; }
+  .listening-shortcut > svg { display: none; }
+  .panel-hero { border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .listening-shortcut:hover { transform: none; } }
+
 /* ============================================================================
    Reduced motion: one consolidated fallback. Everything settles instantly.
    ========================================================================= */

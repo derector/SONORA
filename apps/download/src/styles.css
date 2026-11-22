@@ -72,3 +72,12 @@
     backdrop-filter: blur(18px) saturate(135%);
   }
 }
+
+/* Prismatic landing surfaces, separate from the listening application. */
+.hero-copy h1 { letter-spacing: -.055em; line-height: 1.08; }
+.site-header { margin: 10px auto 0; width: min(1320px, calc(100% - 24px)); border: 1px solid rgba(221,214,254,.22); border-radius: 24px; }
+.release-card, .demo-panel, .final-cta { border-radius: 32px; background: linear-gradient(125deg, rgba(66,49,98,.85), rgba(16,24,37,.96) 65%, rgba(17,53,58,.88)); }
+.button { min-height: 46px; }
+.button:focus-visible, .nav-links a:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 5px; }
+@media (max-width: 700px) { .site-header { border-radius: 18px; } .nav { gap: 12px; } .hero { padding-top: 38px; } }
+@media (prefers-reduced-transparency: reduce) { .site-header, .release-card, .demo-panel, .final-cta { background: #171b2b; backdrop-filter: none; } }

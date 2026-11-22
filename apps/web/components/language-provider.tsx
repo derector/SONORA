@@ -75,6 +75,7 @@ const ru: Record<string, string> = {
   "Discover": "Обзор",
   "Search": "Поиск",
   "Your library": "Медиатека",
+  "Recently played": "Недавно слушали",
   "Liked tracks": "Любимые треки",
   "Listening history": "История прослушивания",
   "Playlists": "Плейлисты",

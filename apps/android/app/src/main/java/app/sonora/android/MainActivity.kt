@@ -120,7 +120,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         SonoraApi.initialize(this)
         OtaNotifications.ensureChannels(this)
-        // Periodic release lookup (12 h, unmetered) plus one quick pass shortly after this
+        // Periodic release lookup (hourly, connected network) plus one quick pass shortly after this
         // cold start. Neither of them needs the activity to stay alive.
         OtaUpdate.schedule(this)
         OtaSession.handleIntent(this, intent)
@@ -459,7 +459,7 @@ private fun SonoraApp() {
         }
     }
 
-    fun startTrack(track: Track, local: Boolean = false) {
+    fun startTrack(track: Track, local: Boolean = false, selection: List<Track>? = null) {
         val player = controller
         if (player == null) { message = "Плеер ещё запускается"; return }
         val url = track.audioUrl
@@ -482,7 +482,7 @@ private fun SonoraApp() {
                 current = track
                 return
             }
-            val queue = (tracks.filter { it.playable && it.audioUrl?.let(::isSupportedAudioUrl) == true } + track)
+            val queue = ((selection ?: tracks).filter { it.playable && it.audioUrl?.let(::isSupportedAudioUrl) == true } + track)
                 .distinctBy { "${it.provider}:${it.id}" }
             activeQueue = queue
             val selectedIndex = queue.indexOfFirst { "${it.provider}:${it.id}" == "${track.provider}:${track.id}" }.coerceAtLeast(0)
@@ -596,7 +596,8 @@ private fun SonoraApp() {
                 label = "tab"
             ) { screen ->
                 when (screen) {
-                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") })
+                    "Помощник" -> app.sonora.android.ui.AssistantScreen({ selectTab("Главная") }, { controller?.pause() }, { controller?.let { player -> if (player.mediaItemCount > 0) { player.play(); true } else false } ?: false }, { queue, track -> startTrack(track, selection = queue) })
+                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") }, { selectTab("Помощник") })
                     "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = SonoraApi.MusicSearch(); message = "" }, searchResults, busy, message, { value ->
                         val term = value.trim()
                         if (query != value) {
@@ -744,19 +745,19 @@ private fun SonoraApp() {
 
 
 @Composable
-private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
+private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit, openAssistant: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("SONORA", color = Lime, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                Text("Твоя музыка. Твой поток.", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text("На твоей волне.", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             }
             Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Lime, Color(0xFF7DD3FC)))), contentAlignment = Alignment.Center) { Text("S", color = Ink, fontWeight = FontWeight.Black, fontSize = 23.sp) }
         }
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                 .clip(RoundedCornerShape(26.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF33254E), Color(0xFF1C233A), Color(0xFF102A35))))
+                .background(Brush.linearGradient(listOf(Color(0xFF49385F), Color(0xFF242E49), Color(0xFF16434B))))
                 .clickable(onClick = openSearch).padding(20.dp)
         ) {
             Box(Modifier.align(Alignment.TopEnd).size(116.dp).offset(x = 22.dp, y = (-28).dp)
@@ -768,7 +769,7 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
                     Text("SONORA DISCOVERY", color = Color(0xFFD8CCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
                 Text("Найди свой звук", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-                Text("Музыка из открытых каталогов. Твоя коллекция и твой поток.", color = Color(0xFFD0CDDC), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp))
+                Text("Ищи исполнителей и треки. Открывай новое и собирай свою коллекцию.", color = Color(0xFFD0CDDC), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 15.dp)) {
                     Text("Открыть поиск", color = Color(0xFF171323), fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD8CCFF)).clickable(onClick = openSearch).padding(horizontal = 15.dp, vertical = 9.dp))
@@ -777,6 +778,7 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
                 }
             }
         }
+        OutlinedButton(onClick = openAssistant, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { Text("Помощник SONORA · голос и миксы") }
         Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
