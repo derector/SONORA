@@ -1137,6 +1137,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
   const artists: Array<Record<string, unknown>> = [];
   const providers: Record<string, { ok: boolean; count: number; error?: string }> = {};
   const queryKey = catalogSearchKey(q);
+  const queryIsrc = validIsrc(q.replace(/^isrc:\s*/i, ""));
   const officialReleases = inApp && type !== "artists" ? searchOfficialReleases(q, limit) : [];
 
   const audiusUsers = (async () => {
@@ -1298,7 +1299,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
     })());
     tasks.push((async () => {
       try {
-        const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
+        const params = new URLSearchParams({ query: queryIsrc ? `isrc:${queryIsrc}` : q, fmt: "json", limit: String(limit) });
         const response = await fetch(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
           headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
           signal: AbortSignal.timeout(9000)
@@ -1306,16 +1307,21 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { recordings?: Array<{
           id: string; title: string; length?: number; isrcs?: string[]; "first-release-date"?: string;
-          "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
+          "artist-credit"?: Array<{ name?: string; joinphrase?: string; artist?: { name?: string } }>;
           releases?: Array<{ title?: string }>;
         }> };
         for (const item of payload.recordings ?? []) {
+          const isrcs = (item.isrcs ?? []).map(validIsrc).filter((code): code is string => code !== null);
+          if (queryIsrc && !isrcs.includes(queryIsrc)) continue;
           metadata.push({
             id: item.id, provider: "MusicBrainz", title: item.title,
-            artist: (item["artist-credit"] ?? []).map((credit) => credit.name ?? credit.artist?.name ?? "").filter(Boolean).join(" "),
+            artist: (item["artist-credit"] ?? []).map((credit, index) => {
+              const name = credit.name ?? credit.artist?.name ?? "";
+              return name + (credit.joinphrase ?? (index < (item["artist-credit"]?.length ?? 0) - 1 ? " " : ""));
+            }).join("").trim(),
             album: item.releases?.[0]?.title ?? null, durationSeconds: item.length ? Math.round(item.length / 1000) : null,
             releaseDate: item["first-release-date"] ?? null,
-            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, isrc: validIsrc(item.isrcs?.[0]), playable: false
+            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, isrc: queryIsrc ?? isrcs[0] ?? null, playable: false
           });
         }
         providers.musicbrainz = { ok: true, count: metadata.length };
@@ -1367,7 +1373,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   if (inApp) {
     const matchingArtists = artists.filter((artist) => matchesCatalogSearch(q, artist.name) || matchesCatalogSearch(q, artist.handle));
-    const relevantMetadata = metadata.filter((item) => matchesCatalogSearch(q, item.artist, item.title, item.album));
+    const relevantMetadata = metadata.filter((item) => queryIsrc ? item.isrc === queryIsrc : matchesCatalogSearch(q, item.artist, item.title, item.album));
     const exactProfiles = matchingArtists.filter((artist) =>
       [artist.name, artist.handle].some((value) => catalogSearchKey(value) === queryKey));
     const exactAudiusIds = new Set(exactProfiles.filter((artist) => artist.provider === "Audius").map((artist) => artist.id));

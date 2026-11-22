@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -186,6 +187,8 @@ fun SonoraBottomBar(
                     Modifier
                         .weight(1f)
                         .heightIn(min = 48.dp)
+                        // Clip Material press feedback before the selectable draws its ripple.
+                        .clip(RoundedCornerShape(percent = 50))
                         .selectable(selected = active, role = Role.Tab, onClick = { onSelect(tab.key) }),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
