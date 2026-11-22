@@ -12,11 +12,32 @@ import { useReveal } from "../../lib/motion";
 type Track = PlayerTrack & { provider: string; playable: boolean };
 type Artist = { id: string; provider: string; name: string; handle?: string | null; followerCount?: number | null; trackCount?: number | null; imageUrl?: string | null; sourceUrl: string };
 type Metadata = { id: string; provider: string; title: string; artist: string; album?: string | null; durationSeconds?: number | null; isrc?: string | null; releaseDate?: string | null; sourceUrl: string; playable: false };
-type OfficialRelease = { id: string; title: string; artist: string; videoId: string };
+type OfficialRelease = { id: string; title: string; artist: string; album?: string; videoId?: string; bandcamp?: { kind: "track" | "album"; id: string } };
+type OfficialPlayer = { provider: "Bandcamp" | "YouTube"; url: string; layout: "track" | "album" | "video" };
 type ProviderStatus = { ok: boolean; count: number; error?: string };
 type SearchResponse = { tracks?: Track[]; artists?: Artist[]; metadata?: Metadata[]; officialReleases?: OfficialRelease[]; providers?: Record<string, ProviderStatus>; error?: string };
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+
+function playersForRelease(release: OfficialRelease): OfficialPlayer[] {
+  const players: OfficialPlayer[] = [];
+  const bandcamp = release.bandcamp;
+  if (bandcamp && (bandcamp.kind === "track" || bandcamp.kind === "album") && /^\d{1,12}$/.test(bandcamp.id)) {
+    const tracklist = bandcamp.kind === "album";
+    players.push({ provider: "Bandcamp", layout: bandcamp.kind,
+      url: `https://bandcamp.com/EmbeddedPlayer/v=2/${bandcamp.kind}=${bandcamp.id}/size=large/tracklist=${tracklist}/artwork=small/` });
+  }
+  if (release.videoId && /^[\w-]{11}$/.test(release.videoId)) {
+    players.push({ provider: "YouTube", layout: "video", url: `https://www.youtube.com/embed/${release.videoId}?playsinline=1` });
+  }
+  return players;
+}
+
+const PLAYER_CLASS = {
+  track: "min-h-[150px]",
+  album: "h-[min(480px,60dvh)]",
+  video: "aspect-video min-h-[200px]"
+};
 
 function RecordingMatch({ item }: { item: Metadata }) {
   const { t } = useLanguage();
@@ -89,8 +110,8 @@ export default function SearchPage() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [metadata, setMetadata] = useState<Metadata[]>([]);
-  const [officialReleases, setOfficialReleases] = useState<OfficialRelease[]>([]);
-  const [officialRelease, setOfficialRelease] = useState<OfficialRelease | null>(null);
+  const [officialReleases, setOfficialReleases] = useState<Array<OfficialRelease & { players: OfficialPlayer[] }>>([]);
+  const [officialRelease, setOfficialRelease] = useState<{ title: string; artist: string; player: OfficialPlayer } | null>(null);
   const [providers, setProviders] = useState<Record<string, ProviderStatus>>({});
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -115,7 +136,8 @@ export default function SearchPage() {
       setTracks((data.tracks ?? []).filter((track) => track.playable && track.audioUrl?.startsWith("https://")));
       setArtists(data.artists ?? []);
       setMetadata((data.metadata ?? []).filter((item) => item.provider === "MusicBrainz"));
-      setOfficialReleases((data.officialReleases ?? []).filter((item) => /^[\w-]{11}$/.test(item.videoId)));
+      setOfficialReleases((data.officialReleases ?? []).map((item) => ({ ...item, players: playersForRelease(item) }))
+        .filter((item) => item.players.length > 0));
       setProviders(data.providers ?? {});
     } catch (err) {
       if (sequence !== searchSequence.current) return;
@@ -254,16 +276,20 @@ export default function SearchPage() {
         <section className="mt-10" aria-labelledby="official-releases-heading">
           <h2 id="official-releases-heading" className="t-h2 mb-3">{t("Official releases")}</h2>
           {officialReleases.map((item) => (
-            <article key={item.id} className="surface track-row my-1 rounded-card">
+            <article key={item.id} className="surface track-row my-1 flex-wrap rounded-card">
               <div className="min-w-0 flex-1">
                 <p className="t-row">{item.title}</p>
-                <p className="t-meta">{item.artist} · YouTube</p>
+                <p className="t-meta">{item.artist}{item.album ? ` · ${item.album}` : ""}</p>
               </div>
-              <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => {
-                if (isPlaying) togglePlay();
-                setOfficialRelease(item);
-                releaseDialog.current?.showModal();
-              }}>{t("Play in YouTube player")}</button>
+              <div className="flex flex-wrap gap-2">
+                {item.players.map((player) => (
+                  <button key={player.provider} type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => {
+                    if (isPlaying) togglePlay();
+                    setOfficialRelease({ title: item.title, artist: item.artist, player });
+                    releaseDialog.current?.showModal();
+                  }}>{t(player.provider === "Bandcamp" ? "Play in Bandcamp player" : "Play in YouTube player")}</button>
+                ))}
+              </div>
             </article>
           ))}
         </section>
@@ -276,9 +302,9 @@ export default function SearchPage() {
               <h2 id="official-release-title" className="t-row">{officialRelease.title}</h2>
               <button type="button" className="btn-ghost !min-h-9 !px-3" onClick={() => releaseDialog.current?.close()}>{t("Close")}</button>
             </div>
-            <iframe className="aspect-video min-h-[200px] w-full rounded-tile"
-              title={`${officialRelease.artist} · ${officialRelease.title} · YouTube`}
-              src={`https://www.youtube.com/embed/${officialRelease.videoId}?playsinline=1`}
+            <iframe className={`w-full rounded-tile ${PLAYER_CLASS[officialRelease.player.layout]}`}
+              title={`${officialRelease.artist} · ${officialRelease.title} · ${officialRelease.player.provider}`}
+              src={officialRelease.player.url}
               referrerPolicy="strict-origin-when-cross-origin" allowFullScreen />
           </>
         )}

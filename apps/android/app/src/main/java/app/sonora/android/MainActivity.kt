@@ -809,8 +809,8 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 
 @Composable
 private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit, pauseNative: () -> Unit) {
-    var selectedRelease by remember { mutableStateOf<SonoraApi.OfficialRelease?>(null) }
-    selectedRelease?.let { release -> ReleasePlayerSheet(release) { selectedRelease = null } }
+    var selectedPlayer by remember { mutableStateOf<Pair<String, SonoraApi.OfficialPlayer>?>(null) }
+    selectedPlayer?.let { (title, player) -> ReleasePlayerSheet(title, player) { selectedPlayer = null } }
     Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
@@ -836,14 +836,16 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
             }
             if (results.officialReleases.isNotEmpty()) {
                 item { Text("Официальные релизы", color = Color.White, fontWeight = FontWeight.SemiBold) }
-                items(results.officialReleases, key = { "release:${it.videoId}" }) { release ->
+                items(results.officialReleases, key = { "release:${it.id}" }) { release ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
                         Text(release.title, color = Color.White, fontWeight = FontWeight.SemiBold)
-                        Text("${release.artist} · YouTube", color = Muted, fontSize = 12.sp)
-                        TextButton(onClick = {
-                            pauseNative()
-                            selectedRelease = release
-                        }) { Text("Включить в плеере YouTube", color = Lime) }
+                        Text(listOfNotNull(release.artist, release.album).joinToString(" · "), color = Muted, fontSize = 12.sp)
+                        release.players.forEach { player ->
+                            TextButton(onClick = {
+                                pauseNative()
+                                selectedPlayer = release.title to player
+                            }) { Text("Включить в плеере ${player.provider}", color = Lime) }
+                        }
                     }
                 }
             }
@@ -875,7 +877,7 @@ private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: Sono
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ReleasePlayerSheet(release: SonoraApi.OfficialRelease, close: () -> Unit) {
+private fun ReleasePlayerSheet(title: String, player: SonoraApi.OfficialPlayer, close: () -> Unit) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val dismiss by rememberUpdatedState(close)
     DisposableEffect(lifecycle) {
@@ -890,11 +892,12 @@ private fun ReleasePlayerSheet(release: SonoraApi.OfficialRelease, close: () -> 
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 16.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(release.title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 TextButton(onClick = close) { Text("Закрыть", color = Lime) }
             }
             AndroidView(
                 factory = { context ->
+                    val host = android.net.Uri.parse(player.url).host
                     WebView(context).apply {
                         settings.javaScriptEnabled = true
                         settings.domStorageEnabled = true
@@ -902,15 +905,15 @@ private fun ReleasePlayerSheet(release: SonoraApi.OfficialRelease, close: () -> 
                         settings.allowContentAccess = false
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-                                request.isForMainFrame && (request.url.scheme != "https" || request.url.host != "www.youtube.com")
+                                request.isForMainFrame && (request.url.scheme != "https" || request.url.host != host)
                         }
-                        loadUrl(
-                            "https://www.youtube.com/embed/${release.videoId}?playsinline=1",
-                            mapOf("Referer" to "https://${context.packageName}")
-                        )
+                        if (player.provider == "YouTube") loadUrl(player.url, mapOf("Referer" to "https://${context.packageName}"))
+                        else loadUrl(player.url)
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(220.dp),
+                modifier = Modifier.fillMaxWidth().height(
+                    if (player.album) 390.dp else if (player.provider == "Bandcamp") 150.dp else 220.dp
+                ),
                 onReset = null,
                 onRelease = { it.destroy() }
             )

@@ -384,7 +384,14 @@ object SonoraApi {
         val searched: Boolean = false
     )
     data class CatalogArtist(val id: String, val name: String, val handle: String, val trackCount: Int?)
-    data class OfficialRelease(val title: String, val artist: String, val videoId: String)
+    data class OfficialPlayer(val provider: String, val url: String, val album: Boolean = false)
+    data class OfficialRelease(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val album: String?,
+        val players: List<OfficialPlayer>
+    )
 
     fun search(query: String): MusicSearch {
         val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20&inApp=true")
@@ -418,14 +425,31 @@ object SonoraApi {
         val officialReleases = buildList {
             if (releases == null) return@buildList
             val validVideoId = Regex("[A-Za-z0-9_-]{11}")
+            val validBandcampId = Regex("[0-9]{1,12}")
             for (index in 0 until releases.length()) {
                 val release = releases.optJSONObject(index) ?: continue
-                val videoId = release.optString("videoId")
+                val id = release.optString("id")
                 val title = release.optString("title")
                 val artist = release.optString("artist")
-                if (validVideoId.matches(videoId) && title.isNotBlank() && artist.isNotBlank()) {
-                    add(OfficialRelease(title, artist, videoId))
+                if (id.isBlank() || title.isBlank() || artist.isBlank()) continue
+                val album = release.optString("album").takeIf { it.isNotBlank() && it != "null" }
+                val players = buildList {
+                    release.optJSONObject("bandcamp")?.let { bandcamp ->
+                        val kind = bandcamp.optString("kind")
+                        val playerId = bandcamp.optString("id")
+                        if ((kind == "track" || kind == "album") && validBandcampId.matches(playerId)) {
+                            val tracklist = kind == "album"
+                            add(OfficialPlayer("Bandcamp",
+                                "https://bandcamp.com/EmbeddedPlayer/v=2/$kind=$playerId/size=large/tracklist=$tracklist/artwork=small/",
+                                album = tracklist))
+                        }
+                    }
+                    val videoId = release.optString("videoId")
+                    if (validVideoId.matches(videoId)) {
+                        add(OfficialPlayer("YouTube", "https://www.youtube.com/embed/$videoId?playsinline=1"))
+                    }
                 }
+                if (players.isNotEmpty()) add(OfficialRelease(id, title, artist, album, players))
             }
         }
         return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, artists, officialReleases, searched = true)

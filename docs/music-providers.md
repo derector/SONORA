@@ -4,11 +4,11 @@ Updated: 2026-11-22
 
 ## Официальные релизы в поиске
 
-Редакционный список в `apps/api/src/official-releases.ts` связывает имя, подтверждённые варианты написания и название записи с ID публикации YouTube. Выдача сайта и Android показывает отдельные карточки этих релизов. Кнопка открывает официальный плеер внутри SONORA. Доступность, звук и ограничения записи определяет YouTube. Источники встраиваются только по явному нажатию пользователя. [Официальный iframe](https://developers.google.com/youtube/iframe_api_reference) · [Требования к встраиванию](https://developers.google.com/youtube/terms/required-minimum-functionality)
+Редакционный список в `apps/api/src/official-releases.ts` связывает имя, варианты написания, название и альбом с официальной публикацией. Карточка может предложить YouTube и Bandcamp для той же записи. Bandcamp использует ID из официального кода встраивания, а для альбомов показывает список дорожек. Клиенты создают HTTPS-адрес плеера из проверенного ID и загружают его по нажатию. Доступность и ограничения определяет соответствующая площадка. [YouTube IFrame API](https://developers.google.com/youtube/iframe_api_reference) · [Bandcamp Embedded Player](https://get.bandcamp.help/en/articles/15263071-how-do-i-create-a-bandcamp-embedded-player)
 
-- Кишлак, «11:11» и «Поцелуями». [11:11](https://www.youtube.com/watch?v=T55-Jowa6Lk) · [Поцелуями](https://www.youtube.com/watch?v=Z30z_Wrr8bY)
-- Молодой Рубль, «чисто гипотетически (prod. by arcadeonly)». [Страница релиза](https://band.link/young_ruble) · [Публикация дистрибьютора](https://www.youtube.com/watch?v=cwoPR0-liOI)
-- N01R, «Bad» и «Убежать». [Bad на Aurora Records](https://aurora-records.com/en/release/n01r-bad/) · [Убежать на канале Aurora Records](https://www.youtube.com/watch?v=1_8_42L7KVM)
+- Кишлак, одноимённая песня и альбом «11:11», «Поцелуями», «Я уёбываю в джаз», «Накуримся, напьемся». [Альбом на Bandcamp](https://kish-lak.bandcamp.com/album/11-11) · [«11:11»](https://kish-lak.bandcamp.com/track/11-11) · [«Поцелуями»](https://kishlakfamily.bandcamp.com/track/-) · [«Я уёбываю в джаз»](https://kish-lak.bandcamp.com/track/--23) · [«Накуримся, напьемся»](https://www.youtube.com/watch?v=iWnqB6PGm3M)
+- Молодой Рубль, «чисто гипотетически (prod. by arcadeonly)», «практически ветер» и «партак». [Страница сингла](https://band.link/young_ruble) · [«практически ветер»](https://www.youtube.com/watch?v=AhcyhUscX2M) · [«партак»](https://www.youtube.com/watch?v=yeHBXVALo-8)
+- N01R, «Bad», «Убежать» и «Холик». [«Bad» на Aurora Records](https://aurora-records.com/en/release/n01r-bad/) · [«Убежать»](https://www.youtube.com/watch?v=1_8_42L7KVM) · [«Холик»](https://www.youtube.com/watch?v=V-o24vSw9hA)
 
 ## Открытый каталог Wikimedia Commons
 

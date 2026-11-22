@@ -139,6 +139,7 @@ const ru: Record<string, string> = {
   "Credit": "Авторский кредит",
   "Official releases": "Официальные релизы",
   "Play in YouTube player": "Включить в плеере YouTube",
+  "Play in Bandcamp player": "Включить в плеере Bandcamp",
   "Artist:": "Артист:",
   "Source:": "Источник:",
   "License terms apply.": "Действуют условия лицензии.",
