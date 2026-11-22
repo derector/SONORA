@@ -1369,6 +1369,9 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
     }
   }
   await Promise.all(tasks);
+  if (queryIsrc && type !== "artists" && providers.musicbrainz?.ok === false && !spotifyMetadata.some((item) => item.isrc === queryIsrc)) {
+    return reply.code(503).send({ ...authError(503, "Поиск по ISRC сейчас недоступен. Попробуйте позже или введите название трека."), providers });
+  }
   const anySuccess = officialReleases.length > 0 || Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
   if (inApp) {
