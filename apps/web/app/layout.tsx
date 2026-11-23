@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./motion.css";
-import { PlayerProvider } from "../components/player-provider";
 import { LanguageProvider } from "../components/language-provider";
 import { AuthProvider } from "../components/auth-provider";
 import { WorkspaceShell } from "../components/workspace-shell";
@@ -15,5 +14,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ru"><body><RouteProgress/><LanguageProvider><AuthProvider><PlayerProvider><SeasonalEffects/><WorkspaceShell><PageTransition>{children}</PageTransition></WorkspaceShell></PlayerProvider></AuthProvider></LanguageProvider></body></html>;
+  return <html lang="ru"><body><RouteProgress/><LanguageProvider><AuthProvider><SeasonalEffects/><WorkspaceShell><PageTransition>{children}</PageTransition></WorkspaceShell></AuthProvider></LanguageProvider></body></html>;
 }
