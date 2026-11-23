@@ -6,6 +6,7 @@ import { useAuth } from "../../components/auth-provider";
 
 const API = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
 type Chat = { id: string; kind: string; title: string | null; created_at: string };
+type Person = { id: string; username: string; displayName: string; avatarUrl: string | null };
 type Message = { id: string; conversation_id: string; sender_id: string; body: string; created_at: string };
 
 async function requestJson<T>(path: string, token: string, init?: RequestInit): Promise<T> {
@@ -24,6 +25,8 @@ export default function MessengerPage() {
   const [selected, setSelected] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [recipient, setRecipient] = useState("");
+  const [people, setPeople] = useState<Person[]>([]);
+  const [searching, setSearching] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -60,17 +63,49 @@ export default function MessengerPage() {
     return () => window.clearInterval(timer);
   }, [selected, accessToken, loadMessages]);
 
-  async function openChat(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    const query = recipient.trim();
+    if (query.length < 2 || /^[0-9a-f-]{36}$/i.test(query)) { setPeople([]); setSearching(false); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearching(true);
+      try {
+        const response = await fetch(`${API}/api/v1/users?q=${encodeURIComponent(query)}&limit=8`, { signal: controller.signal, cache: "no-store" });
+        if (!response.ok) throw new Error("Поиск пользователей временно недоступен");
+        const result = await response.json() as { items: Person[] };
+        if (!controller.signal.aborted) setPeople(result.items.filter(person => person.id !== user?.id));
+      } catch (e) {
+        if (!controller.signal.aborted) { setPeople([]); setError(e instanceof Error ? e.message : "Ошибка поиска"); }
+      } finally { if (!controller.signal.aborted) setSearching(false); }
+    }, 350);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [recipient, user?.id]);
+
+  async function startDirectChat(recipientId: string) {
+    if (!accessToken) return;
     setError("");
     try {
       const result = await requestJson<{ chatId: string }>("/chats/direct", accessToken, {
-        method: "POST", body: JSON.stringify({ recipientId: recipient.trim() })
+        method: "POST", body: JSON.stringify({ recipientId })
       });
       await loadChats();
       setSelected(result.chatId);
+      setMessages([]);
       setRecipient("");
-    } catch (e) { setError((e as Error).message); }
+      setPeople([]);
+    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось открыть диалог"); }
+  }
+
+  async function openChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const id = recipient.trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+      await startDirectChat(id);
+    } else if (people.length === 1) {
+      await startDirectChat(people[0].id);
+    } else {
+      setError("Выберите пользователя из результатов поиска");
+    }
   }
 
   async function send(event: FormEvent<HTMLFormElement>) {
@@ -102,10 +137,12 @@ export default function MessengerPage() {
       <aside className="rounded-3xl border border-white/20 bg-white/10 p-4 shadow-xl backdrop-blur-xl">
         <h2 className="mb-3 text-lg font-medium">Переписки</h2>
         <form onSubmit={openChat} className="mb-5 space-y-2">
-          <label htmlFor="recipient" className="text-sm">ID пользователя для нового диалога</label>
+          <label htmlFor="recipient" className="text-sm">Найти пользователя по имени или @username</label>
           <input id="recipient" required value={recipient} onChange={e => setRecipient(e.target.value)}
-            placeholder="UUID получателя" className="w-full rounded-xl border border-white/20 bg-black/10 p-3 text-sm" />
+            placeholder="Имя, @username или UUID" className="w-full rounded-xl border border-white/20 bg-black/10 p-3 text-sm" />
           <button className="rounded-xl bg-violet-500 px-4 py-2 text-white" type="submit">Открыть чат</button>
+          {searching && <p role="status" className="text-xs opacity-60">Поиск…</p>}
+          {people.length > 0 && <div className="space-y-1" aria-label="Результаты поиска">{people.map(person => <button key={person.id} type="button" onClick={() => void startDirectChat(person.id)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/10">{person.avatarUrl ? <img src={person.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover"/> : <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-400/20">{person.displayName.slice(0,1).toUpperCase()}</span>}<span className="min-w-0"><span className="block truncate">{person.displayName}</span><span className="block truncate text-xs opacity-60">@{person.username}</span></span></button>)}</div>}
         </form>
         <div className="space-y-2">{chats.map(chat =>
           <button key={chat.id} onClick={() => { setSelected(chat.id); setMessages([]); }}
