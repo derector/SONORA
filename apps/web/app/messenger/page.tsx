@@ -27,6 +27,7 @@ export default function MessengerPage() {
   const [recipient, setRecipient] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
   const [searching, setSearching] = useState(false);
+  const [openingChat, setOpeningChat] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -64,8 +65,9 @@ export default function MessengerPage() {
   }, [selected, accessToken, loadMessages]);
 
   useEffect(() => {
-    const query = recipient.trim();
+    const query = recipient.trim().replace(/^@/, "");
     if (query.length < 2 || /^[0-9a-f-]{36}$/i.test(query)) { setPeople([]); setSearching(false); return; }
+    setPeople([]);
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setSearching(true);
@@ -82,7 +84,8 @@ export default function MessengerPage() {
   }, [recipient, user?.id]);
 
   async function startDirectChat(recipientId: string) {
-    if (!accessToken) return;
+    if (!accessToken || openingChat) return;
+    setOpeningChat(true);
     setError("");
     try {
       const result = await requestJson<{ chatId: string }>("/chats/direct", accessToken, {
@@ -94,6 +97,7 @@ export default function MessengerPage() {
       setRecipient("");
       setPeople([]);
     } catch (e) { setError(e instanceof Error ? e.message : "Не удалось открыть диалог"); }
+    finally { setOpeningChat(false); }
   }
 
   async function openChat(event: FormEvent<HTMLFormElement>) {
@@ -140,9 +144,9 @@ export default function MessengerPage() {
           <label htmlFor="recipient" className="text-sm">Найти пользователя по имени или @username</label>
           <input id="recipient" required value={recipient} onChange={e => setRecipient(e.target.value)}
             placeholder="Имя, @username или UUID" className="w-full rounded-xl border border-white/20 bg-black/10 p-3 text-sm" />
-          <button className="rounded-xl bg-violet-500 px-4 py-2 text-white" type="submit">Открыть чат</button>
+          <button disabled={openingChat} className="rounded-xl bg-violet-500 px-4 py-2 text-white disabled:opacity-50" type="submit">{openingChat ? "Открываем…" : "Открыть чат"}</button>
           {searching && <p role="status" className="text-xs opacity-60">Поиск…</p>}
-          {people.length > 0 && <div className="space-y-1" aria-label="Результаты поиска">{people.map(person => <button key={person.id} type="button" onClick={() => void startDirectChat(person.id)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/10">{person.avatarUrl ? <img src={person.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover"/> : <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-400/20">{person.displayName.slice(0,1).toUpperCase()}</span>}<span className="min-w-0"><span className="block truncate">{person.displayName}</span><span className="block truncate text-xs opacity-60">@{person.username}</span></span></button>)}</div>}
+          {people.length > 0 && <div className="space-y-1" aria-label="Результаты поиска">{people.map(person => <button key={person.id} type="button" disabled={openingChat} onClick={() => void startDirectChat(person.id)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/10">{person.avatarUrl ? <img src={person.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover"/> : <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-400/20">{person.displayName.slice(0,1).toUpperCase()}</span>}<span className="min-w-0"><span className="block truncate">{person.displayName}</span><span className="block truncate text-xs opacity-60">@{person.username}</span></span></button>)}</div>}
         </form>
         <div className="space-y-2">{chats.map(chat =>
           <button key={chat.id} onClick={() => { setSelected(chat.id); setMessages([]); }}
