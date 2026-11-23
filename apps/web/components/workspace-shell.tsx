@@ -14,7 +14,7 @@ const links = [
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  if (pathname === "/auth" || pathname.startsWith("/auth/") || pathname === "/messenger" || pathname.startsWith("/messenger/")) {
+  if (pathname === "/auth" || pathname.startsWith("/auth/") || pathname === "/register" || pathname === "/signup") {
     return <>{children}</>;
   }
   return <div className="mx-auto min-h-screen w-full max-w-6xl px-3 py-4 sm:px-6">
