@@ -20,6 +20,23 @@ export function registerMessengerRoutes(app: FastifyInstance) {
     }
   );
 
+  app.get<{ Params: { chatId: string } }>(
+    "/api/v1/messenger/chats/:chatId/members", async (request, reply) => {
+      const auth = await requireUser(request, reply);
+      if (!auth) return;
+      const { chatId } = request.params;
+      if (!UUID.test(chatId)) return reply.code(400).send({ error: "Invalid chat ID." });
+      // Check conversation visibility first; membership rows themselves are self-readable only.
+      const { data: chat, error: chatError } = await auth.client.from("messenger_conversations")
+        .select("id").eq("id", chatId).maybeSingle();
+      if (chatError) return reply.code(503).send({ error: "Chat unavailable." });
+      if (!chat) return reply.code(404).send({ error: "Chat not found." });
+      const { data, error } = await auth.client.rpc("messenger_list_members", { target_chat_id: chatId });
+      if (error) return reply.code(503).send({ error: "Members unavailable." });
+      return { members: data ?? [] };
+    }
+  );
+
   app.get("/api/v1/messenger/chats", async (request, reply) => {
     const auth = await requireUser(request, reply);
     if (!auth) return;
