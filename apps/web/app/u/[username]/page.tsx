@@ -20,7 +20,7 @@ export default function PublicProfilePage() {
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setError("");
     try {
-      if (!/^[a-z0-9_]{3,24}$/.test(username || "")) throw new Error("Некорректное имя пользователя");
+      if (!/^[a-z0-9_]{3,24}$/i.test(username || "")) throw new Error("Некорректное имя пользователя");
       const result = await profileRequest<{ profile: PublicProfile }>(`/users/${encodeURIComponent(username)}`, accessToken, { signal });
       if (!signal?.aborted) setProfile(result.profile);
     } catch {
