@@ -57,7 +57,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("resize", measurePill);
   }, [measurePill]);
 
-  if (pathname === "/auth" || pathname.startsWith("/auth/")) return <>{children}</>;
+  // Messenger has its own navigation. Never render the legacy music sidebar/player chrome here.
+  if (pathname === "/auth" || pathname.startsWith("/auth/") || pathname === "/messenger" || pathname.startsWith("/messenger/")) return <>{children}</>;
 
   const active = (href: string) => isActive(href);
   const profileHref = user ? "/profile" : "/auth";
