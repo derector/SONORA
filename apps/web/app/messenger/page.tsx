@@ -32,6 +32,9 @@ export default function MessengerPage() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const pendingNonce = useRef<{ chatId: string; body: string; nonce: string } | null>(null);
+  const activeChatRef = useRef("");
+  activeChatRef.current = selected;
+  const messageRequestRef = useRef(0);
 
   const loadChats = useCallback(async () => {
     if (!accessToken) return;
@@ -41,8 +44,11 @@ export default function MessengerPage() {
 
   const loadMessages = useCallback(async () => {
     if (!accessToken || !selected) return;
+    const requestId = ++messageRequestRef.current;
     const data = await requestJson<{ messages: Message[] }>(`/chats/${selected}/messages`, accessToken);
-    setMessages(data.messages.slice().reverse());
+    if (activeChatRef.current === selected && requestId === messageRequestRef.current) {
+      setMessages(data.messages.slice().reverse());
+    }
   }, [accessToken, selected]);
 
   useEffect(() => {
@@ -92,6 +98,7 @@ export default function MessengerPage() {
         method: "POST", body: JSON.stringify({ recipientId })
       });
       await loadChats();
+      messageRequestRef.current++;
       setSelected(result.chatId);
       setMessages([]);
       setRecipient("");
@@ -119,14 +126,15 @@ export default function MessengerPage() {
     setError("");
     try {
       const body = draft.trim();
-      const nonce = pendingNonce.current?.chatId === selected && pendingNonce.current.body === body
+      const chatId = selected;
+      const nonce = pendingNonce.current?.chatId === chatId && pendingNonce.current.body === body
         ? pendingNonce.current.nonce : crypto.randomUUID();
-      pendingNonce.current = { chatId: selected, body, nonce };
-      await requestJson(`/chats/${selected}/messages`, accessToken, {
+      pendingNonce.current = { chatId, body, nonce };
+      await requestJson(`/chats/${chatId}/messages`, accessToken, {
         method: "POST", body: JSON.stringify({ body, clientNonce: nonce })
       });
       pendingNonce.current = null;
-      setDraft("");
+      if (activeChatRef.current === chatId) setDraft("");
       await loadMessages();
     } catch (e) { setError((e as Error).message); }
     finally { setSending(false); }
@@ -149,7 +157,7 @@ export default function MessengerPage() {
           {people.length > 0 && <div className="space-y-1" aria-label="Результаты поиска">{people.map(person => <button key={person.id} type="button" disabled={openingChat} onClick={() => void startDirectChat(person.id)} className="flex w-full items-center gap-3 rounded-xl p-2 text-left text-sm hover:bg-white/10">{person.avatarUrl ? <img src={person.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover"/> : <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-400/20">{person.displayName.slice(0,1).toUpperCase()}</span>}<span className="min-w-0"><span className="block truncate">{person.displayName}</span><span className="block truncate text-xs opacity-60">@{person.username}</span></span></button>)}</div>}
         </form>
         <div className="space-y-2">{chats.map(chat =>
-          <button key={chat.id} onClick={() => { setSelected(chat.id); setMessages([]); }}
+          <button key={chat.id} onClick={() => { messageRequestRef.current++; setSelected(chat.id); setMessages([]); }}
             className={`block w-full rounded-2xl border p-3 text-left text-sm ${selected === chat.id ? "border-violet-400 bg-violet-500/20" : "border-white/10 bg-white/5"}`}>
             {chat.title || (chat.kind === "direct" ? "Личный диалог" : "Группа")}<span className="mt-1 block truncate text-xs opacity-60">{chat.id}</span>
           </button>
