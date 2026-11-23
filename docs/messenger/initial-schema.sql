@@ -115,3 +115,25 @@ begin
   alter publication supabase_realtime add table public.messenger_messages;
  end if;
 end $$;
+
+-- Controlled member listing: avoid exposing arbitrary users' memberships.
+create or replace function public.messenger_list_members(target_chat_id uuid)
+returns table(user_id uuid, role text, joined_at timestamptz)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+ if auth.uid() is null or not exists (
+  select 1 from public.messenger_members m
+  where m.conversation_id=target_chat_id and m.user_id=auth.uid()
+ ) then
+  raise exception 'Not a chat participant' using errcode='42501';
+ end if;
+ return query
+ select m.user_id,m.role,m.joined_at from public.messenger_members m
+ where m.conversation_id=target_chat_id order by m.joined_at,m.user_id;
+end;
+$$;
+revoke all on function public.messenger_list_members(uuid) from public,anon;
+grant execute on function public.messenger_list_members(uuid) to authenticated;
