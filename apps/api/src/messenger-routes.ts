@@ -5,6 +5,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const limit = 50;
 
 export function registerMessengerRoutes(app: FastifyInstance) {
+  app.post<{ Body: { recipientId?: unknown } }>(
+    "/api/v1/messenger/chats/direct", async (request, reply) => {
+      const auth = await requireUser(request, reply);
+      if (!auth) return;
+      const recipientId = request.body?.recipientId;
+      if (typeof recipientId !== "string" || !UUID.test(recipientId) || recipientId === auth.user.id) {
+        return reply.code(400).send({ error: "Invalid recipient." });
+      }
+      const { data, error } = await auth.client.rpc("messenger_open_direct_chat", { other_user_id: recipientId });
+      if (error?.code === "22023") return reply.code(404).send({ error: "Recipient not found." });
+      if (error) return reply.code(503).send({ error: "Unable to create chat." });
+      return reply.code(200).send({ chatId: data });
+    }
+  );
+
   app.get("/api/v1/messenger/chats", async (request, reply) => {
     const auth = await requireUser(request, reply);
     if (!auth) return;
