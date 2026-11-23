@@ -80,7 +80,17 @@ export function registerMessengerRoutes(app: FastifyInstance) {
       const { data, error } = await auth.client.from("messenger_messages")
         .insert({ conversation_id: chatId, sender_id: auth.user.id, client_nonce: clientNonce, body: body.trim() })
         .select("id,conversation_id,sender_id,body,created_at").single();
-      if (error?.code === "23505") return reply.code(409).send({ error: "Message already submitted.", clientNonce });
+      if (error?.code === "23505") {
+        // A retry may arrive after a successful insert whose response was lost.
+        // Return the existing message only when it belongs to this sender/chat.
+        const { data: existing, error: lookupError } = await auth.client.from("messenger_messages")
+          .select("id,conversation_id,sender_id,body,created_at")
+          .eq("conversation_id", chatId).eq("sender_id", auth.user.id)
+          .eq("client_nonce", clientNonce).maybeSingle();
+        if (lookupError) return reply.code(503).send({ error: "Message status unavailable." });
+        if (existing && existing.body === body.trim()) return reply.code(200).send({ message: existing, deduplicated: true });
+        return reply.code(409).send({ error: "Message nonce conflicts with an existing message." });
+      }
       if (error?.code === "42501") return reply.code(403).send({ error: "Not allowed to post to this chat." });
       if (error) return reply.code(503).send({ error: "Message delivery is temporarily unavailable." });
       return reply.code(201).send({ message: data });
