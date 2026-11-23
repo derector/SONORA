@@ -7,6 +7,7 @@ import {
   SkipBack, SkipForward, Shuffle, Volume2, VolumeX, X, AlertCircle, LoaderCircle
 } from "lucide-react";
 import { useLanguage } from "./language-provider";
+import { SyncedLyrics } from "./synced-lyrics";
 import { Artwork } from "./ui/artwork";
 import { useAuth } from "./auth-provider";
 
@@ -196,6 +197,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [queueOpen, setQueueOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [lyricsOpen, setLyricsOpen] = useState(false);
   const [shuffle, setShuffle] = useState(false);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("off");
   const [playbackMode, setPlaybackMode] = useState<"original" | "speed" | "slowed">("original");
@@ -778,6 +780,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
                   {currentTrack.artworkUrl && <img src={currentTrack.artworkUrl} alt={currentTrack.title} key={currentTrack.artworkUrl} onError={(event) => { event.currentTarget.hidden = true; }} className="absolute inset-0 h-full w-full object-cover"/>}
                 </div>
                 <div className="mt-8 flex items-center gap-3"><div className="min-w-0 flex-1"><h2 className="truncate text-2xl font-semibold tracking-tight">{currentTrack.title}</h2><p className="mt-1 truncate text-base text-slate-400">{currentTrack.artist}</p></div><button type="button" onClick={() => setAboutOpen((open) => !open)} aria-expanded={aboutOpen} className="shrink-0 rounded-full border border-white/10 px-3 py-2 text-xs text-slate-400 hover:text-white">{t("About track")}</button></div>
+                <button type="button" aria-expanded={lyricsOpen} className="btn-ghost mt-4 self-start" onClick={() => setLyricsOpen((open) => !open)}>{t("Song lyrics")}</button>
+                {lyricsOpen && <SyncedLyrics trackId={currentTrack.id} positionMs={currentTime * 1000} onSeek={(ms) => {
+                  const audio = audioRef.current;
+                  if (!audio || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+                  const next = Math.max(0, Math.min(audio.duration, ms / 1000));
+                  audio.currentTime = next;
+                  setCurrentTime(next);
+                }}/>}
                 {aboutOpen && <div className="state-in mt-4 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-sm">
                   <p className="text-[10px] font-semibold uppercase tracking-[.25em] text-violet-200">{t("About track")}</p>
                   <dl className="mt-3 space-y-2 text-xs">

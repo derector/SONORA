@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, LoaderCircle, MessageSquareText, Send, Sparkles } from "lucide-react";
 import { useAuth } from "../../components/auth-provider";
@@ -43,6 +43,7 @@ export default function AssistantPage() {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [voiceMode, setVoiceMode] = useState(false);
+  const [persona, setPersona] = useState("jarvis");
   const [voiceStatus, setVoiceStatus] = useState("");
   const voiceModeRef = useRef(voiceMode);
   voiceModeRef.current = voiceMode;
@@ -53,21 +54,71 @@ export default function AssistantPage() {
     return () => { mountedRef.current = false; requestRef.current?.abort(); };
   }, []);
   const sendingRef = useRef(false);
-  function speak(text: string) {
+  const voiceRequest = useRef<AbortController | null>(null);
+  const voicePlayback = useRef<{ audio: HTMLAudioElement; url: string } | null>(null);
+  const stopSpeech = useCallback(() => {
+    voiceRequest.current?.abort();
+    voiceRequest.current = null;
+    const playback = voicePlayback.current;
+    if (playback) {
+      playback.audio.pause();
+      URL.revokeObjectURL(playback.url);
+      voicePlayback.current = null;
+    }
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  }, []);
+  useEffect(() => stopSpeech, [stopSpeech]);
+
+  async function speak(text: string) {
     if (!mountedRef.current) return;
-    if (!("speechSynthesis" in window)) { setVoiceStatus("Озвучивание недоступно в этом браузере."); return; }
+    stopSpeech();
     quietMusic();
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    setVoiceStatus("");
+    const controller = new AbortController();
+    voiceRequest.current = controller;
+    if (accessToken) {
+      try {
+        const response = await fetch(`${API}/api/v1/assistant/speech`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ text: text.slice(0, 900), persona }),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(9000)])
+        });
+        if (!response.ok || !response.headers.get("content-type")?.startsWith("audio/")) throw new Error("Speech unavailable");
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        voicePlayback.current = { audio, url };
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          if (voicePlayback.current?.audio === audio) voicePlayback.current = null;
+        };
+        await audio.play();
+        return;
+      } catch {
+        if (controller.signal.aborted) return;
+        const playback = voicePlayback.current;
+        if (playback) { playback.audio.pause(); URL.revokeObjectURL(playback.url); voicePlayback.current = null; }
+      }
+    }
+    if (!("speechSynthesis" in window)) { setVoiceStatus("Озвучивание недоступно в этом браузере."); return; }
+    const voices = window.speechSynthesis.getVoices().filter((voice) => /^ru(?:-|$)/i.test(voice.lang));
+    const voice = voices.find((item) => /natural|neural|premium|enhanced/i.test(item.name))
+      ?? voices.find((item) => !item.localService) ?? voices[0];
+    if (!voice) { setVoiceStatus("Русский голос недоступен. Ответ можно прочитать в чате."); return; }
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\bSONORA\b/gi, "Сонора"));
     utterance.lang = "ru-RU";
-    const voice = window.speechSynthesis.getVoices().find((voice) => voice.lang.toLowerCase().startsWith("ru"));
-    if (voice) utterance.voice = voice;
-    utterance.onerror = () => setVoiceStatus("Не удалось озвучить ответ. Он доступен в чате.");
+    utterance.voice = voice;
+    utterance.rate = 0.95;
+    utterance.onerror = (event) => {
+      if (!controller.signal.aborted && event.error !== "interrupted" && event.error !== "canceled")
+        setVoiceStatus("Не удалось озвучить ответ. Он доступен в чате.");
+    };
     window.speechSynthesis.speak(utterance);
+    setVoiceStatus(accessToken ? "Облачный голос недоступен. Используется русский голос браузера." : "В гостевом режиме используется русский голос браузера.");
   }
   function quietMusic() { pausePlayback(); }
-  function stopSpeech() { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }
-  useEffect(() => () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); }, []);
   const listRef = useRef<HTMLDivElement>(null);
   const emptyReveal = useReveal<HTMLDivElement>();
 
@@ -241,6 +292,15 @@ export default function AssistantPage() {
           <button type="button" className="btn-ghost" onClick={stopSpeech}>Остановить озвучивание</button>
         </div>
         <VoiceInput onStart={() => { stopSpeech(); quietMusic(); }} onText={(text) => { setDraft(text); if (voiceMode) void sendText(text); }} disabled={sending} autoSend={voiceMode}/>
+        <label className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+          Голос помощника
+          <select className="rounded-xl border border-white/15 bg-[#171526] p-2" value={persona} disabled={sending} onChange={(event) => { stopSpeech(); setPersona(event.target.value); }}>
+            <option value="alice">Тёплый</option>
+            <option value="jarvis">Спокойный</option>
+            <option value="dj">Эфир DJ</option>
+          </select>
+        </label>
+        <p className="text-xs text-slate-400">Голос синтезируется ИИ. Для облачной озвучки текст ответа отправляется сервису синтеза речи.</p>
         {voiceStatus && <p role="status" className="text-xs text-violet-200">{voiceStatus}</p>}
       </div>
       <form onSubmit={send} className="sticky bottom-24 mt-5 flex items-center gap-2 rounded-2xl border border-white/10 bg-[#11121d]/95 p-2 backdrop-blur-xl md:bottom-6">

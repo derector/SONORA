@@ -1,4 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
+import { Readable } from "node:stream";
+import type { ReadableStream } from "node:stream/web";
 import type { FastifyInstance } from "fastify";
 import { matchesCatalogSearch } from "./catalog.js";
 import { matchRecording, validIsrc } from "./recording-match.js";
@@ -6,6 +8,7 @@ import { matchRecording, validIsrc } from "./recording-match.js";
 const TRACK_ID = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const AUDIO_PATH = /^(?:[a-z0-9_-]+\/)*[a-z0-9_-][a-z0-9_.-]*\.(?:mp3|m4a|aac|ogg|opus|flac|wav)$/i;
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
+const MAX_AUDIO_BYTES = 64 * 1024 * 1024;
 const TRACKS_PATH = "/api/v1/providers/sonora/tracks";
 
 function origin(value: string | undefined): string | null {
@@ -70,6 +73,7 @@ export function createLicensedCatalog(env: NodeJS.ProcessEnv) {
   const path = env.SONORA_LICENSED_CATALOG_FILE;
   const audioOrigin = origin(env.SONORA_LICENSED_AUDIO_ORIGIN);
   const apiOrigin = origin(env.SONORA_LICENSED_API_ORIGIN);
+  const proxyAudio = env.SONORA_LICENSED_PROXY_AUDIO === "true";
   let snapshot: { key: string; entries: Map<string, Entry> } | undefined;
 
   async function entries() {
@@ -119,10 +123,11 @@ export function createLicensedCatalog(env: NodeJS.ProcessEnv) {
     configured: Boolean(path),
     async search(q: string, limit: number, artistsOnly = false) {
       const now = Date.now();
+      const queryIsrc = validIsrc(q.replace(/^isrc:\s*/i, ""));
       return [...(await entries()).values()]
         .filter((item) => item.expiry > now &&
           (artistsOnly ? matchesCatalogSearch(q, item.artist) :
-            item.isrc === q.toUpperCase() || matchesCatalogSearch(q, item.artist, item.title, item.album)))
+            (queryIsrc !== null && item.isrc === queryIsrc) || matchesCatalogSearch(q, item.artist, item.title, item.album)))
         .slice(0, limit)
         .map(track);
     },
@@ -148,7 +153,43 @@ export function createLicensedCatalog(env: NodeJS.ProcessEnv) {
         reply.header("Cache-Control", "no-store");
         const record = await available(request.params.id);
         if (!record) return reply.code(404).send({ error: "Audio is unavailable." });
-        return reply.redirect(`${audioOrigin}/${record.audioPath}`);
+        const url = `${audioOrigin}/${record.audioPath}`;
+        if (!proxyAudio) return reply.redirect(url);
+        const range = request.headers.range;
+        if (range && !/^bytes=(?:\d{1,10}-\d{0,10}|-\d{1,10})$/.test(range)) {
+          return reply.code(400).send({ error: "A single byte range is required." });
+        }
+        const abort = new AbortController();
+        reply.raw.once("close", () => abort.abort());
+        try {
+          const upstream = await fetch(url, {
+            redirect: "error",
+            headers: { "Accept-Encoding": "identity", ...(range ? { Range: range } : {}) },
+            signal: AbortSignal.any([abort.signal, AbortSignal.timeout(180_000)])
+          });
+          const contentRange = upstream.headers.get("content-range");
+          if (upstream.status === 416 && /^bytes \*\/\d+$/.test(contentRange ?? "")) {
+            await upstream.body?.cancel();
+            return reply.header("Content-Range", contentRange).code(416).send();
+          }
+          const type = upstream.headers.get("content-type") ?? "";
+          const length = Number(upstream.headers.get("content-length"));
+          const segment = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(contentRange ?? "");
+          const validSegment = segment && Number(segment[2]) - Number(segment[1]) + 1 === length
+            && Number(segment[2]) < Number(segment[3]) && Number(segment[3]) <= MAX_AUDIO_BYTES;
+          if (upstream.status !== (range ? 206 : 200) || !upstream.body ||
+              !/^(audio\/[a-z0-9.+-]+|application\/ogg)(?:;|$)/i.test(type) ||
+              (upstream.headers.get("content-encoding") ?? "identity") !== "identity" ||
+              !Number.isSafeInteger(length) || length < 1 || length > MAX_AUDIO_BYTES || (range && !validSegment)) {
+            await upstream.body?.cancel();
+            return reply.code(502).send({ error: "Licensed audio origin returned an invalid stream." });
+          }
+          reply.type(type).header("Accept-Ranges", "bytes").header("Content-Length", length);
+          if (range) reply.header("Content-Range", contentRange);
+          return reply.code(upstream.status).send(Readable.fromWeb(upstream.body as ReadableStream<Uint8Array>));
+        } catch {
+          return reply.code(502).send({ error: "Licensed audio origin is unavailable." });
+        }
       });
     }
   };

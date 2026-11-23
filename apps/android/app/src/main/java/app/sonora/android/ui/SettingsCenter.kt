@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -15,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -36,14 +38,12 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MailOutline
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -66,11 +66,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -78,32 +77,19 @@ import androidx.compose.ui.unit.sp
 import app.sonora.android.BuildConfig
 import app.sonora.android.data.ProfileApi
 import app.sonora.android.ota.ReleaseInfo
+import coil.imageLoader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private val Ink = Color(0xFF080910)
-private val Panel = Color(0xFF141522)
-private val PanelAlt = Color(0xFF1B1C2C)
-private val Muted = Color(0xFF9698AC)
+private val Muted = Color(0xFFC0BFD3)
 private val Accent = Color(0xFFA78BFA)
 private val Warning = Color(0xFFFF9A8D)
 
 private const val WEB = "https://sonora-web-production-fb072d10.up.railway.app"
 
-/**
- * Settings as a list of categories, Spotify-style: every row shows the value that is
- * currently in force, and every switch changes behaviour rather than only its own state.
- *
- * What is actually wired (all of it read back where the behaviour lives):
- *  - non-stop playback → MainActivity keeps feeding the queue when it runs out;
- *  - bitrate per network class → SonoraApi.qualityKbps, sent as X-Sonora-Quality on every
- *    request (the server honours it as soon as API-lane lands the parameter);
- *  - data saver → same 96 kbit ceiling plus smaller artwork loading in the rails;
- *  - downloads over cellular → the network constraint of the download worker;
- *  - update notifications → whether SONORA alerts the user about a new release;
- *  - interface animations → MotionSettings, which gates every transition in the app.
- */
 @Composable
 fun SettingsCenter(
     update: ReleaseInfo?,
@@ -120,7 +106,8 @@ fun SettingsCenter(
     onQualityChanged: (Int) -> Unit
 ) {
     val context = LocalContext.current
-    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("root") }
+    var page by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(SettingsPage.Root) }
+    BackHandler(enabled = page != SettingsPage.Root) { page = SettingsPage.Root }
     // Snapshot of the stored switches; every write goes to prefs and to the live effect.
     var nonStop by remember { mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.NON_STOP, true)) }
     var saver by remember { mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.DATA_SAVER, false)) }
@@ -128,36 +115,52 @@ fun SettingsCenter(
         mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.DOWNLOAD_ON_CELLULAR, false))
     }
     var notifyUpdates by remember { mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.NOTIFY_UPDATES, true)) }
-    var notifyEmails by remember { mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.NOTIFY_EMAILS, true)) }
     var motionOn by remember { mutableStateOf(MotionSettings.userEnabled) }
-    var qualityWifi by remember { mutableStateOf(SonoraPrefs.int(context, SonoraPrefs.QUALITY_WIFI, 160)) }
-    var qualityCellular by remember { mutableStateOf(SonoraPrefs.int(context, SonoraPrefs.QUALITY_CELLULAR, 96)) }
-    var cacheBytes by remember { mutableStateOf(0L) }
+    var cacheBytes by remember { mutableStateOf<Long?>(null) }
     var cacheMessage by remember { mutableStateOf("") }
+    var cacheBusy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun refreshCacheSize() {
+    fun refreshCacheSize(clearArtwork: Boolean = false) {
+        if (cacheBusy) return
+        cacheBusy = true
+        cacheMessage = ""
         scope.launch {
-            cacheBytes = withContext(Dispatchers.IO) { SonoraPrefs.cacheSizeBytes(context) }
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    if (clearArtwork) {
+                        // Clear only the artwork loader. Offline tracks and the prepared OTA APK stay intact.
+                        context.imageLoader.diskCache?.clear()
+                        context.imageLoader.memoryCache?.clear()
+                    }
+                    SonoraPrefs.cacheSizeBytes(context)
+                }
+                cacheBytes = bytes
+                if (clearArtwork) cacheMessage = "Кэш обложек очищен"
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                cacheMessage = if (clearArtwork) "Не удалось очистить кэш обложек" else "Не удалось проверить размер"
+            } finally {
+                cacheBusy = false
+            }
         }
     }
 
-    LaunchedEffect(page) { if (page == "offline") refreshCacheSize() }
+    LaunchedEffect(page) { if (page == SettingsPage.Offline) refreshCacheSize() }
 
     Column(
         Modifier
             .fillMaxSize()
-            .background(Ink)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = 24.dp)
+            .background(GlassBackdrop)
     ) {
         AnimatedContent(
             targetState = page,
             transitionSpec = {
                 if (!MotionSettings.enabled) {
-                    fadeIn(tween(120)) togetherWith fadeOut(tween(100))
+                    fadeIn(tween(0)) togetherWith fadeOut(tween(0))
                 } else {
-                    val forward = page != "root"
+                    val forward = targetState != SettingsPage.Root
                     val enter = if (forward) {
                         slideInHorizontally(tween(220, easing = EaseOutBrand)) { it / 6 } + fadeIn(tween(220))
                     } else {
@@ -173,9 +176,12 @@ fun SettingsCenter(
             },
             label = "settings-page"
         ) { current ->
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 when (current) {
-                    "root" -> RootPage(
+                    SettingsPage.Root -> RootPage(
                         signedIn = signedIn,
                         email = email,
                         nonStop = nonStop,
@@ -188,11 +194,11 @@ fun SettingsCenter(
                     )
 
                     else -> SubPage(
-                        title = pageTitles.getValue(current),
-                        onBack = { page = "root" }
+                        title = current.title,
+                        onBack = { page = SettingsPage.Root }
                     ) {
                         when (current) {
-                            "playback" -> {
+                            SettingsPage.Playback -> {
                                 ToggleRow(
                                     0, Icons.Default.PlayCircleFilled, "Повторять очередь",
                                     "После последнего трека воспроизведение начнётся с начала очереди.",
@@ -205,7 +211,7 @@ fun SettingsCenter(
                                 NoteRow("Качество аудио пока определяется доступным файлом. Выбор битрейта появится, когда сервер предоставит реальные варианты потока.")
                             }
 
-                            "offline" -> {
+                            SettingsPage.Offline -> {
                                 ToggleRow(
                                     0, Icons.Default.CloudOff, "Экономить трафик",
                                     "Новые загрузки ждут нетарифицируемую сеть. Битрейт потоков пока не меняется.",
@@ -217,17 +223,25 @@ fun SettingsCenter(
                                 }
                                 ToggleRow(
                                     1, Icons.Default.Download, "Скачивать через мобильные сети",
-                                    if (cellularDownloads) "Загрузки разрешены в любой сети."
-                                    else "Новые загрузки ждут нетарифицируемую сеть.",
-                                    cellularDownloads
+                                    when {
+                                        saver -> "При экономии трафика загрузки ждут нетарифицируемую сеть."
+                                        cellularDownloads -> "Новые загрузки разрешены в любой сети."
+                                        else -> "Новые загрузки ждут нетарифицируемую сеть."
+                                    },
+                                    cellularDownloads,
+                                    enabled = !saver
                                 ) {
                                     cellularDownloads = it
                                     SonoraPrefs.setBool(context, SonoraPrefs.DOWNLOAD_ON_CELLULAR, it)
                                 }
                                 ValueRow(
-                                    2, Icons.Default.Computer, "Кэш на устройстве",
-                                    if (cacheBytes > 0) SonoraPrefs.formatBytes(cacheBytes) else "Считаем…",
-                                    "Обложки, база офлайн-треков и временные файлы приложения."
+                                    2, Icons.Default.Computer, "Память приложения",
+                                    when {
+                                        cacheBusy -> "Считаем…"
+                                        cacheBytes != null -> SonoraPrefs.formatBytes(checkNotNull(cacheBytes))
+                                        else -> "Размер неизвестен"
+                                    },
+                                    "Обложки, офлайн-файлы и временные данные приложения."
                                 )
                                 Row(
                                     Modifier
@@ -235,20 +249,14 @@ fun SettingsCenter(
                                         .padding(horizontal = 18.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    OutlinedButton(onClick = {
-                                        scope.launch(Dispatchers.IO) {
-                                            // Only Coil's artwork cache is removed: the prepared
-                                            // update APK lives in the same folder and the installer
-                                            // flow must survive a cache clear.
-                                            runCatching {
-                                                val images = java.io.File(context.cacheDir, "image_cache")
-                                                if (images.exists()) images.deleteRecursively()
-                                            }
-                                            cacheBytes = SonoraPrefs.cacheSizeBytes(context)
-                                            cacheMessage = "Кэш обложек очищен"
-                                        }
-                                    }) { Text("Очистить обложки") }
-                                    TextButton(onClick = ::refreshCacheSize) { Text("Обновить") }
+                                    OutlinedButton(
+                                        onClick = { refreshCacheSize(clearArtwork = true) },
+                                        enabled = !cacheBusy
+                                    ) { Text("Очистить обложки") }
+                                    TextButton(
+                                        onClick = { refreshCacheSize() },
+                                        enabled = !cacheBusy
+                                    ) { Text("Пересчитать") }
                                 }
                                 if (cacheMessage.isNotBlank()) {
                                     Text(
@@ -260,7 +268,7 @@ fun SettingsCenter(
                                 }
                             }
 
-                            "notifications" -> {
+                            SettingsPage.Notifications -> {
                                 ToggleRow(
                                     0, Icons.Default.Notifications, "Уведомления о новых версиях",
                                     if (notifyUpdates) "SONORA сообщает о новом релизе после фоновой проверки."
@@ -270,35 +278,25 @@ fun SettingsCenter(
                                     notifyUpdates = it
                                     SonoraPrefs.setBool(context, SonoraPrefs.NOTIFY_UPDATES, it)
                                 }
-                                ToggleRow(
+                                ValueRow(
                                     1, Icons.Default.MailOutline, "Письма на почту",
-                                    if (email.isBlank()) "Сначала укажи почту в профиле."
-                                    else "Сводки о плейлистах и новых релизах на $email.",
-                                    notifyEmails
-                                ) {
-                                    notifyEmails = it
-                                    SonoraPrefs.setBool(context, SonoraPrefs.NOTIFY_EMAILS, it)
-                                    scope.launch(Dispatchers.IO) { ProfileApi.pushNotifications(it) }
-                                }
+                                    "Рассылки недоступны", "Коды входа по почте работают отдельно."
+                                )
                                 if (!notificationsAllowed) {
                                     NoteRow("Уведомления SONORA выключены в настройках Android.", tone = Warning)
                                     TextButton(onClick = {
-                                        context.startActivity(Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        openExternal(context, Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                                             .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName))
                                     }) { Text("Настройки уведомлений Android") }
                                 }
                             }
 
-                            "privacy" -> {
+                            SettingsPage.Privacy -> {
                                 SectionTitle("Что видят другие пользователи")
                                 PrivacyToggles(0)
-                                NoteRow(
-                                    "Настройки применяются к публичной части профиля: подписчикам, плейлистам " +
-                                        "и истории прослушивания."
-                                )
                             }
 
-                            "appearance" -> {
+                            SettingsPage.Appearance -> {
                                 ToggleRow(
                                     0, Icons.Default.Visibility, "Анимации интерфейса",
                                     "Переходы вкладок, появление списков, мини-плеер. Системный отказ от анимаций " +
@@ -310,15 +308,14 @@ fun SettingsCenter(
                                 }
                                 ValueRow(
                                     1, Icons.Default.BrightnessMedium, "Тема", "Тёмная SONORA",
-                                    "Светлая тема идёт вместе с дизайн-системой на сайте."
+                                    "Оформление приложения"
                                 )
                                 ValueRow(
-                                    2, Icons.Default.Info, "Язык", "Русский",
-                                    "Английский подключим вместе с веб-версией."
+                                    2, Icons.Default.Info, "Язык", "Русский"
                                 )
                             }
 
-                            "apps" -> {
+                            SettingsPage.Apps -> {
                                 ValueRow(
                                     0, Icons.Default.Share, "Импорт из других сервисов", "Открыть в браузере",
                                     "Списки и любимые треки переносятся на странице импорта — там же предпросмотр " +
@@ -330,13 +327,9 @@ fun SettingsCenter(
                                     "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
                                     "Android ${Build.VERSION.RELEASE}"
                                 )
-                                NoteRow(
-                                    "Подключённых сервисов пока нет. Spotify и YouTube появятся, как только " +
-                                        "разрешённые OAuth-ключи будут в приложении."
-                                )
                             }
 
-                            else -> {
+                            SettingsPage.Info -> {
                                 UpdateInfoRow(
                                     update = update,
                                     checking = checking,
@@ -358,34 +351,33 @@ fun SettingsCenter(
                                     onClick = { openUrl(context, "https://github.com/derector/SONORA/releases") }
                                 )
                             }
+                            SettingsPage.Root -> Unit
                         }
                     }
                 }
+                if (current == SettingsPage.Root && signedIn) {
+                    Spacer(Modifier.height(18.dp))
+                    OutlinedButton(
+                        onClick = onSignOut,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Warning)
+                    ) { Text("Выйти из аккаунта") }
+                }
             }
-        }
-
-        if (page == "root" && signedIn) {
-            Spacer(Modifier.height(18.dp))
-            OutlinedButton(
-                onClick = onSignOut,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Warning)
-            ) { Text("Выйти из аккаунта") }
         }
     }
 }
 
-private val pageTitles = mapOf(
-    "playback" to "Воспроизведение",
-    "offline" to "Оффлайн и трафик",
-    "notifications" to "Уведомления",
-    "privacy" to "Приватность",
-    "appearance" to "Внешний вид",
-    "apps" to "Приложения и устройства",
-    "info" to "Информация и поддержка"
-)
+private enum class SettingsPage(val title: String) {
+    Root("Настройки"),
+    Playback("Воспроизведение"),
+    Offline("Оффлайн и трафик"),
+    Notifications("Уведомления"),
+    Privacy("Приватность"),
+    Appearance("Внешний вид"),
+    Apps("Приложения и устройства"),
+    Info("Информация и поддержка")
+}
 
 @Composable
 private fun RootPage(
@@ -396,10 +388,10 @@ private fun RootPage(
     notifyUpdates: Boolean,
     motionOn: Boolean,
     update: ReleaseInfo?,
-    onOpen: (String) -> Unit,
+    onOpen: (SettingsPage) -> Unit,
     onOpenProfile: () -> Unit
 ) {
-    SectionTitle("SONORA")
+    SectionTitle("Настройки")
     ValueRow(
         0, Icons.Default.AccountCircle, "Аккаунт",
         if (signedIn) email.ifBlank { "Вход выполнен" } else "Не выполнен вход",
@@ -410,38 +402,38 @@ private fun RootPage(
         1, Icons.Default.PlayCircleFilled, "Воспроизведение",
         if (nonStop) "Повтор очереди" else "Без повтора",
         "Порядок очереди и качество звука",
-        onClick = { onOpen("playback") }
+        onClick = { onOpen(SettingsPage.Playback) }
     )
     ValueRow(
         2, Icons.Default.Notifications, "Уведомления",
         if (notifyUpdates) "Об обновлениях: вкл" else "Об обновлениях: выкл",
-        "Пуши приложения и письма",
-        onClick = { onOpen("notifications") }
+        "Уведомления системы и новые версии",
+        onClick = { onOpen(SettingsPage.Notifications) }
     )
     ValueRow(
         3, Icons.Default.CloudOff, "Оффлайн и трафик",
         if (saver) "Экономия трафика" else "Стандартный расход",
         "Загрузки, кэш, мобильные сети",
-        onClick = { onOpen("offline") }
+        onClick = { onOpen(SettingsPage.Offline) }
     )
     ValueRow(
         4, Icons.Default.Lock, "Приватность", "Кто видит профиль",
-        "Подписчики, плейлисты, история",
-        onClick = { onOpen("privacy") }
+        "Видимость профиля и истории",
+        onClick = { onOpen(SettingsPage.Privacy) }
     )
     ValueRow(
         5, Icons.Default.BrightnessMedium, "Внешний вид",
         if (motionOn) "Тёмная · анимации вкл" else "Тёмная · анимации выкл",
-        onClick = { onOpen("appearance") }
+        onClick = { onOpen(SettingsPage.Appearance) }
     )
     ValueRow(
         6, Icons.Default.Computer, "Приложения и устройства", "Импорт из других сервисов",
-        onClick = { onOpen("apps") }
+        onClick = { onOpen(SettingsPage.Apps) }
     )
     ValueRow(
         7, Icons.Default.Info, "Информация и поддержка",
         "Версия ${BuildConfig.VERSION_NAME}" + if (update != null) " · есть обновление" else "",
-        onClick = { onOpen("info") }
+        onClick = { onOpen(SettingsPage.Info) }
     )
 }
 
@@ -528,9 +520,14 @@ private fun ToggleRow(
     title: String,
     subtitle: String,
     checked: Boolean,
+    enabled: Boolean = true,
     onChange: (Boolean) -> Unit
 ) {
-    Card(index = index, clickable = { onChange(!checked) }) {
+    Card(
+        index = index,
+        clickable = null,
+        interaction = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+    ) {
         IconBadge(icon)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
@@ -546,41 +543,7 @@ private fun ToggleRow(
             )
         }
         Spacer(Modifier.width(8.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-@Composable
-private fun QualityRow(index: Int, title: String, kbps: Int, onChange: (Int) -> Unit) {
-    val options = listOf(96, 160, 320)
-    ToggleLikeRow(
-        index = index,
-        icon = Icons.Default.Download,
-        title = title,
-        value = SonoraPrefs.qualityLabel(kbps),
-        hint = "Нажми, чтобы сменить",
-        onClick = { onChange(options[(options.indexOf(kbps).coerceAtLeast(0) + 1) % options.size]) }
-    )
-}
-
-@Composable
-private fun ToggleLikeRow(
-    index: Int,
-    icon: ImageVector,
-    title: String,
-    value: String,
-    hint: String,
-    onClick: () -> Unit
-) {
-    Card(index = index, clickable = onClick) {
-        IconBadge(icon)
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(value, color = Accent, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
-            Text(hint, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 1.dp))
-        }
-        Icon(Icons.Default.Refresh, null, tint = Muted, modifier = Modifier.size(18.dp))
+        Switch(checked = checked, enabled = enabled, onCheckedChange = null)
     }
 }
 
@@ -600,11 +563,10 @@ private fun IconBadge(icon: ImageVector) {
     Box(
         Modifier
             .size(34.dp)
-            .clip(CircleShape)
-            .background(PanelAlt),
+            .sonoraGlass(CircleShape, GlassTone.Accent),
         contentAlignment = Alignment.Center
     ) {
-        Icon(icon, null, tint = Accent, modifier = Modifier.size(18.dp))
+        Icon(icon, null, tint = Color(0xFFF0E9FF), modifier = Modifier.size(18.dp))
     }
 }
 
@@ -616,6 +578,7 @@ private fun IconBadge(icon: ImageVector) {
 private fun Card(
     index: Int,
     clickable: (() -> Unit)?,
+    interaction: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -625,7 +588,7 @@ private fun Card(
         .staggerEnter(index)
         .sonoraGlass(shape)
     val wrapped = if (clickable != null) base.then(Modifier.pressScale(onClick = clickable)) else base
-    Box(wrapped.padding(14.dp)) {
+    Box(wrapped.then(interaction).padding(14.dp)) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -692,56 +655,84 @@ private fun UpdateInfoRow(
     }
 }
 
-/**
- * The three privacy switches. Kept public so the profile screen and the settings page
- * render exactly the same contract, and so a change from either place persists at once.
- */
+/** Account privacy, shown on the profile and in settings using the same server contract. */
 @Composable
 fun PrivacyToggles(startIndex: Int = 0) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var followersVisible by remember {
-        mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.PRIVACY_FOLLOWERS, true))
+    var privacy by remember { mutableStateOf<ProfileApi.Privacy?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("") }
+
+    fun load() {
+        if (busy) return
+        busy = true
+        message = ""
+        scope.launch {
+            try {
+                privacy = withContext(Dispatchers.IO) { ProfileApi.getPrivacy() }
+                if (privacy == null) message = "Не удалось получить настройки профиля."
+            } finally {
+                busy = false
+            }
+        }
     }
-    var playlistsVisible by remember {
-        mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.PRIVACY_PLAYLISTS, true))
+
+    fun save(next: ProfileApi.Privacy) {
+        if (busy) return
+        busy = true
+        message = ""
+        scope.launch {
+            try {
+                val saved = withContext(Dispatchers.IO) { ProfileApi.savePrivacy(next) }
+                if (saved == null) message = "Сохранение не подтверждено. Проверьте подключение и обновите настройки."
+                else privacy = saved
+            } finally {
+                busy = false
+            }
+        }
     }
-    var historyVisible by remember {
-        mutableStateOf(SonoraPrefs.bool(context, SonoraPrefs.PRIVACY_HISTORY, false))
+
+    val signedIn = app.sonora.android.data.SonoraApi.accessToken() != null
+    LaunchedEffect(signedIn) { if (signedIn) load() }
+    if (!signedIn) {
+        NoteRow("Войдите в аккаунт, чтобы изменить приватность публичного профиля.")
+        return
     }
-    ToggleRow(
-        startIndex, Icons.Default.AccountCircle, "Подписчики и подписки",
-        "Показывать, на кого ты подписан и кто подписан на тебя.",
-        followersVisible
-    ) {
-        followersVisible = it
-        SonoraPrefs.setBool(context, SonoraPrefs.PRIVACY_FOLLOWERS, it)
-        scope.launch(Dispatchers.IO) { ProfileApi.pushPrivacy(followersVisible, playlistsVisible, historyVisible) }
+
+    val current = privacy
+    if (current == null && busy) NoteRow("Загружаем настройки…")
+    if (current != null) {
+        val canSave = !busy && message.isBlank()
+        ToggleRow(
+            startIndex, Icons.Default.AccountCircle, "Публичный профиль",
+            "Позволить другим пользователям открывать ваш профиль.",
+            current.profilePublic, enabled = canSave
+        ) { save(current.copy(profilePublic = it)) }
+        ToggleRow(
+            startIndex + 1, Icons.Default.Visibility, "История прослушивания",
+            "Показывать прослушивания в публичном профиле.",
+            current.history, enabled = canSave
+        ) { save(current.copy(history = it)) }
     }
-    ToggleRow(
-        startIndex + 1, Icons.Default.Download, "Плейлисты",
-        "Публичные плейлисты видят другие пользователи и сайт.",
-        playlistsVisible
-    ) {
-        playlistsVisible = it
-        SonoraPrefs.setBool(context, SonoraPrefs.PRIVACY_PLAYLISTS, it)
-        scope.launch(Dispatchers.IO) { ProfileApi.pushPrivacy(followersVisible, playlistsVisible, historyVisible) }
-    }
-    ToggleRow(
-        startIndex + 2, Icons.Default.Visibility, "Недавно прослушано",
-        "История прослушивания в твоём публичном профиле.",
-        historyVisible
-    ) {
-        historyVisible = it
-        SonoraPrefs.setBool(context, SonoraPrefs.PRIVACY_HISTORY, it)
-        scope.launch(Dispatchers.IO) { ProfileApi.pushPrivacy(followersVisible, playlistsVisible, historyVisible) }
+    if (message.isNotBlank()) {
+        NoteRow(message, tone = Warning)
+        TextButton(
+            onClick = ::load,
+            enabled = !busy,
+            modifier = Modifier.padding(horizontal = 18.dp)
+        ) { Text("Обновить настройки") }
     }
 }
 
-private fun openUrl(context: Context, raw: String) {
-    runCatching {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(raw)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+private fun openExternal(context: Context, intent: Intent) {
+    try {
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (_: android.content.ActivityNotFoundException) {
+        Toast.makeText(context, "На устройстве нет приложения для этого действия.", Toast.LENGTH_LONG).show()
+    } catch (_: SecurityException) {
+        Toast.makeText(context, "Не удалось открыть этот раздел.", Toast.LENGTH_LONG).show()
     }
 }
+
+private fun openUrl(context: Context, raw: String) =
+    openExternal(context, Intent(Intent.ACTION_VIEW, Uri.parse(raw)))

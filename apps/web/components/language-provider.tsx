@@ -371,6 +371,7 @@ const ru: Record<string, string> = {
   "Picked from your listening": "По твоим прослушиваниям",
   "Licensed playback": "Лицензионное воспроизведение",
   "Licensing and attribution": "Лицензии и атрибуция",
+  "Song lyrics": "Текст песни",
   "About track": "О треке",
   "Album": "Альбом",
   "Open source page": "Открыть страницу источника",

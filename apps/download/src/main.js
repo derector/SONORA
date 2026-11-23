@@ -10,8 +10,10 @@ const $$ = (selector) => [...document.querySelectorAll(selector)];
 function releaseApk(release) {
   const tag = release?.tag_name;
   if (!/^v\d+\.\d+\.\d+$/.test(tag ?? "")) return undefined;
-  const assets = (release.assets ?? []).filter(({ name, browser_download_url: url }) =>
-    name?.toLowerCase().endsWith(".apk") && url === `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(name)}`);
+  const assets = Array.isArray(release.assets) ? release.assets.filter((asset) =>
+    typeof asset?.name === "string" &&
+    asset.browser_download_url === `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(asset.name)}`
+  ) : [];
   return assets.find(({ name }) => name === `SONORA-release-${tag}.apk`) ??
     assets.find(({ name }) => name === "SONORA-latest.apk");
 }
@@ -30,7 +32,7 @@ const getSha = (asset) => {
   return "";
 };
 
-function applyRelease(release, history = []) {
+function applyRelease(release) {
   const asset = releaseApk(release);
   const version = release?.tag_name || "См. релиз";
   const url = asset?.browser_download_url ?? `${RELEASES_PAGE}/latest`;
@@ -51,6 +53,9 @@ function applyRelease(release, history = []) {
     node.textContent = body.length > 420 ? body.slice(0, 417) + "…" : body;
   });
   $$("[data-sha]").forEach((node) => node.textContent = sha || "Контрольная сумма доступна в официальном релизе");
+}
+
+function applyReleaseHistory(release, history = []) {
   const historyNode = $("#releaseHistory");
   if (historyNode) {
     historyNode.replaceChildren();
@@ -93,15 +98,22 @@ async function loadReleases() {
         return null;
       }
     };
-    const [latest, rawHistory] = await Promise.all([
-      read(`${RELEASES_API}/latest`),
-      read(`${RELEASES_API}?per_page=5`)
-    ]);
+    const historyRequest = read(`${RELEASES_API}?per_page=5`);
+    const latest = await read(`${RELEASES_API}/latest`);
     const hasPublishedApk = (item) => item && !item.draft && !item.prerelease && Boolean(releaseApk(item));
+    let release = hasPublishedApk(latest) ? latest : null;
+    if (release) applyRelease(release);
+
+    const rawHistory = await historyRequest;
     const history = Array.isArray(rawHistory) ? rawHistory.filter(hasPublishedApk) : [];
-    applyRelease(hasPublishedApk(latest) ? latest : history[0] ?? null, history);
+    if (!release) {
+      release = history[0] ?? null;
+      applyRelease(release);
+    }
+    applyReleaseHistory(release, history);
   } catch {
     applyRelease(null);
+    applyReleaseHistory(null);
   } finally {
     clearTimeout(timeout);
   }

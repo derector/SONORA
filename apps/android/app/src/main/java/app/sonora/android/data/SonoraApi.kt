@@ -12,7 +12,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object SonoraApi {
-    private const val BASE = "https://sonora-web-api-production.up.railway.app"
+    internal const val BASE = "https://sonora-web-api-production.up.railway.app"
     /**
      * Bitrate the user selected in Настройки → Воспроизведение, in kbit/s (0 = server default).
      * Sent as X-Sonora-Quality on every API call so the resolver can honour it as soon as
@@ -474,6 +474,22 @@ object SonoraApi {
         val candidate = result.optJSONObject("playableTrack") ?: return null
         val track = parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable } ?: return null
         return PlayableVersion(track, result.optString("matchedVia"))
+    }
+
+    fun synthesizeAssistantSpeech(text: String, persona: String = "jarvis"): ByteArray? {
+        val token = prefs.getString("access_token", null) ?: return null
+        val body = JSONObject().put("text", text.take(900)).put("persona", persona).toString().toRequestBody(jsonType)
+        val request = Request.Builder().url("$BASE/api/v1/assistant/speech")
+            .header("Authorization", "Bearer $token").post(body).build()
+        val call = http.newCall(request)
+        call.timeout().timeout(9, TimeUnit.SECONDS)
+        return call.execute().use { response ->
+            val audio = response.body ?: return@use null
+            if (!response.isSuccessful || audio.contentType()?.type != "audio") return@use null
+            val source = audio.source()
+            if (source.request(1024L * 1024L + 1L)) return@use null
+            source.readByteArray().takeIf { it.isNotEmpty() }
+        }
     }
 
     data class AssistantAnswer(val reply: String, val tracks: List<Track>)

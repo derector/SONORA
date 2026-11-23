@@ -15,6 +15,7 @@
 // must never construct a full-track URL for commercial platforms.
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { createCommonsCatalog } from "./commons-catalog.js";
 import type { createLicensedCatalog } from "./licensed-catalog.js";
 import { createPrivateKey, createSign } from "node:crypto";
 import {
@@ -1270,7 +1271,11 @@ export function licensedCandidate(result: DiscoveryResult): JamendoCandidate | n
 // HTTP registration (called from index.ts)
 // ---------------------------------------------------------------------------
 
-export function registerDiscoveryRoutes(app: FastifyInstance, licensedCatalog: ReturnType<typeof createLicensedCatalog>): void {
+export function registerDiscoveryRoutes(
+  app: FastifyInstance,
+  licensedCatalog: ReturnType<typeof createLicensedCatalog>,
+  commonsCatalog: ReturnType<typeof createCommonsCatalog>
+): void {
   const discoveryRateLimit = {
     config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 30, timeWindow: "1 minute" } }
   };
@@ -1295,8 +1300,24 @@ export function registerDiscoveryRoutes(app: FastifyInstance, licensedCatalog: R
         const licensed = await licensedCatalog.match(request.body).catch(() => null);
         if (licensed) return licensed;
       }
-      const result = await resolveBestTrack(request.body ?? {}, process.env);
-      if (request.body?.playbackOnly !== true) return result;
+      const input = request.body ?? {};
+      if (input.playbackOnly !== true) return await resolveBestTrack(input, process.env);
+      const artist = firstString(input.artist);
+      const title = firstString(input.title);
+      const durationSeconds = finiteNumber(input.durationSeconds);
+      const [resolved, commons] = await Promise.allSettled([
+        resolveBestTrack(input, process.env),
+        artist && title && durationSeconds && durationSeconds > 0
+          ? commonsCatalog.search(`${artist} ${title}`.slice(0, 160), 12).then((tracks) =>
+              tracks.filter((track) => matchRecording({ artist, title, durationSeconds }, track) === "meta+duration")
+                .sort((a, b) => Math.abs(a.durationSeconds - durationSeconds) - Math.abs(b.durationSeconds - durationSeconds))[0])
+          : Promise.resolve(undefined)
+      ]);
+      if (commons.status === "fulfilled" && commons.value && (resolved.status === "rejected" || !resolved.value.track)) {
+        return { playableTrack: commons.value, matchedVia: "meta+duration" };
+      }
+      if (resolved.status === "rejected") throw resolved.reason;
+      const result = resolved.value;
       const track = result.track ? licensedCandidate(result.track) : null;
       const provider = track?.provider === "audius" ? "Audius" : "Jamendo";
       return {

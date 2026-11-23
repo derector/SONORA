@@ -5,6 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
 import { createLicensedCatalog } from "./licensed-catalog.js";
+import { registerLyricsRoutes } from "./lyrics.js";
 import { createCommonsCatalog } from "./commons-catalog.js";
 import { searchOfficialReleases } from "./official-releases.js";
 import {
@@ -101,6 +102,8 @@ app.get("/api/v1", async () => ({
     "/api/v1/providers/commons/tracks",
     "/api/v1/recommendations",
     "/api/v1/assistant",
+    "/api/v1/assistant/speech",
+    "/api/v1/lyrics",
     "/api/v1/import/link",
     "/api/v1/import/file",
     "/api/v1/import/jobs",
@@ -1369,7 +1372,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
     }
   }
   await Promise.all(tasks);
-  if (queryIsrc && type !== "artists" && providers.musicbrainz?.ok === false && !spotifyMetadata.some((item) => item.isrc === queryIsrc)) {
+  if (queryIsrc && type !== "artists" && providers.musicbrainz?.ok === false && ![...spotifyMetadata, ...tracks].some((item) => item.isrc === queryIsrc)) {
     return reply.code(503).send({ ...authError(503, "Поиск по ISRC сейчас недоступен. Попробуйте позже или введите название трека."), providers });
   }
   const anySuccess = officialReleases.length > 0 || Object.values(providers).some((provider) => provider.ok);
@@ -1391,7 +1394,7 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: stri
         : [track.artist, track.artistHandle].some((value) => catalogSearchKey(value) === queryKey);
     const playable = tracks.filter((track) =>
       track.playable === true && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") &&
-      (creditsMatch(track) || !exactArtist && !hasUncreditedArtistPrefix(queryKey, track.title) &&
+      (queryIsrc ? track.isrc === queryIsrc : creditsMatch(track) || !exactArtist && !hasUncreditedArtistPrefix(queryKey, track.title) &&
         matchesCatalogSearch(q, track.artist, track.title, track.album)));
     return {
       query: q, type, tracks: playable.slice(0, limit * 2), metadata: matchingMetadata.slice(0, limit),
@@ -1411,7 +1414,7 @@ import { rankRecommendations, type TasteSignal } from "./recommendation-core.js"
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
 import {
-  audiusPublicPage, PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
+  audiusCandidates, audiusPublicPage, PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
   jamendoConfig, jamendoLicenseAllowed, matchesCatalogSearch, type JamendoCandidate
 } from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
@@ -1477,6 +1480,30 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (r
 // intent parser over the licensed catalogs; upgrades to an LLM only when the
 // operator provides their own OPENAI_API_KEY (service stays free by default).
 import { parseAssistantMessage, type AssistantIntent } from "./assistant-core.js";
+import { speechConfig, synthesizeAssistantVoice } from "./assistant-voice.js";
+
+app.post<{ Body: { text?: string; persona?: string } }>("/api/v1/assistant/speech", {
+  bodyLimit: 4096,
+  config: { rateLimit: { max: 12, timeWindow: "1 minute" } }
+}, async (request, reply) => {
+  const config = speechConfig(process.env);
+  if (!config) return reply.code(503).send(authError(503, "Облачный голос не настроен."));
+  const account = await requireUser(request, reply);
+  if (!account) return;
+  const allowedUsers = process.env.SONORA_AZURE_SPEECH_USER_IDS?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
+  if (allowedUsers.length && !allowedUsers.includes(account.user.id)) {
+    return reply.code(403).send(authError(403, "Облачный голос недоступен для этого аккаунта."));
+  }
+  const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+  if (!text || text.length > 900) return reply.code(400).send(authError(400, "Текст озвучивания должен содержать от 1 до 900 символов."));
+  try {
+    const audio = await synthesizeAssistantVoice(text, config, request.body?.persona);
+    return reply.header("Cache-Control", "private, no-store").type("audio/mpeg").send(audio);
+  } catch {
+    return reply.code(502).send(authError(502, "Облачный голос временно недоступен."));
+  }
+});
+
 async function assistantViaLlm(message: string): Promise<AssistantIntent | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -1569,6 +1596,7 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
 
   }
   let candidates = await jamendoCandidates(intent.query, 24);
+  if (!candidates.length) candidates = await audiusCandidates(intent.query, 20);
   let personalized = false;
   if (auth && candidates.length) {
     const { data: favorites, error } = await auth.client.from("user_provider_favorites")
@@ -1600,10 +1628,10 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
     }
     const chosen = candidates.slice(0, 15);
     const rows = chosen.map((track, index) => ({
-      playlist_id: created.id, provider: "jamendo", provider_track_id: track.providerTrackId,
+      playlist_id: created.id, provider: track.provider.toLowerCase(), provider_track_id: track.providerTrackId,
       title: track.title, artist_name: track.artist, album_name: track.album,
       duration_seconds: track.durationSeconds ?? 0, artwork_url: track.artworkUrl,
-      license_url: track.licenseUrl || "https://jamendo.com/legal/license", source_url: track.sourceUrl,
+      license_url: track.licenseUrl || (track.provider === "Audius" ? "https://audius.co/terms" : "https://jamendo.com/legal/license"), source_url: track.sourceUrl,
       position: index
     }));
     const { error: addError } = await auth.client.from("provider_playlist_tracks").insert(rows);
@@ -1627,7 +1655,8 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
 registerImportRoutes(app);
 // Multi-source discovery (GET /discovery/search, POST /discovery/resolve).
 licensedCatalog.register(app);
-registerDiscoveryRoutes(app, licensedCatalog);
+registerLyricsRoutes(app, process.env);
+registerDiscoveryRoutes(app, licensedCatalog, commonsCatalog);
 
 try {
   registerProfileRoutes(app, { authClient, authError, requireUser });

@@ -8,8 +8,7 @@ import org.json.JSONObject
 
 /**
  * Account endpoints for the profile surface, following docs/PROFILE_CENTER_API.md
- * (`GET/PATCH /api/v1/profile`, `POST /api/v1/profile/avatar`, privacy + notification
- * blocks inside the same PATCH).
+ * (`GET/PATCH /api/v1/profile`, `POST /api/v1/profile/avatar`, privacy inside the same PATCH).
  *
  * Everything here is deliberately best-effort: the API lane is still landing these routes.
  * A `null`/`false` return is not an error the user is shown — the caller keeps the locally
@@ -93,23 +92,28 @@ object ProfileApi {
         return call("/api/v1/profile", "PATCH", body) != null
     }
 
-    fun pushPrivacy(followersVisible: Boolean, playlistsVisible: Boolean, historyVisible: Boolean): Boolean {
+    data class Privacy(val profilePublic: Boolean, val history: Boolean, val comments: Boolean)
+
+    private fun JSONObject.readPrivacy(): Privacy? {
+        val privacy = optJSONObject("user")?.optJSONObject("privacy") ?: return null
+        val profile = privacy.optString("profile")
+        if (profile != "public" && profile != "private") return null
+        val history = privacy.opt("history") as? Boolean ?: return null
+        val comments = privacy.opt("comments") as? Boolean ?: return null
+        return Privacy(profilePublic = profile == "public", history = history, comments = comments)
+    }
+
+    fun getPrivacy(): Privacy? = call("/api/v1/profile", "GET", null)?.readPrivacy()
+
+    fun savePrivacy(privacy: Privacy): Privacy? {
         val body = JSONObject().put(
             "privacy",
             JSONObject()
-                .put("showFollowers", followersVisible)
-                .put("showPlaylists", playlistsVisible)
-                .put("showHistory", historyVisible)
+                .put("profile", if (privacy.profilePublic) "public" else "private")
+                .put("history", privacy.history)
+                .put("comments", privacy.comments)
         )
-        return call("/api/v1/profile", "PATCH", body) != null
-    }
-
-    fun pushNotifications(emailsEnabled: Boolean): Boolean {
-        val body = JSONObject().put(
-            "preferences",
-            JSONObject().put("emailNotifications", emailsEnabled)
-        )
-        return call("/api/v1/profile", "PATCH", body) != null
+        return call("/api/v1/profile", "PATCH", body)?.readPrivacy()
     }
 
     /**

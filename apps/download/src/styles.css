@@ -306,3 +306,9 @@ body {
   height: auto;
   aspect-ratio: 9 / 20;
 }
+
+.gallery-note { color: var(--muted); font-size: 12px; }
+.gallery-note a { color: #ddd8ff; text-decoration: underline; text-underline-offset: .16em; }
+
+.screen-link { display: block; border-radius: 13px; }
+.screen-link:hover { box-shadow: 0 0 0 1px var(--glass-edge); }

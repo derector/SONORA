@@ -60,3 +60,41 @@ test("licensed catalog serves only permitted tracks and stops resolving revoked 
   assert.deepEqual(await catalog.search("Тестовый артист", 10), []);
   assert.equal((await app.inject("/api/v1/providers/sonora/tracks/owner-recording/audio")).statusCode, 404);
 });
+
+test("opt-in licensed proxy preserves a byte range and refuses a multipart request", async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), "sonora-range-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const path = join(dir, "catalog.json");
+  await writeFile(path, JSON.stringify([{
+    id: "recording", title: "Recording", artist: "Artist", isrc: "USABC2600001",
+    audioPath: "tracks/recording.mp3", rightsHolder: "Rights holder", licenseRef: "license",
+    streamingAllowed: true, availableUntil: null
+  }]));
+  const catalog = createLicensedCatalog({
+    SONORA_LICENSED_CATALOG_FILE: path,
+    SONORA_LICENSED_AUDIO_ORIGIN: "https://audio.example",
+    SONORA_LICENSED_API_ORIGIN: "https://api.example",
+    SONORA_LICENSED_PROXY_AUDIO: "true"
+  });
+  const app = Fastify();
+  t.after(() => app.close());
+  catalog.register(app);
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
+    assert.equal(url, "https://audio.example/tracks/recording.mp3");
+    assert.equal(init.redirect, "error");
+    assert.equal(new Headers(init.headers).get("range"), "bytes=2-4");
+    return new Response(new Uint8Array([2, 3, 4]), { status: 206, headers: {
+      "Content-Type": "audio/mpeg", "Content-Range": "bytes 2-4/10", "Content-Length": "3"
+    } });
+  });
+  const endpoint = "/api/v1/providers/sonora/tracks/recording/audio";
+  const partial = await app.inject({ url: endpoint, headers: { range: "bytes=2-4" } });
+  assert.equal(partial.statusCode, 206);
+  assert.equal(partial.headers["content-range"], "bytes 2-4/10");
+  assert.equal(partial.headers["accept-ranges"], "bytes");
+  assert.deepEqual([...partial.rawPayload], [2, 3, 4]);
+  const multipart = await app.inject({ url: endpoint, headers: { range: "bytes=0-1,3-4" } });
+  assert.equal(multipart.statusCode, 400);
+  assert.equal(fetchMock.mock.callCount(), 1);
+  assert.equal((await catalog.search("isrc: us-abc-26-00001", 4))[0]?.id, "sonora:recording");
+});
