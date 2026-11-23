@@ -86,8 +86,10 @@ export function SeasonalEffects() {
       if (event.key !== "sonora-seasonal-effects") return;
       setEnabled(event.newValue !== "off");
     };
+    const onLocalChange = () => { try { setEnabled(window.localStorage.getItem("sonora-seasonal-effects") !== "off"); } catch {} };
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("sonora-seasonal-effects-change", onLocalChange);
+    return () => { window.removeEventListener("storage", onStorage); window.removeEventListener("sonora-seasonal-effects-change", onLocalChange); };
   }, []);
 
   const particles = useMemo(() => buildParticles(season), [season]);
