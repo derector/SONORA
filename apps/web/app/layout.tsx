@@ -10,10 +10,10 @@ import { PageTransition } from "../components/page-transition";
 import { RouteProgress } from "../components/route-progress";
 
 export const metadata: Metadata = {
-  title: "SONORA | Music, in your frequency",
-  description: "Discover music that moves with you."
+  title: "SONORA Messenger | Общение в твоём ритме",
+  description: "SONORA Messenger — общение, сообщения и звонки в современном интерфейсе.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><RouteProgress/><LanguageProvider><AuthProvider><PlayerProvider><SeasonalEffects/><WorkspaceShell><PageTransition>{children}</PageTransition></WorkspaceShell></PlayerProvider></AuthProvider></LanguageProvider></body></html>;
+  return <html lang="ru"><body><RouteProgress/><LanguageProvider><AuthProvider><PlayerProvider><SeasonalEffects/><WorkspaceShell><PageTransition>{children}</PageTransition></WorkspaceShell></PlayerProvider></AuthProvider></LanguageProvider></body></html>;
 }
