@@ -4,6 +4,10 @@ import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyRequest } from "fastify";
 import { authClient, authError, cleanText, requireUser } from "./auth-helpers.js";
+import { createLicensedCatalog } from "./licensed-catalog.js";
+import { registerLyricsRoutes } from "./lyrics.js";
+import { createCommonsCatalog } from "./commons-catalog.js";
+import { searchOfficialReleases } from "./official-releases.js";
 import {
   ACCENT_PRESETS, PROFILE_AVATAR_BODY_LIMIT, PROFILE_ROLES, normalizeGenres, normalizeLinks,
   normalizePrivacy, readProfile, registerProfileRoutes
@@ -11,6 +15,8 @@ import {
 const app = Fastify({ logger: true, trustProxy: true, bodyLimit: 3_000_000 });
 const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
+const licensedCatalog = createLicensedCatalog(process.env);
+const commonsCatalog = createCommonsCatalog();
 
 await app.register(cookie);
 await app.register(cors, {
@@ -93,8 +99,11 @@ app.get("/api/v1", async () => ({
     "/api/v1/discovery/resolve",
     "/api/v1/providers/jamendo/tracks",
     "/api/v1/providers/audius/tracks",
+    "/api/v1/providers/commons/tracks",
     "/api/v1/recommendations",
     "/api/v1/assistant",
+    "/api/v1/assistant/speech",
+    "/api/v1/lyrics",
     "/api/v1/import/link",
     "/api/v1/import/file",
     "/api/v1/import/jobs",
@@ -647,7 +656,7 @@ app.post<{ Params: { playlistId: string }; Body: { provider?: string; providerTr
         album_name: track.album?.playlist_name ?? null, duration_seconds: track.duration ?? null,
         artwork_url: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         license_url: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        source_url: track.permalink ?? "https://audius.co", position: (last?.position ?? -1) + 1
+        source_url: audiusPublicPage(track.permalink), position: (last?.position ?? -1) + 1
       });
       if (error) return reply.code(error.code === "23505" ? 409 : 400).send(authError(error.code === "23505" ? 409 : 400, "Track could not be added. It may already be in this playlist."));
       return reply.code(201).send({ ok: true, provider: "audius", providerTrackId: track.id });
@@ -1098,7 +1107,7 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
         artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
         licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+        sourceUrl: audiusPublicPage(track.permalink), provider: "Audius", playable: true
       }];
     });
     return { provider: "Audius", sort, items, sourceCount: records.length };
@@ -1108,20 +1117,98 @@ app.get<{ Querystring: { sort?: string; limit?: string; id?: string } }>("/api/v
   }
 });
 
-app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1/search/music", async (request, reply) => {
+app.get<{ Querystring: { id?: string } }>("/api/v1/providers/commons/tracks", async (request, reply) => {
+  try {
+    const track = await commonsCatalog.lookup(request.query.id ?? "");
+    return { items: track ? [track] : [] };
+  } catch {
+    return reply.code(502).send(authError(502, "Wikimedia Commons is temporarily unavailable."));
+  }
+});
+
+app.get<{ Querystring: { q?: string; type?: string; limit?: string; inApp?: string } }>("/api/v1/search/music", async (request, reply) => {
   const q = request.query.q?.trim().slice(0, 100) ?? "";
   const type = request.query.type ?? "all";
   const limit = Math.min(20, Math.max(1, Number(request.query.limit) || 12));
+  const inApp = request.query.inApp === "true";
   if (q.length < 2) return reply.code(400).send(authError(400, "Search query must contain at least two characters."));
   if (!["all", "tracks", "artists"].includes(type)) return reply.code(400).send(authError(400, "Search type must be all, tracks or artists."));
 
   const tracks: Array<Record<string, unknown>> = [];
   const metadata: Array<Record<string, unknown>> = [];
+  const spotifyMetadata: Array<Record<string, unknown>> = [];
   const artists: Array<Record<string, unknown>> = [];
   const providers: Record<string, { ok: boolean; count: number; error?: string }> = {};
+  const queryKey = catalogSearchKey(q);
+  const queryIsrc = validIsrc(q.replace(/^isrc:\s*/i, ""));
+  const officialReleases = inApp && type !== "artists" ? searchOfficialReleases(q, limit) : [];
+
+  const audiusUsers = (async () => {
+    if (!inApp && type === "tracks") return [];
+    try {
+      const params = new URLSearchParams({ query: q, limit: String(limit), app_name: "SONORA" });
+      const response = await fetch(`https://api.audius.co/v1/users/search?${params}`, {
+        headers: { Accept: "application/json" }, signal: AbortSignal.timeout(4500)
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const payload = await response.json() as { data?: Array<{
+        id: string; name?: string; handle?: string; follower_count?: number; track_count?: number;
+        profile_picture?: Record<string, string> | null;
+      }> };
+      const users = (payload.data ?? []).filter((user) => user.id && (user.name || user.handle) &&
+        (!inApp || matchesCatalogSearch(q, user.name) || matchesCatalogSearch(q, user.handle)));
+      providers.audiusArtists = { ok: true, count: users.length };
+      return users;
+    } catch (error) {
+      providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
+      return [];
+    }
+  })();
 
   const tasks: Array<Promise<void>> = [];
+  if (licensedCatalog.configured) {
+    tasks.push((async () => {
+      try {
+        const matches = await licensedCatalog.search(q, limit, type === "artists");
+        if (type !== "artists") tracks.unshift(...matches);
+        if (inApp || type !== "tracks") {
+          const artistNames = new Map(matches.filter((item) => matchesCatalogSearch(q, item.artist))
+            .map((item) => [catalogSearchKey(item.artist), item.artist]));
+          for (const [key, name] of artistNames) {
+            artists.push({ id: `sonora-artist:${key}`, provider: "SONORA", name });
+          }
+        }
+        providers.sonora = { ok: true, count: matches.length };
+      } catch {
+        providers.sonora = { ok: false, count: 0, error: "Licensed catalog temporarily unavailable." };
+      }
+    })());
+  }
   if (type !== "artists") {
+    if (inApp) {
+      tasks.push((async () => {
+        try {
+          const matches = await commonsCatalog.search(q, limit);
+          tracks.push(...matches);
+          providers.commons = { ok: true, count: matches.length };
+        } catch {
+          providers.commons = { ok: false, count: 0, error: "Wikimedia Commons is temporarily unavailable." };
+        }
+      })());
+    }
+    if (!inApp && process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CATALOG_MARKET) {
+      tasks.push((async () => {
+        const report = await runDiscoverySearch(q, limit, "commercial_streaming", process.env);
+        providers.spotify = report.providers.commercial_streaming;
+        for (const { best } of report.groups) {
+          spotifyMetadata.push({
+            id: `spotify:${best.externalId}`, provider: "Spotify", title: best.title,
+            artist: best.artist, album: best.album, durationSeconds: best.durationSeconds,
+            sourceUrl: best.sourcePageUrl, isrc: best.isrc, playable: false
+          });
+        }
+      })());
+    }
     tasks.push((async () => {
       const jamendo = jamendoConfig();
       if (!jamendo) {
@@ -1159,26 +1246,48 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     })());
     tasks.push((async () => {
       try {
-        const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/tracks/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { data?: Array<{
+        type AudiusTrack = {
           id: string; title: string; duration?: number; permalink?: string; is_streamable?: boolean;
           is_stream_gated?: boolean; license?: string; artwork?: Record<string, string> | null;
-          user?: { name?: string; handle?: string }; album?: { playlist_name?: string };
-        }> };
-        const before = tracks.length;
-        for (const track of payload.data ?? []) {
+          user?: { id?: string; name?: string; handle?: string }; album?: { playlist_name?: string };
+        };
+        async function fetchTracks(path: string, params: URLSearchParams): Promise<AudiusTrack[]> {
+          const response = await fetch(`https://api.audius.co/v1/${path}?${params}`, {
+            headers: { Accept: "application/json" }, signal: AbortSignal.timeout(4500)
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const payload = await response.json() as { data?: AudiusTrack[] };
+          return payload.data ?? [];
+        }
+        const queryResults = Promise.allSettled([
+          fetchTracks("tracks/search", new URLSearchParams({ query: q, limit: String(limit), app_name: "SONORA" }))
+        ]);
+        const exactAccounts = inApp && queryKey ? (await audiusUsers)
+          .filter((user) => [user.name, user.handle].some((name) => catalogSearchKey(name) === queryKey))
+          .filter((user) => user.track_count !== 0).slice(0, 2) : [];
+        const [search, uploads] = await Promise.all([
+          queryResults,
+          Promise.allSettled(exactAccounts.map(async (user) => {
+            const items = await fetchTracks(`users/${encodeURIComponent(user.id)}/tracks`,
+              new URLSearchParams({ limit: String(limit), app_name: "SONORA" }));
+            return items.filter((item) => item.user?.id === user.id);
+          }))
+        ]);
+        const resolved = [...uploads, ...search].flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+        if (!resolved.length) throw new Error("Audius track search unavailable");
+        const included = new Set<string>();
+        for (const track of resolved.flat()) {
           if (!track.id || !track.title) continue;
           const artist = track.user?.name ?? track.user?.handle ?? "Audius creator";
-          const sourceUrl = track.permalink ?? `https://audius.co/${track.user?.handle ?? ""}`;
+          const sourceUrl = audiusPublicPage(track.permalink, track.user?.handle);
           const streamable = track.is_streamable === true && track.is_stream_gated !== true &&
             (!track.duration || track.duration <= PLAYABLE_MAX_DURATION_SECONDS);
-         tracks.push({
+          if (included.has(track.id) || inApp && !streamable) continue;
+          included.add(track.id);
+          tracks.push({
             id: `audius:${track.id}`, providerTrackId: track.id, provider: "Audius",
-            title: track.title, artist, album: track.album?.playlist_name ?? null,
+            title: track.title, artist, artistId: track.user?.id, artistHandle: track.user?.handle,
+            album: track.album?.playlist_name ?? null,
             durationSeconds: track.duration ?? 0,
             artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
             audioUrl: streamable ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA` : "",
@@ -1186,31 +1295,36 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
             sourceUrl, playable: streamable, rightsLabel: track.license ?? "Audius platform terms"
           });
         }
-        providers.audius = { ok: true, count: tracks.length - before };
+        providers.audius = { ok: true, count: included.size };
       } catch (error) {
         providers.audius = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
     tasks.push((async () => {
       try {
-        const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
+        const params = new URLSearchParams({ query: queryIsrc ? `isrc:${queryIsrc}` : q, fmt: "json", limit: String(limit) });
         const response = await fetch(`https://musicbrainz.org/ws/2/recording/?${params.toString()}`, {
           headers: { Accept: "application/json", "User-Agent": "SONORA/0.2 (music discovery app)" },
           signal: AbortSignal.timeout(9000)
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload = await response.json() as { recordings?: Array<{
-          id: string; title: string; length?: number; "first-release-date"?: string;
-          "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
+          id: string; title: string; length?: number; isrcs?: string[]; "first-release-date"?: string;
+          "artist-credit"?: Array<{ name?: string; joinphrase?: string; artist?: { name?: string } }>;
           releases?: Array<{ title?: string }>;
         }> };
         for (const item of payload.recordings ?? []) {
+          const isrcs = (item.isrcs ?? []).map(validIsrc).filter((code): code is string => code !== null);
+          if (queryIsrc && !isrcs.includes(queryIsrc)) continue;
           metadata.push({
             id: item.id, provider: "MusicBrainz", title: item.title,
-            artist: (item["artist-credit"] ?? []).map((credit) => credit.name ?? credit.artist?.name ?? "").filter(Boolean).join(" "),
+            artist: (item["artist-credit"] ?? []).map((credit, index) => {
+              const name = credit.name ?? credit.artist?.name ?? "";
+              return name + (credit.joinphrase ?? (index < (item["artist-credit"]?.length ?? 0) - 1 ? " " : ""));
+            }).join("").trim(),
             album: item.releases?.[0]?.title ?? null, durationSeconds: item.length ? Math.round(item.length / 1000) : null,
             releaseDate: item["first-release-date"] ?? null,
-            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, playable: false
+            sourceUrl: `https://musicbrainz.org/recording/${item.id}`, isrc: queryIsrc ?? isrcs[0] ?? null, playable: false
           });
         }
         providers.musicbrainz = { ok: true, count: metadata.length };
@@ -1219,33 +1333,18 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
       }
     })());
   }
-  if (type !== "tracks") {
+  if (inApp || type !== "tracks") {
     tasks.push((async () => {
-      try {
-        const params = new URLSearchParams({ query: q, limit: String(limit) });
-        const response = await fetch(`https://api.audius.co/v1/users/search?${params.toString()}`, {
-          headers: { Accept: "application/json" }, signal: AbortSignal.timeout(9000)
+      for (const user of await audiusUsers) {
+        artists.push({
+          id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
+          handle: user.handle ?? null, followerCount: user.follower_count ?? null, trackCount: user.track_count ?? null,
+          imageUrl: user.profile_picture?.["150x150"] ?? null,
+          sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
         });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json() as { data?: Array<{
-          id: string; name?: string; handle?: string; follower_count?: number;
-          profile_picture?: Record<string, string> | null;
-        }> };
-        for (const user of payload.data ?? []) {
-          if (!user.id || !(user.name || user.handle)) continue;
-          artists.push({
-            id: `audius-user:${user.id}`, provider: "Audius", name: user.name ?? user.handle,
-            handle: user.handle ?? null, followerCount: user.follower_count ?? null,
-            imageUrl: user.profile_picture?.["150x150"] ?? null,
-            sourceUrl: user.handle ? `https://audius.co/${user.handle}` : "https://audius.co"
-          });
-        }
-        providers.audiusArtists = { ok: true, count: artists.length };
-      } catch (error) {
-        providers.audiusArtists = { ok: false, count: 0, error: error instanceof Error ? error.message : "Provider unavailable" };
       }
     })());
-    if (type === "artists") {
+    if (type === "artists" || type === "all") {
       tasks.push((async () => {
         try {
           const params = new URLSearchParams({ query: q, fmt: "json", limit: String(limit) });
@@ -1273,10 +1372,37 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
     }
   }
   await Promise.all(tasks);
-  const anySuccess = Object.values(providers).some((provider) => provider.ok);
+  if (queryIsrc && type !== "artists" && providers.musicbrainz?.ok === false && ![...spotifyMetadata, ...tracks].some((item) => item.isrc === queryIsrc)) {
+    return reply.code(503).send({ ...authError(503, "Поиск по ISRC сейчас недоступен. Попробуйте позже или введите название трека."), providers });
+  }
+  const anySuccess = officialReleases.length > 0 || Object.values(providers).some((provider) => provider.ok);
   if (!anySuccess) return reply.code(502).send({ ...authError(502, "All music catalog providers are temporarily unavailable."), providers });
+  if (inApp) {
+    const matchingArtists = artists.filter((artist) => matchesCatalogSearch(q, artist.name) || matchesCatalogSearch(q, artist.handle));
+    const relevantMetadata = metadata.filter((item) => queryIsrc ? item.isrc === queryIsrc : matchesCatalogSearch(q, item.artist, item.title, item.album));
+    const exactProfiles = matchingArtists.filter((artist) =>
+      [artist.name, artist.handle].some((value) => catalogSearchKey(value) === queryKey));
+    const exactAudiusIds = new Set(exactProfiles.filter((artist) => artist.provider === "Audius").map((artist) => artist.id));
+    const exactArtist = exactProfiles.length > 0 ||
+      relevantMetadata.some((item) => catalogSearchKey(item.artist) === queryKey);
+    const matchingMetadata = exactArtist
+      ? relevantMetadata.filter((item) => matchesCatalogSearch(q, item.artist))
+      : relevantMetadata;
+    const creditsMatch = (track: Record<string, unknown>) =>
+      track.provider === "Audius" && exactAudiusIds.size > 0
+        ? exactAudiusIds.has(`audius-user:${track.artistId}`)
+        : [track.artist, track.artistHandle].some((value) => catalogSearchKey(value) === queryKey);
+    const playable = tracks.filter((track) =>
+      track.playable === true && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") &&
+      (queryIsrc ? track.isrc === queryIsrc : creditsMatch(track) || !exactArtist && !hasUncreditedArtistPrefix(queryKey, track.title) &&
+        matchesCatalogSearch(q, track.artist, track.title, track.album)));
+    return {
+      query: q, type, tracks: playable.slice(0, limit * 2), metadata: matchingMetadata.slice(0, limit),
+      artists: matchingArtists.slice(0, limit), officialReleases, providers
+    };
+  }
   return {
-    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: metadata.slice(0, limit),
+    query: q, type, tracks: tracks.slice(0, limit * 2), metadata: [...spotifyMetadata, ...metadata].slice(0, limit),
     artists: artists.slice(0, limit), providers
   };
 });
@@ -1287,10 +1413,13 @@ app.get<{ Querystring: { q?: string; type?: string; limit?: string } }>("/api/v1
 import { rankRecommendations, type TasteSignal } from "./recommendation-core.js";
 // Licensed-catalog helpers (Jamendo/Audius) now live in the shared catalog
 // module so the import service and the core routes use identical access.
-import { PLAYABLE_MAX_DURATION_SECONDS, jamendoCandidates, jamendoConfig, jamendoLicenseAllowed, type JamendoCandidate } from "./catalog.js";
+import {
+  audiusCandidates, audiusPublicPage, PLAYABLE_MAX_DURATION_SECONDS, catalogSearchKey, hasUncreditedArtistPrefix, jamendoCandidates,
+  jamendoConfig, jamendoLicenseAllowed, matchesCatalogSearch, type JamendoCandidate
+} from "./catalog.js";
 import { registerImportRoutes } from "./import-routes.js";
 // Universal Music Discovery & Import Engine: adapters, grouping, resolve.
-import { registerDiscoveryRoutes } from "./discovery.js";
+import { registerDiscoveryRoutes, runDiscoverySearch, validIsrc } from "./discovery.js";
 
 app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (request, reply) => {
   const limit = Math.min(40, Math.max(4, Number(request.query.limit) || 20));
@@ -1347,56 +1476,34 @@ app.get<{ Querystring: { limit?: string } }>("/api/v1/recommendations", async (r
   };
 });
 
-// SONORA music assistant. Works fully offline through a deterministic RU/EN
+// SONORA music assistant. Intent parsing works without an LLM via a deterministic RU/EN
 // intent parser over the licensed catalogs; upgrades to an LLM only when the
 // operator provides their own OPENAI_API_KEY (service stays free by default).
-const MOOD_QUERIES: Array<{ words: string[]; query: string; label: string }> = [
-  { words: ["relax", "calm", "chill", "релакс", "спокойн", "отдых", "медитац", "ambient"], query: "calm ambient relaxation", label: "Relaxation" },
-  { words: ["focus", "study", "work", "фокус", "работа", "учёб", "учеб", "концентр"], query: "lofi study focus", label: "Focus" },
-  { words: ["energy", "energetic", "workout", "run", "gym", "бодр", "энерг", "тренеровк", "пробежк", "спорт"], query: "upbeat electronic energy", label: "Energy" },
-  { words: ["party", "dance", "club", "вечеринк", "танц", "дискотек"], query: "party dance", label: "Party" },
-  { words: ["sleep", "night", "dream", "сон", "сном", "ночн", "расслабь и усни"], query: "sleep dreamy", label: "Sleep" },
-  { words: ["happy", "fun", "bright", "весел", "радост", "классн", "позитив"], query: "happy upbeat indie", label: "Happy" },
-  { words: ["sad", "melanchol", "груст", "печал", "минор"], query: "sad piano melancholic", label: "Melancholy" },
-  { words: ["jazz", "джаз", "swing", "свинг"], query: "jazz swing", label: "Jazz" },
-  { words: ["classical", "orchestral", "классич", "оркестр", "фортепиано", "piano"], query: "classical piano orchestral", label: "Classical" },
-  { words: ["rock", "гитар", "метал", "metal", "punk"], query: "rock guitar", label: "Rock" },
-  { words: ["electronic", "electro", "synth", "электрон", "синт", "techno", "house"], query: "electronic synth", label: "Electronic" }
-];
-type AssistantIntent = {
-  action: "search" | "create_playlist" | "similar" | "explain" | "greeting";
-  query: string; label: string; playlistName?: string;
-};
-function parseAssistantMessage(rawMessage: string): AssistantIntent {
-  const message = rawMessage.toLowerCase();
-  const wantsPlaylist = /(плейлист|playlist|собери|сделай|create|make|создай)/.test(message);
-  const wantsSimilar = /(похож|like|similar|в духе|рядом с|аналогичн)/.test(message);
-  const wantsExplain = /(почему|why|recommend|совет|что слушать|посоветуй|подбери)/.test(message);
-  const mood = MOOD_QUERIES.find((entry) => entry.words.some((word) => message.includes(word)));
-  const artistMatch = /(?:похож[ееа]? на|like|в духе|аналогичн[а-я]* )\s*([a-zа-яё0-9][a-zа-яё0-9 .+&_-]{1,59})/i.exec(rawMessage.trim());
-  if (wantsSimilar && artistMatch?.[1]) {
-    const query = artistMatch[1].trim();
-    return { action: "similar", query, label: query, playlistName: wantsPlaylist ? `Similar to ${query}` : undefined };
+import { parseAssistantMessage, type AssistantIntent } from "./assistant-core.js";
+import { speechConfig, synthesizeAssistantVoice } from "./assistant-voice.js";
+
+app.post<{ Body: { text?: string; persona?: string } }>("/api/v1/assistant/speech", {
+  bodyLimit: 4096,
+  config: { rateLimit: { max: 12, timeWindow: "1 minute" } }
+}, async (request, reply) => {
+  const config = speechConfig(process.env);
+  if (!config) return reply.code(503).send(authError(503, "Облачный голос не настроен."));
+  const account = await requireUser(request, reply);
+  if (!account) return;
+  const allowedUsers = process.env.SONORA_AZURE_SPEECH_USER_IDS?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
+  if (allowedUsers.length && !allowedUsers.includes(account.user.id)) {
+    return reply.code(403).send(authError(403, "Облачный голос недоступен для этого аккаунта."));
   }
-  if (mood) {
-    return {
-      action: wantsPlaylist ? "create_playlist" : "search",
-      query: mood.query, label: mood.label,
-      playlistName: wantsPlaylist ? `${mood.label} mix` : undefined
-    };
+  const text = typeof request.body?.text === "string" ? request.body.text.trim() : "";
+  if (!text || text.length > 900) return reply.code(400).send(authError(400, "Текст озвучивания должен содержать от 1 до 900 символов."));
+  try {
+    const audio = await synthesizeAssistantVoice(text, config, request.body?.persona);
+    return reply.header("Cache-Control", "private, no-store").type("audio/mpeg").send(audio);
+  } catch {
+    return reply.code(502).send(authError(502, "Облачный голос временно недоступен."));
   }
-  if (wantsExplain && !wantsSimilar) {
-    return { action: "explain", query: "", label: "recommendations" };
-  }
-  if (/(привет|здравств|hello|hi|start)/.test(message) && message.length < 40) {
-    return { action: "greeting", query: "", label: "greeting" };
-  }
-  // Free text: strip command words and search the remainder.
-  const stripped = message
-    .replace(/(собери|создай|сделай|найди|поищем|плейлист|playlist|для|мне|пожалуйста|create|make|find|play|search|some|a|the)/gi, " ")
-    .replace(/\s+/g, " ").trim();
-  return { action: "search", query: stripped || rawMessage.trim().slice(0, 60), label: "search" };
-}
+});
+
 async function assistantViaLlm(message: string): Promise<AssistantIntent | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
@@ -1408,7 +1515,7 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
         messages: [
-          { role: "system", content: 'Classify a music assistant request. Reply ONLY with JSON {"action":"search|create_playlist|similar|explain|greeting","query":"catalog search terms","label":"short human label","playlistName":"only for create_playlist"}. Query must name genre/mood/artist in English.' },
+          { role: "system", content: 'Classify a music assistant request. Reply ONLY with JSON {"action":"search|create_playlist|similar|explain|greeting","query":"catalog search terms","label":"short human label","playlistName":"only for create_playlist"}. Use Russian for label and playlistName. Preserve artist and track names in their original language. Translate only generic mood/genre search terms.' },
           { role: "user", content: message }
         ],
         temperature: 0, max_tokens: 120, response_format: { type: "json_object" }
@@ -1423,7 +1530,7 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
       action: parsed.action,
       query: typeof parsed.query === "string" ? parsed.query.slice(0, 100) : "",
       label: typeof parsed.label === "string" ? parsed.label.slice(0, 60) : "assistant",
-      playlistName: typeof parsed.playlistName === "string" ? parsed.playlistName.slice(1, 80) : undefined
+      playlistName: typeof parsed.playlistName === "string" ? parsed.playlistName.slice(0, 80) : undefined
     };
   } catch {
     return null;
@@ -1431,17 +1538,17 @@ async function assistantViaLlm(message: string): Promise<AssistantIntent | null>
 }
 app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, async (request, reply) => {
   const message = typeof request.body?.message === "string" ? request.body.message.trim().slice(0, 300) : "";
-  if (message.length < 2) return reply.code(400).send(authError(400, "Ask the assistant something about music."));
-  const intent = (await assistantViaLlm(message)) ?? parseAssistantMessage(message);
+  if (message.length < 2) return reply.code(400).send(authError(400, "Напишите настроение, название трека или исполнителя."));
   const bearer = request.headers.authorization;
   const auth = bearer ? await requireUser(request, reply) : null;
   if (bearer && !auth) return; // token was present but invalid
+  const intent = (await assistantViaLlm(message)) ?? parseAssistantMessage(message);
   if (intent.action === "greeting") {
-    return { reply: "I can find music by mood, artist or occasion, explain recommendations and build playlists. Try: 'собери плейлист для вечерней пробежки'.", intent, tracks: [] };
+    return { reply: "Подберу музыку по настроению и вашим вкусам. Попробуйте: «микс для пробежки» или «найди спокойное фортепиано».", intent, tracks: [] };
   }
   if (intent.action === "explain") {
     if (!auth) {
-      return { reply: "Recommendations explain themselves once you sign in and start listening — I learn from real plays, skips and favorites.", intent, tracks: [] };
+      return { reply: "Войдите в аккаунт: для персональной подборки нужны ваши прослушивания, пропуски и избранное. Пока попробуйте подборку по настроению.", intent, tracks: [] };
     }
     const { items } = await (async () => {
       const taste: TasteSignal[] = [];
@@ -1454,26 +1561,61 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
         else plays.set(event.artist_name, (plays.get(event.artist_name) ?? 0) + 1);
       }
       for (const [artist, count] of plays) taste.push({ artist, plays: count });
-      const pool = await jamendoCandidates([...plays.keys()].slice(0, 2).join(" "), 24);
-      return { items: rankRecommendations(pool, taste, 6) };
+      const favoriteArtists = (favorites ?? []).map((favorite) => favorite.artist_name as string);
+      const seeds = [...new Set([...favoriteArtists, ...[...plays.entries()].sort((a, b) => b[1] - a[1]).map(([artist]) => artist)])].slice(0, 4);
+      const pools = await Promise.allSettled([...seeds.map((artist) => jamendoCandidates(artist, 12)), jamendoCandidates("", 24, "popularity_total")]);
+      const pool = pools.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+      return { items: rankRecommendations(pool, taste, 15) };
     })();
-    const topReasons = items.slice(0, 3).map((item) => `“${item.title}” — ${item.reasons.join(", ") || "popular in licensed catalogs"}`);
+    const topReasons = items.slice(0, 3).map((item) => `“${item.title}” — ${item.reasons.join(", ") || "из доступного каталога"}`);
     return {
       reply: topReasons.length
-        ? `You picked these because of your listening story: ${topReasons.join("; ")}.`
-        : "Your listening history is still small. Play a few tracks and I will explain every suggestion.",
+        ? `Подборка с учётом ваших прослушиваний: ${topReasons.join("; ")}.`
+        : "Пока мало данных о ваших вкусах. Слушайте музыку и добавляйте любимые треки в избранное.",
       intent, tracks: items.map(({ score, reasons, ...track }) => ({ ...track, reasons }))
     };
   }
-  const candidates = await jamendoCandidates(intent.query, 24);
+  if (intent.action === "search") {
+    const [catalog, jamendo] = await Promise.allSettled([
+      app.inject({ method: "GET", url: `/api/v1/search/music?${new URLSearchParams({ q: intent.query, type: "tracks", inApp: "true" })}` }),
+      jamendoCandidates(intent.query, 15)
+    ]);
+    const catalogResult = catalog.status === "fulfilled"
+      ? catalog.value.json<{ tracks?: Array<Record<string, unknown>>; providers?: Record<string, { ok: boolean; count: number }> }>() : null;
+    const found = catalog.status === "fulfilled" && catalog.value.statusCode === 200 ? catalogResult?.tracks ?? [] : [];
+    const sources = Object.fromEntries(Object.entries(catalogResult?.providers ?? {}).map(([name, provider]) => [name, { ok: provider.ok, count: provider.count }]));
+    const partial = Object.values(sources).some((source) => !source.ok) || catalog.status === "rejected";
+    const tracks = [...found, ...(jamendo.status === "fulfilled" ? jamendo.value : [])]
+      .filter((track, index, all) => track.playable !== false && typeof track.audioUrl === "string" && track.audioUrl.startsWith("https://") && all.findIndex((item) => item.id === track.id) === index).slice(0, 15);
+    const allUnavailable = !tracks.length && !Object.values(sources).some((source) => source.ok);
+    if (allUnavailable) return reply.code(503).send({ error: "Музыкальные источники сейчас недоступны. Попробуйте повторить запрос позже.", intent, tracks: [], sources, partial: true });
+    return { reply: tracks.length
+      ? `Нашёл треки для вас. Нажмите «Слушать подборку» или скажите «слушать».${partial ? " Часть источников недоступна, выдача может быть неполной." : ""}`
+      : partial ? "В доступных источниках звук не найден. Часть каталогов сейчас недоступна — можно повторить поиск позже."
+      : "В проверенных каталогах доступный звук не найден. Попробуйте уточнить название или выбрать другое настроение.", intent, tracks, sources, partial };
+
+  }
+  let candidates = await jamendoCandidates(intent.query, 24);
+  if (!candidates.length) candidates = await audiusCandidates(intent.query, 20);
+  let personalized = false;
+  if (auth && candidates.length) {
+    const { data: favorites, error } = await auth.client.from("user_provider_favorites")
+      .select("artist_name").eq("user_id", auth.user.id).limit(100);
+    if (!error && favorites?.length) {
+      const taste: TasteSignal[] = favorites.map((favorite) => ({ artist: favorite.artist_name, liked: true }));
+      const byId = new Map(candidates.map((track) => [track.id, track]));
+      candidates = rankRecommendations(candidates, taste, 24).map((track) => byId.get(track.id)!);
+      personalized = true;
+    }
+  }
   if (candidates.length === 0) {
-    return { reply: "The catalogs are quiet right now — no licensed matches for that request. Try another mood or artist.", intent, tracks: [] };
+    return { reply: "Не удалось найти доступные треки. Попробуйте другое настроение или исполнителя; источник также может быть временно недоступен.", intent, tracks: [] };
   }
   let playlist: { id: string; name: string } | null = null;
   if (intent.action === "create_playlist") {
     if (!auth) {
       return {
-        reply: `Here is a ${intent.label.toLowerCase()} selection. Sign in and ask again and I will save it as a playlist “${intent.playlistName ?? intent.label}”.`,
+        reply: `Подборка «${intent.label}» готова. Чтобы сохранить её в медиатеке, войдите и повторите запрос.`,
         intent, tracks: candidates.slice(0, 15)
       };
     }
@@ -1482,37 +1624,39 @@ app.post<{ Body: { message?: string } }>("/api/v1/assistant", writeRateLimit, as
       owner_id: auth.user.id, title: name, description: `Created by the SONORA assistant from: ${message.slice(0, 120)}`, is_public: false
     }).select("id,title").single();
     if (createError || !created) {
-      return { reply: "I found the tracks but could not save the playlist. Try again in a moment.", intent, tracks: candidates.slice(0, 15) };
+      return { reply: "Треки найдены, но сохранить плейлист не удалось. Попробуйте ещё раз.", intent, tracks: candidates.slice(0, 15) };
     }
     const chosen = candidates.slice(0, 15);
     const rows = chosen.map((track, index) => ({
-      playlist_id: created.id, provider: "jamendo", provider_track_id: track.providerTrackId,
+      playlist_id: created.id, provider: track.provider.toLowerCase(), provider_track_id: track.providerTrackId,
       title: track.title, artist_name: track.artist, album_name: track.album,
       duration_seconds: track.durationSeconds ?? 0, artwork_url: track.artworkUrl,
-      license_url: track.licenseUrl || "https://jamendo.com/legal/license", source_url: track.sourceUrl,
+      license_url: track.licenseUrl || (track.provider === "Audius" ? "https://audius.co/terms" : "https://jamendo.com/legal/license"), source_url: track.sourceUrl,
       position: index
     }));
     const { error: addError } = await auth.client.from("provider_playlist_tracks").insert(rows);
     if (addError) {
       await auth.client.from("playlists").delete().eq("id", created.id).eq("owner_id", auth.user.id);
-      return { reply: "Tracks could not be attached to the new playlist. Try again later.", intent, tracks: chosen };
+      return { reply: "Не удалось сохранить треки в плейлист. Подборку можно прослушать здесь.", intent, tracks: chosen };
     }
     playlist = { id: created.id, name: created.title };
   }
   return {
     reply: playlist
-      ? `Saved playlist “${playlist.name}” with ${Math.min(15, candidates.length)} licensed tracks.`
+      ? `Сохранён плейлист «${playlist.name}». Треков: ${Math.min(15, candidates.length)}.`
       : intent.action === "similar"
-        ? `Tracks close to “${intent.label}” from Jamendo's licensed catalog:`
-        : `A ${intent.label.toLowerCase()} selection from the licensed catalogs:`,
-    intent, tracks: candidates.slice(0, 15), playlist
+        ? `Результаты по запросу «${intent.label}»:`
+        : `Подборка «${intent.label}» готова к прослушиванию:`,
+    intent, tracks: candidates.slice(0, 15), playlist, personalized
   };
 });
 
 // Server-side music import from other platforms (public links + export files).
 registerImportRoutes(app);
 // Multi-source discovery (GET /discovery/search, POST /discovery/resolve).
-registerDiscoveryRoutes(app);
+licensedCatalog.register(app);
+registerLyricsRoutes(app, process.env);
+registerDiscoveryRoutes(app, licensedCatalog, commonsCatalog);
 
 try {
   registerProfileRoutes(app, { authClient, authError, requireUser });

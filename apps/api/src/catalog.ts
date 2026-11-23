@@ -8,6 +8,37 @@ import type { RecommendationTrack } from "./recommendation-core.js";
 // Long Audius uploads are frequently multi-hour playlist dumps, not songs.
 export const PLAYABLE_MAX_DURATION_SECONDS = 2700;
 
+export function catalogSearchKey(value: unknown): string {
+  return typeof value === "string"
+    ? value.normalize("NFKC").toLowerCase().replace(/ё/g, "е").replace(/[^\p{L}\p{N}]+/gu, " ").trim()
+    : "";
+}
+
+export function matchesCatalogSearch(query: string, ...fields: unknown[]): boolean {
+  const key = catalogSearchKey(query);
+  const words = new Set(catalogSearchKey(fields.join(" ")).split(" "));
+  return key !== "" && key.split(" ").every((word) => words.has(word));
+}
+
+export function hasUncreditedArtistPrefix(queryKey: string, title: unknown): boolean {
+  if (typeof title !== "string" || !queryKey) return false;
+  const [prefix, recording] = title.split(/\s+[-–—]\s+/, 2);
+  return Boolean(recording && catalogSearchKey(prefix) === queryKey);
+}
+
+/** Public Audius API permalinks can be relative to audius.co. */
+export function audiusPublicPage(permalink?: string | null, handle?: string | null): string {
+  const fallback = handle ? `https://audius.co/${encodeURIComponent(handle)}` : "https://audius.co";
+  if (!permalink) return fallback;
+  try {
+    const url = new URL(permalink, "https://audius.co");
+    return (url.origin === "https://audius.co" || url.origin === "https://www.audius.co") && !url.username && !url.password
+      ? url.href : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export type JamendoCandidate = RecommendationTrack & {
   album: string | null; artworkUrl: string | null; audioUrl: string;
   licenseUrl: string; sourceUrl: string; providerTrackId: string;
@@ -108,7 +139,7 @@ export async function audiusCandidates(query: string, count: number): Promise<Ja
         artworkUrl: track.artwork?.["480x480"] ?? track.artwork?.["150x150"] ?? null,
         audioUrl: `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`,
         licenseUrl: typeof track.license === "string" && track.license.startsWith("http") ? track.license : "https://audius.co/terms",
-        sourceUrl: track.permalink ?? "https://audius.co", provider: "Audius", playable: true
+        sourceUrl: audiusPublicPage(track.permalink), provider: "Audius", playable: true
       }];
     });
   } catch {

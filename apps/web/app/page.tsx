@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, AudioLines, Search, Sparkles } from "lucide-react";
+import { ArrowUpRight, AudioLines, Search, Sparkles, Heart, History, ListMusic } from "lucide-react";
 import { useLanguage } from "../components/language-provider";
 import { usePlayer, type PlayerTrack } from "../components/player-provider";
 import { MoodPicker } from "../components/mood-picker";
@@ -95,6 +95,19 @@ export default function Home() {
             <AudioLines size={54} strokeWidth={1} className="text-violet-100" />
           </div>
         </div>
+
+        <nav aria-label={t("Your library")} className="listening-shortcuts">
+          {[
+            { href: "/favorites", label: t("Favorites"), Icon: Heart },
+            { href: "/history", label: t("Recently played"), Icon: History },
+            { href: "/playlists", label: t("Playlists"), Icon: ListMusic }
+          ].map(({ href, label, Icon }) => (
+            <a key={href} href={href} className="listening-shortcut">
+              <span className="shortcut-icon"><Icon size={20} aria-hidden="true" /></span>
+              <span>{label}</span><ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          ))}
+        </nav>
 
         <MoodPicker />
 

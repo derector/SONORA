@@ -42,6 +42,9 @@
   --accent-teal: #14b8a6;
   --accent-grad: linear-gradient(120deg, #8b5cf6 0%, #7d6ef2 48%, #14b8a6 135%);
   --accent-ink: #0b0d14;
+  --glass-edge: rgba(220, 221, 255, .18);
+  --glass-fill: linear-gradient(145deg, rgba(43, 39, 68, .93), rgba(14, 17, 28, .96) 58%, rgba(16, 37, 43, .94));
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, .13), inset 0 -1px 0 rgba(118, 210, 213, .08);
 
   /* Motion */
   --dur-fast: 180ms;
@@ -340,6 +343,31 @@ img, video, canvas, svg { max-width: 100%; }
    ========================================================================= */
 .sonora-workspace { isolation: isolate; }
 .sonora-sidebar { border-color: var(--border-soft); }
+
+.sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+  background: var(--glass-fill);
+  border-color: var(--glass-edge);
+  box-shadow: var(--glass-highlight), 0 12px 38px rgba(3, 5, 13, .36);
+}
+
+.sonora-topbar { border-radius: 0 0 var(--r-panel) var(--r-panel); }
+.sonora-sidebar a[aria-current="page"] {
+  background: linear-gradient(112deg, rgba(150, 113, 249, .23), rgba(128, 213, 219, .08));
+  box-shadow: inset 0 1px 0 rgba(226, 221, 255, .12);
+}
+
+.sonora-workspace .nav-pill {
+  background: linear-gradient(145deg, rgba(188, 157, 255, .34), rgba(89, 126, 170, .19));
+  box-shadow: var(--glass-highlight), inset 0 0 0 1px rgba(215, 201, 255, .14);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+    --glass-fill: linear-gradient(145deg, rgba(43, 39, 68, .78), rgba(14, 17, 28, .82) 58%, rgba(16, 37, 43, .76));
+    -webkit-backdrop-filter: blur(20px) saturate(135%);
+    backdrop-filter: blur(20px) saturate(135%);
+  }
+}
 .sonora-sidebar a:focus-visible,
 .sonora-mobile-nav a:focus-visible,
 button:focus-visible,
@@ -471,6 +499,42 @@ main > section:nth-of-type(5), main article:nth-child(5) { animation-delay: 170m
   55%, 100% { transform: translate3d(70%, 0, 0); }
 }
 
+/* Listening surfaces: static light refraction, motion only on interaction. */
+:root {
+  --glass-fill: linear-gradient(135deg, rgba(63, 54, 91, .86), rgba(18, 24, 38, .94) 62%, rgba(23, 55, 61, .88));
+  --glass-edge: rgba(222, 228, 255, .24);
+}
+.panel-hero {
+  border-radius: 32px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 24px 70px rgba(0,0,0,.24);
+}
+.listening-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 22px 0 30px; }
+.listening-shortcut {
+  display: flex; align-items: center; gap: 12px; min-height: 76px; padding: 16px;
+  border: 1px solid var(--glass-edge); border-radius: 22px;
+  background: var(--glass-fill); box-shadow: var(--glass-highlight);
+  font-size: 14px; font-weight: 600;
+  transition: transform 220ms var(--ease-soft), border-color 220ms ease;
+}
+.listening-shortcut > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.shortcut-icon { display: grid; place-items: center; width: 42px; height: 42px; flex-shrink: 0; border-radius: 14px; background: rgba(196,181,253,.13); color: #ddd6fe; }
+.listening-shortcut:nth-child(2) .shortcut-icon { color: #99f6e4; background: rgba(94,234,212,.10); }
+.listening-shortcut:nth-child(3) .shortcut-icon { color: #fbcfe8; background: rgba(249,168,212,.10); }
+@supports (backdrop-filter: blur(16px)) {
+  .listening-shortcut { backdrop-filter: blur(16px) saturate(130%); }
+}
+@media (hover: hover) {
+  .listening-shortcut:hover { transform: translateY(-3px); border-color: rgba(222,228,255,.45); }
+}
+.listening-shortcut:focus-visible { outline: 2px solid #c4b5fd; outline-offset: 4px; }
+@media (max-width: 640px) {
+  .listening-shortcuts { gap: 8px; }
+  .listening-shortcut { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px; font-size: 12px; border-radius: 18px; }
+  .listening-shortcut > svg { display: none; }
+  .panel-hero { border-radius: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .listening-shortcut:hover { transform: none; } }
+
 /* ============================================================================
    Reduced motion: one consolidated fallback. Everything settles instantly.
    ========================================================================= */
@@ -486,4 +550,76 @@ main > section:nth-of-type(5), main article:nth-child(5) { animation-delay: 170m
   .season-overlay { display: none; }
   .btn-press:active { transform: none; }
   .card-lift:hover { transform: none; }
+}
+
+/* Clear, raised edges make the controls readable over artwork and content. */
+:root {
+  --lens-edge: rgb(218 230 255 / 28%);
+  --lens-sheen: linear-gradient(160deg, rgb(237 233 255 / 18%), transparent 44%, rgb(136 231 240 / 10%));
+  --lens-shadow: inset 0 1px 1px rgb(255 255 255 / 24%), inset 0 -1px 2px rgb(110 211 238 / 17%), 0 12px 36px rgb(2 4 12 / 30%);
+}
+.sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+  background-image: var(--lens-sheen), var(--glass-fill);
+  border-color: var(--lens-edge);
+  box-shadow: var(--lens-shadow);
+}
+.sonora-sidebar { border-radius: 26px; }
+.sonora-topbar { border-radius: 0 0 25px 25px; }
+.sonora-mobile-nav { border-radius: 29px; }
+.sonora-player-glass { border-radius: 24px; }
+.sonora-workspace .nav-pill {
+  background: linear-gradient(152deg, rgb(204 181 255 / 50%), rgb(118 145 190 / 20%) 62%, rgb(121 224 232 / 24%));
+  box-shadow: var(--lens-shadow), inset 0 0 0 1px rgb(221 208 255 / 26%);
+}
+.sonora-topbar a[aria-label],
+.sonora-player-glass .btn-icon:not(.hidden),
+.sonora-player-stage button.rounded-full,
+.sonora-transport button:not(.pp-toggle) {
+  background-image: linear-gradient(145deg, rgb(233 224 255 / 16%), rgb(162 211 245 / 4%));
+  box-shadow: inset 0 1px 0 rgb(234 229 255 / 21%), inset 0 0 0 1px rgb(215 221 255 / 12%);
+}
+.sonora-transport button:not(.pp-toggle) {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: #d7dbea;
+}
+.sonora-transport button[aria-pressed="true"] { color: #f3ddff; background-color: rgb(172 132 250 / 32%); }
+.sonora-player-glass .pp-toggle, .sonora-player-stage .pp-toggle {
+  color: #1a1530;
+  background: linear-gradient(145deg, #fff 3%, #e4d4ff 45%, #9de8eb 112%);
+  box-shadow: inset 0 1px 2px white, inset 0 -2px 4px rgb(56 74 133 / 32%), 0 5px 22px rgb(172 153 247 / 32%);
+}
+.sonora-player-stage {
+  isolation: isolate;
+  background: radial-gradient(ellipse at 50% 18%, #332956 0, #121625 52%, #090a12 80%);
+}
+.sonora-cover-glow {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(54px) saturate(135%) brightness(.68);
+  opacity: .43;
+  pointer-events: none;
+}
+.sonora-stage-content { position: relative; }
+.sonora-stage-content .cover-breathe { box-shadow: var(--lens-shadow), 0 24px 72px rgb(2 4 12 / 63%); }
+.sonora-player-glass .mini-progress { border-radius: 24px 24px 0 0; overflow: hidden; }
+@media (prefers-reduced-transparency: reduce) {
+  .sonora-sidebar, .sonora-topbar, .sonora-mobile-nav, .sonora-player-glass {
+    --glass-fill: linear-gradient(145deg, #282538, #131b25);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .sonora-cover-glow { display: none; }
+}
+.sonora-search-lens {
+  background: linear-gradient(155deg, rgb(189 172 255 / 14%), rgb(8 12 24 / 55%) 65%);
+  border-color: var(--lens-edge);
+  box-shadow: var(--lens-shadow);
 }

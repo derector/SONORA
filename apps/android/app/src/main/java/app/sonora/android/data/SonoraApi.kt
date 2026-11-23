@@ -12,7 +12,7 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 object SonoraApi {
-    private const val BASE = "https://sonora-web-api-production.up.railway.app"
+    internal const val BASE = "https://sonora-web-api-production.up.railway.app"
     /**
      * Bitrate the user selected in Настройки → Воспроизведение, in kbit/s (0 = server default).
      * Sent as X-Sonora-Quality on every API call so the resolver can honour it as soon as
@@ -358,6 +358,8 @@ object SonoraApi {
     fun resolveTrack(provider: String, providerTrackId: String): Track? {
         val encodedId = java.net.URLEncoder.encode(providerTrackId, "UTF-8")
         val path = when (provider.lowercase()) {
+            "sonora" -> "/api/v1/providers/sonora/tracks?id=$encodedId"
+            "wikimedia commons" -> "/api/v1/providers/commons/tracks?id=$encodedId"
             "audius" -> "/api/v1/providers/audius/tracks?id=$encodedId"
             "jamendo" -> "/api/v1/providers/jamendo/tracks?id=$encodedId"
             else -> return null
@@ -366,9 +368,134 @@ object SonoraApi {
             .firstOrNull { it.providerTrackId == providerTrackId || it.id == providerTrackId }
     }
 
-    fun search(query: String): List<Track> {
-        val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20")
-        return parseTracks(result.optJSONArray("tracks")).filter { it.playable }
+    data class CatalogMatch(
+        val id: String,
+        val provider: String,
+        val title: String,
+        val artist: String,
+        val isrc: String?,
+        val durationSeconds: Int?
+    )
+    data class MusicSearch(
+        val tracks: List<Track> = emptyList(),
+        val matches: List<CatalogMatch> = emptyList(),
+        val artists: List<CatalogArtist> = emptyList(),
+        val officialReleases: List<OfficialRelease> = emptyList(),
+        val searched: Boolean = false
+    )
+    data class CatalogArtist(val id: String, val name: String, val handle: String, val trackCount: Int?)
+    data class OfficialPlayer(val provider: String, val url: String, val album: Boolean = false)
+    data class OfficialRelease(
+        val id: String,
+        val title: String,
+        val artist: String,
+        val album: String?,
+        val players: List<OfficialPlayer>
+    )
+
+    fun search(query: String): MusicSearch {
+        val result = request("/api/v1/search/music?q=${java.net.URLEncoder.encode(query, "UTF-8")}&type=tracks&limit=20&inApp=true")
+        val metadata = result.optJSONArray("metadata")
+        val matches = buildList {
+            if (metadata == null) return@buildList
+            for (index in 0 until metadata.length()) {
+                val item = metadata.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                val title = item.optString("title")
+                val provider = item.optString("provider")
+                if (id.isBlank() || title.isBlank() || provider != "MusicBrainz") continue
+                val isrc = item.optString("isrc").takeIf { it.isNotBlank() && it != "null" }
+                val duration = item.optInt("durationSeconds").takeIf { it > 0 }
+                add(CatalogMatch(id, provider, title, item.optString("artist"), isrc, duration))
+            }
+        }
+        val catalogArtists = result.optJSONArray("artists")
+        val artists = buildList {
+            if (catalogArtists == null) return@buildList
+            for (index in 0 until catalogArtists.length()) {
+                val item = catalogArtists.optJSONObject(index) ?: continue
+                val id = item.optString("id")
+                val name = item.optString("name")
+                val handle = item.optString("handle").takeIf { it.isNotBlank() && it != "null" }
+                if (id.isBlank() || name.isBlank() || item.optString("provider") !in setOf("Audius", "SONORA")) continue
+                add(CatalogArtist(id, name, handle ?: name, item.optInt("trackCount", -1).takeIf { it >= 0 }))
+            }
+        }
+        val releases = result.optJSONArray("officialReleases")
+        val officialReleases = buildList {
+            if (releases == null) return@buildList
+            val validVideoId = Regex("[A-Za-z0-9_-]{11}")
+            val validBandcampId = Regex("[0-9]{1,12}")
+            for (index in 0 until releases.length()) {
+                val release = releases.optJSONObject(index) ?: continue
+                val id = release.optString("id")
+                val title = release.optString("title")
+                val artist = release.optString("artist")
+                if (id.isBlank() || title.isBlank() || artist.isBlank()) continue
+                val album = release.optString("album").takeIf { it.isNotBlank() && it != "null" }
+                val players = buildList {
+                    release.optJSONObject("bandcamp")?.let { bandcamp ->
+                        val kind = bandcamp.optString("kind")
+                        val playerId = bandcamp.optString("id")
+                        if ((kind == "track" || kind == "album") && validBandcampId.matches(playerId)) {
+                            val tracklist = kind == "album"
+                            add(OfficialPlayer("Bandcamp",
+                                "https://bandcamp.com/EmbeddedPlayer/v=2/$kind=$playerId/size=large/tracklist=$tracklist/artwork=small/",
+                                album = tracklist))
+                        }
+                    }
+                    val soundCloudId = release.optString("soundCloudTrackId")
+                    if (validBandcampId.matches(soundCloudId)) {
+                        val track = java.net.URLEncoder.encode("https://api.soundcloud.com/tracks/$soundCloudId", "UTF-8")
+                        add(OfficialPlayer("SoundCloud",
+                            "https://w.soundcloud.com/player/?visual=true&url=$track&show_artwork=true&maxheight=166"))
+                    }
+                    val videoId = release.optString("videoId")
+                    if (validVideoId.matches(videoId)) {
+                        add(OfficialPlayer("YouTube", "https://www.youtube.com/embed/$videoId?playsinline=1"))
+                    }
+                }
+                if (players.isNotEmpty()) add(OfficialRelease(id, title, artist, album, players))
+            }
+        }
+        return MusicSearch(parseTracks(result.optJSONArray("tracks")).filter { it.playable }, matches, artists, officialReleases, searched = true)
+    }
+
+    data class PlayableVersion(val track: Track, val matchedVia: String)
+
+    fun findPlayableVersion(match: CatalogMatch): PlayableVersion? {
+        val body = JSONObject()
+            .put("title", match.title)
+            .put("artist", match.artist)
+            .put("isrc", match.isrc)
+            .put("durationSeconds", match.durationSeconds)
+            .put("playbackOnly", true)
+        val result = request("/api/v1/discovery/resolve", method = "POST", body = body)
+        val candidate = result.optJSONObject("playableTrack") ?: return null
+        val track = parseTracks(org.json.JSONArray().put(candidate)).firstOrNull { it.playable } ?: return null
+        return PlayableVersion(track, result.optString("matchedVia"))
+    }
+
+    fun synthesizeAssistantSpeech(text: String, persona: String = "jarvis"): ByteArray? {
+        val token = prefs.getString("access_token", null) ?: return null
+        val body = JSONObject().put("text", text.take(900)).put("persona", persona).toString().toRequestBody(jsonType)
+        val request = Request.Builder().url("$BASE/api/v1/assistant/speech")
+            .header("Authorization", "Bearer $token").post(body).build()
+        val call = http.newCall(request)
+        call.timeout().timeout(9, TimeUnit.SECONDS)
+        return call.execute().use { response ->
+            val audio = response.body ?: return@use null
+            if (!response.isSuccessful || audio.contentType()?.type != "audio") return@use null
+            val source = audio.source()
+            if (source.request(1024L * 1024L + 1L)) return@use null
+            source.readByteArray().takeIf { it.isNotEmpty() }
+        }
+    }
+
+    data class AssistantAnswer(val reply: String, val tracks: List<Track>)
+    fun askAssistant(message: String): AssistantAnswer {
+        val result = request("/api/v1/assistant", "POST", JSONObject().put("message", message.take(300)), authenticated = isSignedIn())
+        return AssistantAnswer(result.optString("reply", "Не удалось получить ответ."), parseTracks(result.optJSONArray("tracks")).filter { it.playable })
     }
 
     private fun parseTracks(array: org.json.JSONArray?): List<Track> {
@@ -405,7 +532,10 @@ object SonoraApi {
                 // The track keeps all of its metadata but is reported through the existing
                 // availability flag, so every screen shows it as unavailable instead of
                 // starting a playback attempt that can never succeed.
-                playable = audioUrl != null && item.optBoolean("playable", true)
+                playable = audioUrl != null && item.optBoolean("playable", true),
+                rightsHolder = item.optString("rightsLabel").takeIf {
+                    it.isNotBlank() && it != "null"
+                }
             )
         }
         return tracks

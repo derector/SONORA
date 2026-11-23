@@ -12,7 +12,7 @@ import java.io.IOException
  * No token, no Firebase, no third-party service: the unauthenticated `releases/latest`
  * endpoint is enough, and it already excludes drafts and prereleases, which is exactly what
  * must reach a stable installation. Rate limiting (60 requests per hour per IP) is respected
- * by the caller: the check runs from WorkManager on a 12-hour schedule, plus one explicit
+ * by the caller: the check runs periodically through WorkManager, plus one explicit
  * request per tap on «Проверить обновления».
  *
  * Transport and JSON follow the existing data-layer style (plain OkHttp + org.json, see
@@ -23,6 +23,7 @@ object GithubReleases {
 
     /** GitHub rejects API calls without a User-Agent. */
     private const val USER_AGENT = "SONORA-Android"
+    private val sha256Digest = Regex("sha256:([0-9a-fA-F]{64})")
 
     /** The release plus the payload it came from, so the cache needs no own serializer. */
     data class Response(val raw: String, val release: ReleaseInfo?)
@@ -89,7 +90,8 @@ object GithubReleases {
             result += ReleaseAsset(
                 name = name.ifBlank { url.substringAfterLast('/') },
                 url = url,
-                size = asset.optLong("size")
+                size = asset.optLong("size"),
+                sha256 = sha256Digest.matchEntire(asset.optString("digest"))?.groupValues?.get(1)
             )
         }
         return result

@@ -6,13 +6,18 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -47,6 +52,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.media3.common.MediaItem
@@ -59,6 +65,9 @@ import androidx.work.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.sonora.android.data.OfflineDatabase
 import app.sonora.android.data.OfflineTrack
 import coil.compose.AsyncImage
@@ -79,15 +88,20 @@ import app.sonora.android.ota.OtaUpdate
 import app.sonora.android.ota.ReleaseInfo
 import app.sonora.android.ota.UpdateSheet
 import app.sonora.android.ui.EaseOutBrand
+import app.sonora.android.ui.GlassBackdrop
+import app.sonora.android.ui.GlassTone
+import app.sonora.android.ui.sonoraGlass
 import app.sonora.android.ui.MotionSettings
 import app.sonora.android.ui.NavTab
 import app.sonora.android.ui.NavTabs
 import app.sonora.android.ui.PlayPauseIcon
+import app.sonora.android.ui.PlayerArtwork
 import app.sonora.android.ui.ProfileCenter
 import app.sonora.android.ui.SeekBar
 import app.sonora.android.ui.SettingsCenter
 import app.sonora.android.ui.SonoraBottomBar
 import app.sonora.android.ui.SonoraPrefs
+import app.sonora.android.ui.SyncedLyricsSheet
 import app.sonora.android.ui.Violet
 import app.sonora.android.ui.popOn
 import app.sonora.android.ui.staggerEnter
@@ -112,7 +126,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         SonoraApi.initialize(this)
         OtaNotifications.ensureChannels(this)
-        // Periodic release lookup (12 h, unmetered) plus one quick pass shortly after this
+        // Periodic release lookup (hourly, connected network) plus one quick pass shortly after this
         // cold start. Neither of them needs the activity to stay alive.
         OtaUpdate.schedule(this)
         OtaSession.handleIntent(this, intent)
@@ -145,7 +159,7 @@ private fun SonoraApp() {
     var activeQueue by remember { mutableStateOf<List<Track>>(emptyList()) }
     var current by remember { mutableStateOf<Track?>(null) }
     var query by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var searchResults by remember { mutableStateOf(SonoraApi.MusicSearch()) }
     var email by remember { mutableStateOf(SonoraApi.email()) }
     var username by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
@@ -176,7 +190,9 @@ private fun SonoraApp() {
     // Tab transitions slide in the direction of travel; selectTab computes it before
     // changing `tab`, so the AnimatedContent spec reads a settled value.
     var tabSwipeDirection by remember { mutableIntStateOf(1) }
+    var tabBeforePlayer by rememberSaveable { mutableStateOf("Главная") }
     fun selectTab(next: String) {
+        if (next == "Плеер" && tab != next) tabBeforePlayer = tab
         val order = NavTabs.map { it.key } + "Плеер"
         val from = order.indexOf(tab).takeIf { it >= 0 } ?: 0
         val to = order.indexOf(next).takeIf { it >= 0 } ?: from
@@ -235,7 +251,11 @@ private fun SonoraApp() {
                 done(withContext(Dispatchers.IO) { SonoraApi.discoverCatalog() })
                 message = ""
             }
-            catch (e: Exception) { message = e.message ?: "Не удалось загрузить каталог" }
+            catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch (e: Exception) {
+                Log.w("SONORA_CATALOG", "Catalog request failed", e)
+                message = "Не удалось загрузить музыку. Проверьте подключение и попробуйте ещё раз."
+            }
             finally { busy = false }
         }
     }
@@ -451,7 +471,7 @@ private fun SonoraApp() {
         }
     }
 
-    fun startTrack(track: Track, local: Boolean = false) {
+    fun startTrack(track: Track, local: Boolean = false, selection: List<Track>? = null) {
         val player = controller
         if (player == null) { message = "Плеер ещё запускается"; return }
         val url = track.audioUrl
@@ -474,7 +494,7 @@ private fun SonoraApp() {
                 current = track
                 return
             }
-            val queue = (tracks.filter { it.playable && it.audioUrl?.let(::isSupportedAudioUrl) == true } + track)
+            val queue = ((selection ?: tracks).filter { it.playable && it.audioUrl?.let(::isSupportedAudioUrl) == true } + track)
                 .distinctBy { "${it.provider}:${it.id}" }
             activeQueue = queue
             val selectedIndex = queue.indexOfFirst { "${it.provider}:${it.id}" == "${track.provider}:${track.id}" }.coerceAtLeast(0)
@@ -532,6 +552,8 @@ private fun SonoraApp() {
         startTrack(localTrack, local = true)
     }
 
+    BackHandler(enabled = tab == "Плеер" && !ota.sheetVisible) { selectTab(tabBeforePlayer) }
+
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Lime, onPrimary = Ink, background = Ink, surface = Panel,
         onBackground = Color.White, onSurface = Color.White, secondary = Lime
@@ -543,7 +565,7 @@ private fun SonoraApp() {
                     // The mini player slides up when playback starts and can be swiped
                     // down to dismiss; tapping it opens the full player again.
                     AnimatedVisibility(
-                        visible = current != null && !miniDismissed,
+                        visible = current != null && !miniDismissed && tab != "Плеер",
                         enter = slideInVertically(animationSpec = tween(MotionSettings.duration(260), easing = EaseOutBrand)) { it } +
                             fadeIn(animationSpec = tween(MotionSettings.duration(200))),
                         exit = fadeOut(animationSpec = tween(0)),
@@ -553,7 +575,7 @@ private fun SonoraApp() {
                         if (track != null) {
                             MiniPlayer(
                                 track = track,
-                                playing = controller?.isPlaying == true,
+                                playing = isPlaying,
                                 liked = likedIds.contains("${track.provider}:${track.id}"),
                                 likeTick = likeTick,
                                 onClick = { selectTab("Плеер") },
@@ -588,22 +610,56 @@ private fun SonoraApp() {
                 label = "tab"
             ) { screen ->
                 when (screen) {
-                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") })
-                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = emptyList(); message = "" }, searchResults, busy, message, {
-                        val term = query.trim()
+                    "Помощник" -> app.sonora.android.ui.AssistantScreen(
+                        onBack = { selectTab("Главная") },
+                        onQuiet = { controller?.pause() },
+                        onResume = {
+                            val player = controller
+                            if (player != null && player.mediaItemCount > 0) { player.play(); true } else false
+                        },
+                        onPlay = { queue, track -> startTrack(track, selection = queue) },
+                        onDuck = {
+                            val player = controller?.takeIf { it.isConnected && it.isPlaying }
+                            if (player == null) {
+                                {}
+                            } else {
+                                val previousVolume = player.volume
+                                val speechVolume = previousVolume.coerceAtMost(0.2f)
+                                player.volume = speechVolume
+                                val restoreVolume: () -> Unit = {
+                                    if (player.isConnected && player.volume == speechVolume) player.volume = previousVolume
+                                }
+                                restoreVolume
+                            }
+                        }
+                    )
+                    "Главная" -> DiscoverScreen(tracks, busy, message, { loadCatalog { tracks = it } }, ::play, { selectTab("Плеер") }, { selectTab("Поиск") }, { selectTab("Помощник") })
+                    "Поиск" -> SearchScreen(query, { value -> query = value; searchResults = SonoraApi.MusicSearch(); message = "" }, searchResults, busy, message, { value ->
+                        val term = value.trim()
+                        if (query != value) {
+                            query = value
+                            searchResults = SonoraApi.MusicSearch()
+                        }
                         if (term.isBlank()) {
-                            searchResults = emptyList()
+                            searchResults = SonoraApi.MusicSearch()
                             message = "Введите название трека или исполнителя"
                         } else {
                             scope.launch {
                                 busy = true
                                 message = ""
-                                try { searchResults = withContext(Dispatchers.IO) { SonoraApi.search(term) } }
-                                catch (e: Exception) { searchResults = emptyList(); message = e.message ?: "Ошибка поиска" }
+                                try {
+                                    val results = withContext(Dispatchers.IO) { SonoraApi.search(term) }
+                                    if (query.trim() == term) searchResults = results
+                                } catch (e: Exception) {
+                                    if (query.trim() == term) {
+                                        searchResults = SonoraApi.MusicSearch()
+                                        message = "Не удалось выполнить поиск. Проверьте подключение и повторите запрос."
+                                    }
+                                }
                                 finally { busy = false }
                             }
                         }
-                    }, ::play)
+                    }, ::play, pauseNative = { controller?.pause() })
                     "Медиатека" -> LibraryScreen(
                         signedIn = authStep == "signed",
                         currentTrack = current,
@@ -620,7 +676,7 @@ private fun SonoraApp() {
                         update = ota.release,
                         checking = ota.checking,
                         lastCheckedAt = OtaUpdate.lastCheckedAt(context),
-                        notificationsAllowed = OtaNotifications.canPost(context),
+                        notificationsAllowed = ota.notificationsAllowed,
                         signedIn = authStep == "signed",
                         email = email,
                         onCheck = { OtaSession.checkNow(context) },
@@ -670,9 +726,10 @@ private fun SonoraApp() {
                         track = current,
                         queue = activeQueue,
                         controller = controller,
-                        playing = controller?.isPlaying == true,
+                        playing = isPlaying,
                         liked = current?.let { likedIds.contains("${it.provider}:${it.id}") } == true,
                         onLike = { current?.let(::toggleLike) },
+                        onClose = { selectTab(tabBeforePlayer) },
                         pause = { controller?.pause() },
                         resume = { controller?.play() },
                         previous = { controller?.seekToPrevious() },
@@ -725,20 +782,20 @@ private fun SonoraApp() {
 
 
 @Composable
-private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit) {
+private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, refresh: () -> Unit, play: (Track) -> Unit, openPlayer: () -> Unit, openSearch: () -> Unit, openAssistant: () -> Unit) {
     Column(Modifier.fillMaxSize().background(Ink)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("SONORA", color = Lime, fontSize = 13.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                Text("Твоя музыка. Твой поток.", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                Text("На твоей волне.", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Bold)
             }
-            Box(Modifier.size(42.dp).clip(CircleShape).background(Brush.linearGradient(listOf(Lime, Color(0xFF7DD3FC)))), contentAlignment = Alignment.Center) { Text("S", color = Ink, fontWeight = FontWeight.Black, fontSize = 23.sp) }
+            Box(Modifier.size(42.dp).sonoraGlass(CircleShape, GlassTone.Primary), contentAlignment = Alignment.Center) { Text("S", color = Ink, fontWeight = FontWeight.Black, fontSize = 23.sp) }
         }
         Box(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
-                .clip(RoundedCornerShape(26.dp))
-                .background(Brush.linearGradient(listOf(Color(0xFF33254E), Color(0xFF1C233A), Color(0xFF102A35))))
-                .clickable(onClick = openSearch).padding(20.dp)
+                .sonoraGlass(RoundedCornerShape(26.dp), GlassTone.Accent)
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = openSearch)
+                .padding(20.dp)
         ) {
             Box(Modifier.align(Alignment.TopEnd).size(116.dp).offset(x = 22.dp, y = (-28).dp)
                 .clip(CircleShape).background(Color.White.copy(alpha = 0.045f)))
@@ -749,19 +806,25 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
                     Text("SONORA DISCOVERY", color = Color(0xFFD8CCFF), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                 }
                 Text("Найди свой звук", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-                Text("Музыка из открытых каталогов. Твоя коллекция и твой поток.", color = Color(0xFFD0CDDC), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp))
+                Text("Ищи исполнителей и треки. Открывай новое и собирай свою коллекцию.", color = Color(0xFFD0CDDC), fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 15.dp)) {
                     Text("Открыть поиск", color = Color(0xFF171323), fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0xFFD8CCFF)).clickable(onClick = openSearch).padding(horizontal = 15.dp, vertical = 9.dp))
+                        modifier = Modifier.sonoraGlass(CircleShape, GlassTone.Primary)
+                            .heightIn(min = 48.dp).wrapContentHeight().padding(horizontal = 15.dp))
                     Spacer(Modifier.width(10.dp))
                     Text("Единый каталог", color = Color.White.copy(alpha = 0.72f), fontSize = 10.sp)
                 }
             }
         }
+        TextButton(
+            onClick = openAssistant,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).sonoraGlass(CircleShape),
+            colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFF0E9FF))
+        ) { Text("Помощник SONORA · голос и миксы") }
         Text("Тебе может понравиться", Modifier.padding(start = 22.dp, top = 24.dp, bottom = 10.dp), color = Color.White, fontSize = 19.sp, fontWeight = FontWeight.Bold)
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Lime, trackColor = Panel)
         if (message.isNotBlank()) Text(message, Modifier.padding(horizontal = 22.dp, vertical = 8.dp), color = Muted)
-        if (!busy && tracks.isEmpty() && message.isBlank()) {
+        if (!busy && tracks.isEmpty()) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -789,26 +852,155 @@ private fun DiscoverScreen(tracks: List<Track>, busy: Boolean, message: String, 
 }
 
 @Composable
-private fun SearchScreen(query: String, onQuery: (String) -> Unit, tracks: List<Track>, busy: Boolean, message: String, search: () -> Unit, play: (Track) -> Unit) {
-    Column(Modifier.fillMaxSize().background(Ink).padding(horizontal = 18.dp)) {
+private fun SearchScreen(query: String, onQuery: (String) -> Unit, results: SonoraApi.MusicSearch, busy: Boolean, message: String, search: (String) -> Unit, play: (Track) -> Unit, pauseNative: () -> Unit) {
+    var selectedPlayer by remember { mutableStateOf<Pair<String, SonoraApi.OfficialPlayer>?>(null) }
+    selectedPlayer?.let { (title, player) -> ReleasePlayerSheet(title, player) { selectedPlayer = null } }
+    Column(Modifier.fillMaxSize().background(GlassBackdrop).padding(horizontal = 18.dp)) {
         Text("Поиск", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 22.dp, bottom = 16.dp))
         OutlinedTextField(
             value = query,
             onValueChange = onQuery,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Трек, исполнитель, альбом") },
+            modifier = Modifier.fillMaxWidth().sonoraGlass(CircleShape),
+            shape = CircleShape,
+            placeholder = { Text("Трек, исполнитель, альбом или ISRC") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { search() }),
-            trailingIcon = { IconButton(onClick = search) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Panel, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+            keyboardActions = KeyboardActions(onSearch = { search(query) }),
+            trailingIcon = { IconButton(onClick = { search(query) }) { Icon(Icons.Default.Search, contentDescription = "Искать", tint = Lime) } },
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Lime, unfocusedBorderColor = Color.Transparent, focusedTextColor = Color.White, unfocusedTextColor = Color.White)
         )
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Lime)
         if (message.isNotBlank()) Text(message, color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+        if (!busy && results.searched && results.tracks.isEmpty() && results.officialReleases.isEmpty()) {
+            Text("По этому запросу в SONORA нет треков, доступных для воспроизведения.",
+                color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+        }
         LazyColumn(contentPadding = PaddingValues(vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            itemsIndexed(items = tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
+            itemsIndexed(items = results.tracks, key = { _: Int, item: Track -> item.provider + ":" + item.id }) { index, track ->
                 TrackRow(track, index, { play(track) }, {})
             }
+            if (results.officialReleases.isNotEmpty()) {
+                item { Text("Официальные релизы", color = Color.White, fontWeight = FontWeight.SemiBold) }
+                items(results.officialReleases, key = { "release:${it.id}" }) { release ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
+                        Text(release.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(listOfNotNull(release.artist, release.album).joinToString(" · "), color = Muted, fontSize = 12.sp)
+                        release.players.forEach { player ->
+                            TextButton(onClick = {
+                                pauseNative()
+                                selectedPlayer = release.title to player
+                            }) { Text("Включить в плеере ${player.provider}", color = Lime) }
+                        }
+                    }
+                }
+            }
+            if (results.artists.isNotEmpty()) {
+                item {
+                    Text("Исполнители в каталоге", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                items(results.artists, key = { "artist:${it.id}" }) { artist ->
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel)
+                        .clickable(enabled = !busy) { search(artist.handle) }.padding(14.dp)) {
+                        Text(artist.name, color = Color.White, fontWeight = FontWeight.SemiBold)
+                        Text(if (artist.trackCount == 0) "В профиле нет загруженных треков" else "Треки исполнителя в SONORA",
+                            color = Muted, fontSize = 12.sp)
+                    }
+                }
+            }
+            if (results.matches.isNotEmpty()) {
+                item {
+                    Text("Совпадения в каталогах", color = Color.White, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(top = 12.dp))
+                }
+                items(results.matches, key = { "catalog:${it.provider}:${it.id}" }) { match ->
+                    RecordingMatchCard(match, play)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReleasePlayerSheet(title: String, player: SonoraApi.OfficialPlayer, close: () -> Unit) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val dismiss by rememberUpdatedState(close)
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) dismiss()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    ModalBottomSheet(onDismissRequest = close, containerColor = Panel, contentColor = Color.White) {
+        Column(
+            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 16.dp)
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                TextButton(onClick = close) { Text("Закрыть", color = Lime) }
+            }
+            AndroidView(
+                factory = { context ->
+                    val host = android.net.Uri.parse(player.url).host
+                    WebView(context).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
+                                request.isForMainFrame && (request.url.scheme != "https" || request.url.host != host)
+                        }
+                        if (player.provider == "YouTube") loadUrl(player.url, mapOf("Referer" to "https://${context.packageName}"))
+                        else loadUrl(player.url)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth().height(
+                    if (player.album) 390.dp else if (player.provider == "YouTube") 220.dp else 166.dp
+                ),
+                onReset = null,
+                onRelease = { it.destroy() }
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordingMatchCard(match: SonoraApi.CatalogMatch, play: (Track) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var finding by remember(match) { mutableStateOf(false) }
+    var status by remember(match) { mutableStateOf("") }
+    var candidate by remember(match) { mutableStateOf<SonoraApi.PlayableVersion?>(null) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp)) {
+        Text(match.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(listOf(match.artist, match.provider).filter { it.isNotBlank() }.joinToString(" · "),
+            color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        match.isrc?.let { Text("ISRC $it", color = Muted, fontSize = 12.sp) }
+        val found = candidate
+        if (found == null) {
+            TextButton(enabled = !finding, onClick = {
+                finding = true
+                status = ""
+                scope.launch {
+                    try {
+                        candidate = withContext(Dispatchers.IO) { SonoraApi.findPlayableVersion(match) }
+                        if (candidate == null) status = "Доступная версия не найдена."
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        status = "Поиск доступной версии временно недоступен. Попробуйте ещё раз."
+                    } finally {
+                        finding = false
+                    }
+                }
+            }) { Text(if (finding) "Ищем доступную версию…" else "Найти доступную версию", color = Lime) }
+            if (status.isNotBlank()) Text(status, color = Muted, fontSize = 12.sp)
+        } else {
+            Spacer(Modifier.height(8.dp))
+            val evidence = if (found.matchedVia == "isrc") "ISRC совпадает" else "Возможное совпадение"
+            Text("$evidence · ${found.track.title} · ${found.track.artist} · ${found.track.provider}", color = Muted, fontSize = 12.sp)
+            TextButton(onClick = { play(found.track) }) { Text("Воспроизвести", color = Lime) }
         }
     }
 }
@@ -852,20 +1044,22 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         enqueueDownload()
     }
-    // The provider field stays internal (routing, resolve, download eligibility); a row
-    // only ever shows title, artist, artwork and duration. Tracks whose source cannot be
+    // Rows can show a licensed recording's attribution. Tracks whose source cannot be
     // delivered (for example a cleartext stream URL rejected by the manifest policy) are
     // labelled and tinted as unavailable instead of offering a playback attempt.
     val available = track.playable && !track.audioUrl.isNullOrBlank()
     Row(
         Modifier.fillMaxWidth().staggerEnter(index)
-            .clip(RoundedCornerShape(16.dp)).background(Panel).clickable(onClick = onPlay).padding(10.dp),
+            .sonoraGlass(RoundedCornerShape(16.dp)).clickable(enabled = available, onClick = onPlay).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(track.artworkUrl, null, Modifier.size(54.dp).clip(RoundedCornerShape(11.dp)), contentScale = ContentScale.Crop)
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(track.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(track.artist, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            track.rightsHolder?.let {
+                Text(it, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
             if (isDownloading) {
                 Text(if (progress >= 0) "Загрузка $progress%" else "Загрузка…", color = Lime, fontSize = 10.sp)
             } else if (workState == WorkInfo.State.FAILED) {
@@ -891,8 +1085,8 @@ private fun TrackRow(track: Track, index: Int = 0, onPlay: () -> Unit, open: () 
                 }
             }
         }
-        IconButton(onClick = onPlay) {
-            Icon(Icons.Default.PlayCircleFilled, null, tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
+        IconButton(onClick = onPlay, enabled = available) {
+            Icon(Icons.Default.PlayCircleFilled, "Воспроизвести", tint = if (available) Lime else Muted, modifier = Modifier.size(30.dp))
         }
     }
 }
@@ -915,8 +1109,7 @@ private fun MiniPlayer(
             // Declared before the clickable in the chain, so a vertical pull steals the
             // gesture and dismisses; a plain tap still opens the full player.
             .swipeDownToDismiss(onDismiss = onDismiss)
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.horizontalGradient(listOf(Color(0xFF2A1E4A), Color(0xFF171827))))
+            .sonoraGlass(RoundedCornerShape(22.dp))
             .clickable(onClick = onClick)
             .heightIn(min = 68.dp)
             .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -935,7 +1128,9 @@ private fun MiniPlayer(
                 modifier = Modifier.size(22.dp).popOn(likeTick)
             )
         }
-        IconButton(onClick = onPlay) { PlayPauseIcon(playing = playing, tint = Lime) }
+        IconButton(onClick = onPlay, modifier = Modifier.sonoraGlass(CircleShape, GlassTone.Accent)) {
+            PlayPauseIcon(playing = playing, tint = Color.White)
+        }
     }
 }
 
@@ -948,6 +1143,7 @@ private fun FullPlayer(
     playing: Boolean,
     liked: Boolean,
     onLike: () -> Unit,
+    onClose: () -> Unit,
     pause: () -> Unit,
     resume: () -> Unit,
     previous: () -> Unit,
@@ -957,6 +1153,7 @@ private fun FullPlayer(
     var duration by remember(controller) { mutableFloatStateOf(0f) }
     var showQueue by remember { mutableStateOf(false) }
     var showTrackInfo by remember { mutableStateOf(false) }
+    var showLyrics by remember(track?.id) { mutableStateOf(false) }
     val playableQueue = remember(queue) { queue.filter { it.playable && !it.audioUrl.isNullOrBlank() }.distinctBy { "${it.provider}:${it.id}" } }
     var shuffle by remember(controller) { mutableStateOf(controller?.shuffleModeEnabled == true) }
     var repeat by remember(controller) { mutableIntStateOf(controller?.repeatMode ?: Player.REPEAT_MODE_OFF) }
@@ -966,6 +1163,16 @@ private fun FullPlayer(
         mutableFloatStateOf(
             speedPreferences.getFloat("playback_speed", 1f).takeIf { it == 1f || it == 1.25f || it == 0.8f } ?: 1f
         )
+    }
+    var vinyl by remember(context) { mutableStateOf(speedPreferences.getBoolean("vinyl_cover", false)) }
+    var artworkColor by remember(track?.artworkUrl) { mutableStateOf<Color?>(null) }
+    val accent by animateColorAsState(
+        targetValue = artworkColor ?: Violet,
+        animationSpec = tween(MotionSettings.duration(360), easing = EaseOutBrand),
+        label = "player-artwork-accent"
+    )
+    val playerBackdrop = remember(accent) {
+        Brush.verticalGradient(listOf(accent.copy(alpha = 0.28f), Color(0xFF151426), Ink, Color(0xFF121B28)))
     }
     var volume by remember(controller) { mutableFloatStateOf(controller?.volume ?: 1f) }
 
@@ -995,7 +1202,11 @@ private fun FullPlayer(
                 .coerceAtMost(resolvedDuration.takeIf { it > 0L } ?: Long.MAX_VALUE).toFloat()
         }
         val listener = object : Player.Listener {
-            override fun onEvents(player: Player, events: Player.Events) { syncTimeline() }
+            override fun onEvents(player: Player, events: Player.Events) {
+                syncTimeline()
+                if (events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) shuffle = player.shuffleModeEnabled
+                if (events.contains(Player.EVENT_REPEAT_MODE_CHANGED)) repeat = player.repeatMode
+            }
         }
         player.addListener(listener)
         syncTimeline()
@@ -1033,13 +1244,14 @@ private fun FullPlayer(
                         val selected = item.provider == track?.provider && item.id == track?.id
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
-                                .background(if (selected) Color(0xFF2B2050) else Panel)
+                                .sonoraGlass(RoundedCornerShape(16.dp), if (selected) GlassTone.Accent else GlassTone.Panel)
                                 .clickable {
                                     val player = controller ?: return@clickable
                                     val index = (0 until player.mediaItemCount).firstOrNull {
                                         player.getMediaItemAt(it).mediaId == "${item.provider}:${item.id}"
                                     } ?: -1
-                                    if (index >= 0) player.seekTo(index, 0L)
+                                    if (index < 0) return@clickable
+                                    player.seekTo(index, 0L)
                                     player.play()
                                     showQueue = false
                                 }
@@ -1103,30 +1315,61 @@ private fun FullPlayer(
                         ) { Text(label, fontWeight = if (speed == value) FontWeight.Bold else FontWeight.Medium) }
                     }
                 }
+                HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Виниловая обложка", color = Color.White, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    Switch(checked = vinyl, onCheckedChange = { value ->
+                        vinyl = value
+                        speedPreferences.edit().putBoolean("vinyl_cover", value).apply()
+                    })
+                }
                 // Attribution stays deliberately inside the track-info/legal area.
                 details.licenseUrl?.let { license ->
                     Text("Лицензия и атрибуция", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    details.rightsHolder?.let { Text(it, color = Muted, fontSize = 12.sp) }
                     Text(license, color = Violet, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(license) }.padding(vertical = 4.dp))
                 }
-                details.sourceUrl?.let { source ->
+                details.sourceUrl?.takeIf { source ->
+                    val uri = android.net.Uri.parse(source)
+                    (uri.scheme == "https" || uri.scheme == "http") && !uri.host.isNullOrBlank()
+                }?.let { source ->
                     Text("Страница трека", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 2.dp))
                     Text(source, color = Violet, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openLink(source) }.padding(vertical = 4.dp))
+                    TextButton(onClick = {
+                        val share = Intent(Intent.ACTION_SEND).setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, "${details.title} · ${details.artist}\n$source")
+                        context.startActivity(Intent.createChooser(share, "Поделиться треком"))
+                    }) {
+                        Icon(Icons.Default.Share, null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Поделиться треком")
+                    }
                 }
             }
         }
     }
 
+    if (showLyrics && track != null) {
+        SyncedLyricsSheet(
+            trackId = track.id,
+            positionMs = position.toLong(),
+            onSeek = { controller?.seekTo(it) },
+            onDismiss = { showLyrics = false }
+        )
+    }
+
     Column(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF21183D), Color(0xFF11111B), Ink)))
+        Modifier.fillMaxSize().background(Ink).background(playerBackdrop)
             .statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onClose) { Icon(Icons.Default.KeyboardArrowDown, "Свернуть плеер", tint = Color.White) }
             Column(Modifier.weight(1f)) {
-                Text("СЕЙЧАС ИГРАЕТ", color = Violet, letterSpacing = 2.5.sp, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("СЕЙЧАС ИГРАЕТ", color = accent, letterSpacing = 2.5.sp, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                 Text(if (track == null) "SONORA" else "Твой поток", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 3.dp))
             }
             IconButton(onClick = { showQueue = true }, enabled = playableQueue.isNotEmpty()) {
@@ -1137,10 +1380,7 @@ private fun FullPlayer(
             }
         }
         Spacer(Modifier.height(14.dp))
-        Box(Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(24.dp)).background(Color(0xFF2B2050)), contentAlignment = Alignment.Center) {
-            AsyncImage(track?.artworkUrl, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            if (track == null) Icon(Icons.Default.GraphicEq, "Нет выбранного трека", tint = Violet, modifier = Modifier.size(56.dp))
-        }
+        PlayerArtwork(track?.artworkUrl, vinyl, playing, accent) { artworkColor = it }
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).padding(end = 10.dp)) {
                 Text(track?.title ?: "Выбери свой трек", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -1157,19 +1397,39 @@ private fun FullPlayer(
             Text(formatTime(duration.toLong()), color = Muted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { shuffle = !shuffle; controller?.shuffleModeEnabled = shuffle }, modifier = Modifier.size(48.dp)) {
+        Row(
+            Modifier.fillMaxWidth().sonoraGlass(CircleShape).padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { shuffle = !shuffle; controller?.shuffleModeEnabled = shuffle }, enabled = controller != null && playableQueue.size > 1, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Shuffle, "Перемешать", tint = if (shuffle) Violet else Muted, modifier = Modifier.size(22.dp))
             }
-            IconButton(onClick = previous, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipPrevious, "Предыдущий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }
-            FilledIconButton(onClick = { if (playing) pause() else resume() }, colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Ink), modifier = Modifier.size(72.dp)) {
+            IconButton(onClick = previous, enabled = controller != null && track != null, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipPrevious, "Предыдущий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }
+            IconButton(
+                onClick = { if (playing) pause() else resume() },
+                enabled = controller != null && track != null,
+                modifier = Modifier.size(64.dp).sonoraGlass(CircleShape, GlassTone.Primary)
+            ) {
                 PlayPauseIcon(playing = playing, size = 35.dp, tint = Ink)
             }
-            IconButton(onClick = next, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipNext, "Следующий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }
+            IconButton(onClick = next, enabled = controller != null && playableQueue.size > 1, modifier = Modifier.size(52.dp)) { Icon(Icons.Default.SkipNext, "Следующий трек", tint = Color.White, modifier = Modifier.size(42.dp)) }
             IconButton(onClick = {
-                repeat = if (repeat == Player.REPEAT_MODE_OFF) Player.REPEAT_MODE_ALL else Player.REPEAT_MODE_OFF
+                repeat = when (repeat) {
+                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                    else -> Player.REPEAT_MODE_OFF
+                }
                 controller?.repeatMode = repeat
-            }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Repeat, "Повтор", tint = if (repeat == Player.REPEAT_MODE_ALL) Violet else Muted, modifier = Modifier.size(22.dp)) }
+            }, enabled = controller != null && track != null, modifier = Modifier.size(48.dp)) {
+                val repeatLabel = when (repeat) {
+                    Player.REPEAT_MODE_ONE -> "Повтор трека"
+                    Player.REPEAT_MODE_ALL -> "Повтор очереди"
+                    else -> "Повтор выключен"
+                }
+                Icon(if (repeat == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                    repeatLabel, tint = if (repeat != Player.REPEAT_MODE_OFF) accent else Muted, modifier = Modifier.size(22.dp))
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1183,6 +1443,16 @@ private fun FullPlayer(
                 Spacer(Modifier.width(6.dp))
                 Text("О треке")
             }
+        }
+        OutlinedButton(
+            onClick = { showLyrics = true },
+            enabled = track != null,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+        ) {
+            Icon(Icons.Default.Lyrics, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Текст песни")
         }
         Spacer(Modifier.height(8.dp))
     }

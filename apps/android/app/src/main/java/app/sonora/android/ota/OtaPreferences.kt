@@ -24,6 +24,7 @@ object OtaPreferences {
     private const val KEY_READY_TAG = "ready_apk_tag"
     private const val KEY_READY_PATH = "ready_apk_path"
     private const val KEY_CURRENT_DOWNLOAD_ID = "current_download_id"
+    private const val KEY_NOTIFIED_TAG = "notified_tag"
 
     private fun prefs(context: Context): SharedPreferences =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -74,8 +75,11 @@ object OtaPreferences {
      * FileProvider content URI; a file:// URI would be rejected by the receiving app since
      * Android 7, so none is ever stored.
      */
-    fun readyApkFile(context: Context): java.io.File? {
-        val path = prefs(context).getString(KEY_READY_PATH, null) ?: return null
+    @Synchronized
+    fun readyApkFile(context: Context, expectedTag: String? = null): java.io.File? {
+        val state = prefs(context)
+        if (expectedTag != null && state.getString(KEY_READY_TAG, null) != expectedTag) return null
+        val path = state.getString(KEY_READY_PATH, null) ?: return null
         val file = java.io.File(path)
         val updatesDirectory = java.io.File(context.cacheDir, "updates")
         val isScopedUpdate = runCatching {
@@ -92,18 +96,33 @@ object OtaPreferences {
 
     fun readyApkTag(context: Context): String? = prefs(context).getString(KEY_READY_TAG, null)
 
-    fun rememberReadyApk(context: Context, tag: String, file: java.io.File) {
+    fun notifiedTag(context: Context): String? = prefs(context).getString(KEY_NOTIFIED_TAG, null)
+
+    fun rememberNotifiedTag(context: Context, tag: String) {
+        prefs(context).edit().putString(KEY_NOTIFIED_TAG, tag).apply()
+    }
+
+    @Synchronized
+    fun rememberReadyApk(
+        context: Context, requestId: String, tag: String, url: String, sha256: String?, file: java.io.File
+    ): Boolean {
+        if (currentDownloadId(context) != requestId) return false
+        val release = cachedRelease(context) ?: return false
+        val asset = release.apk ?: return false
+        if (release.tagName != tag || asset.url != url || asset.sha256 != sha256) return false
         prefs(context).edit()
             .putString(KEY_READY_TAG, tag)
             .putString(KEY_READY_PATH, file.absolutePath)
             .apply()
+        return true
     }
 
     /** Exact WorkManager request currently representing the selected release download. */
     fun currentDownloadId(context: Context): String? =
         prefs(context).getString(KEY_CURRENT_DOWNLOAD_ID, null)
 
-    fun rememberCurrentDownload(context: Context, id: String) {
+    @Synchronized
+    fun rememberCurrentDownload(context: Context, id: String?) {
         prefs(context).edit().putString(KEY_CURRENT_DOWNLOAD_ID, id).apply()
     }
 

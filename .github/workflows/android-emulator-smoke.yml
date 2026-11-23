@@ -5,11 +5,13 @@ on:
     branches: [main]
     paths:
       - "apps/android/**"
+      - "scripts/android-smoke.py"
       - ".github/workflows/android-emulator-smoke.yml"
   push:
     branches: [main]
     paths:
       - "apps/android/**"
+      - "scripts/android-smoke.py"
       - ".github/workflows/android-emulator-smoke.yml"
   workflow_dispatch:
 
@@ -67,16 +69,9 @@ jobs:
           cores: 2
           ram-size: 2048M
           disk-size: 4096M
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none -dns-server 1.1.1.1,8.8.8.8
           disable-animations: true
-          script: |
-            set -euo pipefail
-            adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am force-stop app.sonora.android
-            adb shell monkey -p app.sonora.android 1
-            sleep 8
-            adb exec-out screencap -p > "$GITHUB_WORKSPACE/sonora-android-start.png"
-            adb shell dumpsys activity activities | grep -m1 'mResumedActivity' | tee "$GITHUB_WORKSPACE/sonora-android-activity.txt"
+          script: python3 scripts/android-smoke.py
 
       - name: Upload emulator evidence
         if: always()
@@ -86,5 +81,10 @@ jobs:
           path: |
             sonora-android-start.png
             sonora-android-activity.txt
+            sonora-android-assistant.png
+            sonora-android-network.txt
+            sonora-android-ui.xml
+            sonora-android-logcat.txt
+            sonora-android-result.txt
           if-no-files-found: warn
           retention-days: 14

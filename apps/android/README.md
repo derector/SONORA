@@ -37,7 +37,7 @@ push service and no third-party SDK: the app reads the public
 `https://api.github.com/repos/derector/SONORA/releases/latest` endpoint without a token.
 
 1. **Check.** `OtaUpdate.schedule()` (from `MainActivity.onCreate`) registers WorkManager
-   work `sonora-release-check` every 12 hours over an unmetered network with exponential
+   work `sonora-release-check` roughly every hour over Wi-Fi or mobile data with exponential
    backoff, plus `sonora-release-check-startup` 25 seconds after a cold start. The answer,
    the last-check timestamp and the dismissed tags live in the `ota_prefs` SharedPreferences
    file. A release is newer only when its parsed `vX.Y.Z` tuple is strictly greater than the

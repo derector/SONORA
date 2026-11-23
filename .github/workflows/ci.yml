@@ -18,9 +18,13 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run test:recommendations --workspace @sonora/api
+      - name: Validate Russian assistant and playback commands
+        run: npx tsx --test apps/api/src/assistant-core.test.ts apps/api/src/assistant-voice.test.ts apps/api/src/lyrics.test.ts apps/web/lib/assistant-commands.test.ts
       - run: npm run test:import --workspace @sonora/api
       - run: npm run typecheck
       - run: npm run build
+      - name: Build download website
+        run: npm run build --workspace @sonora/download-site
       - run: npm run test:profile-access --workspace @sonora/api
 
   android-validate:

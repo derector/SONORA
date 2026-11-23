@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, test } from "node:test";
 import assert from "node:assert/strict";
 import { rankRecommendations } from "./recommendation-core.js";
 
@@ -101,4 +101,13 @@ describe("rankRecommendations", () => {
     ], [], 10);
     assert.deepEqual(result.map((track) => track.id), ["valid"]);
   });
+});
+
+test('repeated listening ranks a preferred artist above alphabetical fallback', () => {
+  const ranked = rankRecommendations([
+    { id: '1', title: 'A first', artist: 'New artist' },
+    { id: '2', title: 'Z last', artist: 'Favourite artist' }
+  ], [{ artist: 'Favourite artist', plays: 8 }], 2);
+  assert.equal(ranked[0].id, '2');
+  assert.ok(ranked[0].reasons.includes('часто слушаете исполнителя'));
 });

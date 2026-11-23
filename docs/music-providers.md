@@ -1,6 +1,64 @@
 # SONORA music provider policy and integration plan
 
-Updated: 2026-11-18
+Updated: 2026-11-22
+
+## Официальные релизы в поиске
+
+Редакционный список в `apps/api/src/official-releases.ts` связывает имя, варианты написания, название и альбом с официальной публикацией. Одна карточка может предложить YouTube, Bandcamp и SoundCloud для той же записи. Bandcamp использует ID из официального кода встраивания, а для альбомов показывает список дорожек. ID SoundCloud берутся из официального oEmbed после сверки владельца страницы. Клиенты создают HTTPS-адрес плеера из проверенного ID и загружают его по нажатию. Доступность и ограничения определяет соответствующая площадка. [YouTube IFrame API](https://developers.google.com/youtube/iframe_api_reference) · [Bandcamp Embedded Player](https://get.bandcamp.help/en/articles/15263071-how-do-i-create-a-bandcamp-embedded-player) · [SoundCloud oEmbed](https://developers.soundcloud.com/docs/oembed)
+
+- Кишлак, одноимённая песня и альбом «11:11», «Поцелуями», «Я уёбываю в джаз», «Накуримся, напьемся» и «Существо». [Альбом на Bandcamp](https://kish-lak.bandcamp.com/album/11-11) · [«11:11»](https://kish-lak.bandcamp.com/track/11-11) · [«Поцелуями» на Bandcamp](https://kishlakfamily.bandcamp.com/track/-) · [«Я уёбываю в джаз»](https://kish-lak.bandcamp.com/track/--23) · [«Накуримся, напьемся»](https://www.youtube.com/watch?v=iWnqB6PGm3M) · [«Поцелуями» на SoundCloud](https://soundcloud.com/kishlakmusic/potseluyami) · [«Существо»](https://soundcloud.com/kishlakmusic/suschestvo)
+- Молодой Рубль, «чисто гипотетически (prod. by arcadeonly)», «практически ветер» и «партак». [Страница сингла](https://band.link/young_ruble) · [«практически ветер»](https://www.youtube.com/watch?v=AhcyhUscX2M) · [«партак»](https://www.youtube.com/watch?v=yeHBXVALo-8)
+- N01R, «Bad», «Убежать» и «Холик». [«Bad» на Aurora Records](https://aurora-records.com/en/release/n01r-bad/) · [«Убежать»](https://www.youtube.com/watch?v=1_8_42L7KVM) · [«Холик»](https://www.youtube.com/watch?v=V-o24vSw9hA)
+
+### Проверенные варианты подключения
+
+| Площадка | Метаданные и воспроизведение | Статус для SONORA |
+| --- | --- | --- |
+| SoundCloud | Публичный oEmbed открывает официальный виджет. API поиска и прямых потоков требует регистрации и соблюдения условий SoundCloud. [API](https://developers.soundcloud.com/docs/api/guide) · [Условия](https://developers.soundcloud.com/docs/api/terms-of-use) · [Widget API на GitHub](https://github.com/soundcloud/Widget-JS-API) | Подключены два официальных виджета Кишлака. Расширение прямого поиска требует доступ приложения и подтверждённый сценарий использования. |
+| Spotify | Web API для метаданных, официальный Embed или SDK в допустимых сценариях. Условия Spotify отдельно регулируют совместимость с другими музыкальными источниками. [Web API](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide) · [Условия](https://developer.spotify.com/policy) · [Условия виджетов](https://developer.spotify.com/documentation/embeds/terms) | Существующая интеграция метаданных доступна при настройке приложения и рынка. Для прослушивания потребуется согласовать отдельный режим. |
+| YouTube и Bandcamp | Официальные плееры с настройками площадки. YouTube Data API отдельно сообщает доступность встраивания. [YouTube](https://developers.google.com/youtube/data/reference/rest/v3/videos) · [Bandcamp](https://get.bandcamp.help/en/articles/15263071-how-do-i-create-a-bandcamp-embedded-player) | Подключены проверенные публикации. |
+| Apple Music | Каталог и MusicKit для веба и Android. Полное воспроизведение зависит от подписки и авторизации пользователя. [MusicKit](https://developer.apple.com/musickit/) | Кандидат на интеграцию с официальными SDK и ключами Apple. |
+| TIDAL и Amazon Music | У TIDAL есть официальный Embed. Amazon Music документирует поиск и воспроизведение в закрытой бете. [TIDAL](https://developer.tidal.com/documentation/embeds/embeds-overview) · [Amazon](https://developer.amazon.com/docs/music/API_web_overview.html) | TIDAL можно проверять по подтверждённым релизам. Для Amazon нужен доступ платформы. |
+| Яндекс Музыка, Звук, VK Музыка | Яндекс документирует виджет для конкретной записи. Звук публикует каталог и сведения о загрузке через Студио. По VK текущий статус описан ниже. [Яндекс](https://yandex.ru/support/wiki/ru/actions/iframe) · [Звук](https://help.zvuk.com/article/57288) | Следующий приоритет для покрытия русскоязычных артистов — сверить конкретные виджеты Яндекс Музыки. |
+| Audius, Jamendo, Wikimedia Commons | API поисков и потоков с разными правилами доступности. [Audius](https://docs.audius.co/api/) · [Jamendo](https://developer.jamendo.com/v3.0/tracks) · [Commons](https://www.mediawiki.org/wiki/API:Imageinfo/en) | Уже подключены к поиску. |
+| Openverse и Free Music Archive | Openverse индексирует открытые записи. FMA разрешает размещать подходящие лицензированные записи на своём сервере и ограничивает прямое встраивание файлов. [Openverse на GitHub](https://github.com/WordPress/openverse) · [FMA](https://freemusicarchive.org/app-developers) | Источники для расширения открытого и собственного каталога. |
+| LANE и Dotify | Публично описаны метаданные и импорт. В изученных документах отсутствует публичный контракт, по которому SONORA могла бы получать аудио. [LANE](https://sklane.com/ru/terms-of-service) · [Dotify](https://dotify.fun/tos) | Ориентиры для сценария поиска и импорта. |
+
+## Открытый каталог Wikimedia Commons
+
+Встроенный поиск сайта и Android запрашивает аудиозаписи через MediaWiki Action API. Запись попадает в выдачу, если Commons обозначает её как аудио, файл доступен на официальном медиа-сервере Wikimedia и у записи указана поддерживаемая лицензия. Поддерживаются CC0 1.0, CC BY 3.0/4.0 и CC BY-SA 3.0/4.0. При обязательной атрибуции требуется явное поле с авторским кредитом. Записи с дополнительными ограничениями, видео и MIDI исключаются.
+
+Для воспроизведения плеер получает оригинальный файл с Wikimedia. В поиске отображаются кредит и лицензия, а Android повторно проверяет метаданные и лицензию при восстановлении записи по ID. Общий поиск выдаёт доступные исполнения и записи Commons самостоятельно. При поиске версии коммерческого релиза SONORA не выдаёт одноимённую запись Commons за тот же мастер.
+
+Изучены открытые реализации Wikimedia MultimediaViewer и TimedMediaHandler, каталог Openverse, MusicBrainz API и примеры Feishin и Tempo. Для нового источника выбран MediaWiki Action API, поскольку он возвращает файл и атрибуцию от площадки, которая его хранит. [MultimediaViewer](https://github.com/wikimedia/mediawiki-extensions-MultimediaViewer) · [TimedMediaHandler](https://github.com/wikimedia/mediawiki-extensions-TimedMediaHandler) · [Openverse](https://github.com/WordPress/openverse) · [MusicBrainz API](https://github.com/Borewit/musicbrainz-api) · [Feishin](https://github.com/jeffvli/feishin) · [Tempo](https://github.com/CappielloAntonio/tempo) · [MediaWiki Imageinfo](https://www.mediawiki.org/wiki/API:Imageinfo/en)
+
+## Каталог правообладателей SONORA
+
+LANE публично описывает метаданные Spotify и SoundCloud. Dotify описывает импорт плейлистов и воспроизведение через внешние площадки. Документация не раскрывает подробности выдачи аудио для каждого трека. Для воспроизведения в SONORA оператор может подключить отдельный каталог с записями, право на которые подтверждено. [LANE](https://sklane.com/ru/terms-of-service) · [Dotify FAQ](https://dotify.fun/faq) · [Dotify Terms](https://dotify.fun/tos)
+
+Оператор API хранит JSON отдельно от репозитория. Укажи абсолютный путь в `SONORA_LICENSED_CATALOG_FILE`, публичный HTTPS origin медиа в `SONORA_LICENSED_AUDIO_ORIGIN` и публичный HTTPS origin API в `SONORA_LICENSED_API_ORIGIN`. Эти три настройки подключают каталог к существующему поиску на сайте и Android. Медиа можно хранить на том же HTTPS origin, если сервер действительно отдаёт записи по указанным путям.
+
+```json
+[
+  {
+    "id": "demo-recording",
+    "title": "Демонстрационная запись",
+    "artist": "Тестовый артист",
+    "album": "Демо",
+    "durationSeconds": 120,
+    "audioPath": "tracks/demo-recording.mp3",
+    "rightsHolder": "Название правообладателя",
+    "licenseRef": "Внутренний номер разрешения",
+    "streamingAllowed": true,
+    "availableUntil": "2027-12-31T23:59:59Z"
+  }
+]
+```
+
+- `id` должен оставаться стабильным. `audioPath` задаёт относительный путь к записи на настроенном origin. Для совместимости сайта и Android используй HTTPS-доставку с MIME аудио и поддержкой диапазонов байтов.
+- Дополнительные поля `isrc`, `artworkUrl`, `sourceUrl` и `licenseUrl` обогащают выдачу. ISRC применяется для точного сопоставления записей. Внутренний номер разрешения остаётся на сервере.
+- В этот каталог попадают только записи с разрешением на воспроизведение для всей аудитории конкретного развёртывания. Укажи время окончания в UTC. Значение `null` подходит для бессрочного разрешения.
+- Для снятия записи установи `streamingAllowed` в `false` или убери запись из файла. Публикуй файл заменой через rename. Новые запросы плеера перестанут получать адрес аудио. Удали файл на медиа-сервере и сбрось кэш CDN, если требуется отключить ранее выданный публичный адрес. Архивы, публичные плейлисты и офлайн-скачивание в этой интеграции пока не подключены.
 
 ## What is connected today
 

@@ -7,8 +7,7 @@
 //   open        — licensed full audio SONORA may stream (CC/PD catalogs,
 //                 Jamendo, Audius public streams, Internet Archive, Openverse,
 //                 ccMixter).
-//   preview     — official short platform preview (iTunes 30s AAC, Deezer
-//                 preview, Spotify preview_url when the API still provides one).
+//   preview     — official short preview where the provider permits this use.
 //   stream_only — playable only through the source's official player/embed.
 //   external    — we may only link to the source page.
 //   metadata    — identifiers/credits only, no audio at all.
@@ -16,11 +15,15 @@
 // must never construct a full-track URL for commercial platforms.
 
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { createCommonsCatalog } from "./commons-catalog.js";
+import type { createLicensedCatalog } from "./licensed-catalog.js";
 import { createPrivateKey, createSign } from "node:crypto";
 import {
-  jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
+  audiusPublicPage, jamendoCandidates, jamendoConfig, PLAYABLE_MAX_DURATION_SECONDS
 } from "./catalog.js";
-import { normalizeForMatch, scoreMatch, type ImportListItem } from "./import-core.js";
+import { normalizeForMatch, type ImportListItem } from "./import-core.js";
+import { matchRecording, recordingTextKey, recordingTitleKey, validIsrc } from "./recording-match.js";
+export { validIsrc } from "./recording-match.js";
 import type { JamendoCandidate } from "./catalog.js";
 
 export type AccessStatus = "open" | "preview" | "stream_only" | "external" | "metadata";
@@ -60,12 +63,6 @@ export interface SourceAdapter {
 export const ACCESS_RANK: Record<AccessStatus, number> = {
   open: 0, preview: 1, stream_only: 2, external: 3, metadata: 4
 };
-
-const ISRC_PATTERN = /^[A-Z]{2}[A-Z0-9]{3}\d{2}\d{5}$/;
-export function validIsrc(value: unknown): string | null {
-  const text = typeof value === "string" ? value.toUpperCase().replace(/[\s-]/g, "") : "";
-  return ISRC_PATTERN.test(text) ? text : null;
-}
 
 function clampLimit(value: unknown, fallback: number, max = 40): number {
   const parsed = typeof value === "number" ? value : Number(value);
@@ -115,19 +112,12 @@ export function classifyVersionTag(rawTitle: unknown): VersionTag {
   return null;
 }
 
-const VERSION_NOISE_IN_KEY = /\b(?:remix|live|acoustic|instrumental|karaoke|vip|bootleg|mashup|nightcore|slowed|sped|speed|edit|version|original|cover|remake|rework)\b/gi;
-
-/** Group key without version noise so "Song (Remix)" merges with "Song". */
-function versionlessKeyArtistTitle(result: DiscoveryResult): string {
-  const title = normalizeForMatch(result.title).replace(VERSION_NOISE_IN_KEY, " ").replace(/\s+/g, " ").trim();
-  const artist = normalizeForMatch(result.artist);
-  return `mt:${artist}|${title}`;
-}
-
 function groupKeyOf(result: DiscoveryResult): string {
   const isrc = validIsrc(result.isrc);
   if (isrc) return `isrc:${isrc}`;
-  return versionlessKeyArtistTitle(result);
+  const artist = recordingTextKey(result.artist);
+  const title = recordingTitleKey(result.title);
+  return artist && artist !== "unknown artist" && title ? `mt:${artist}|${title}` : `source:${result.sourceId}:${result.externalId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,8 +144,8 @@ function byAccessThenSource(a: DiscoveryResult, b: DiscoveryResult): number {
 
 /**
  * Dedupe/fold results into groups:
- *  - key = ISRC when present, else normalized artist+title with version noise
- *    stripped, so official/remix/slowed variants merge into one group;
+ *  - key = ISRC when present, else normalized artist+title preserving the
+ *    version text (remix, live, edit, alternate take, etc.);
  *  - within a group, members whose known durations differ by more than ±10s
  *    from the group anchor split into separate groups (a wrong-ISRC merge of
  *    different recordings must not present one as an alternative of the other);
@@ -321,7 +311,7 @@ const audiusPlatformAdapter: SourceAdapter = {
           ? `https://api.audius.co/v1/tracks/${encodeURIComponent(track.id)}/stream?app_name=SONORA`
           : null,
         previewUrl: null,
-        sourcePageUrl: track.permalink ?? "https://audius.co",
+        sourcePageUrl: audiusPublicPage(track.permalink, track.user?.handle),
         licenseUrl,
         access: streamable ? "open" as const : "external" as const,
         isrc: null,
@@ -624,7 +614,8 @@ const metadataGraphAdapter: SourceAdapter = {
         sourcePageUrl: `https://musicbrainz.org/recording/${recording.id}`,
         licenseUrl: null,
         access: "metadata" as const,
-        isrc: validIsrc((recording.isrcs ?? [])[0]),
+        isrc: (recording.isrcs ?? []).map(validIsrc).find((id) => id === isrc) ??
+          (recording.isrcs ?? []).map(validIsrc).find(Boolean) ?? null,
         releaseYear: null,
         versionTag: classifyVersionTag(recording.title)
       } satisfies DiscoveryResult];
@@ -668,37 +659,37 @@ async function spotifyAccessToken(clientId: string, clientSecret: string): Promi
 const spotifySearchAdapter: SourceAdapter = {
   id: "commercial_streaming",
   label: "commercial_streaming",
-  available: (env) => Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET),
-  async search(query, { limit }, ) {
+  available: (env) => Boolean(env.SPOTIFY_CLIENT_ID && env.SPOTIFY_CLIENT_SECRET &&
+    /^[A-Z]{2}$/.test(env.SPOTIFY_CATALOG_MARKET ?? "")),
+  async search(query, { limit }) {
     const clientId = process.env.SPOTIFY_CLIENT_ID ?? "";
     const secret = process.env.SPOTIFY_CLIENT_SECRET ?? "";
     const token = await spotifyAccessToken(clientId, secret);
-    const params = new URLSearchParams({ q: query, type: "track", limit: String(Math.min(30, limit)) });
+    const params = new URLSearchParams({
+      q: query, type: "track", limit: String(Math.min(10, limit)), market: process.env.SPOTIFY_CATALOG_MARKET ?? ""
+    });
     const payload = await fetchJson<{ tracks?: { items?: Array<{
-      id: string; name: string; duration_ms?: number; preview_url?: string | null;
-      artists?: Array<{ name?: string }>; album?: { name?: string; images?: Array<{ url?: string }> };
-      external_urls?: { spotify?: string };
+      id: string; name: string; duration_ms?: number;
+      artists?: Array<{ name?: string }>;
+      album?: { name?: string; release_date?: string; images?: Array<{ url?: string }> };
+      external_ids?: { isrc?: string };
     }> } }>(`https://api.spotify.com/v1/search?${params.toString()}`, 8000, {
       headers: { Authorization: `Bearer ${token}` }
     });
     return (payload.tracks?.items ?? []).flatMap((track) => {
       if (!track.id || !track.name) return [];
-      // Official 30s preview only when the API itself still hands one out.
-      // Full audio is NEVER surfaced: Playback SDK integration (out of scope
-      // here, see README note) is the only sanctioned playback path.
-      const preview = typeof track.preview_url === "string" && track.preview_url.startsWith("https://")
-        ? track.preview_url : null;
       return [{
         sourceId: this.id, externalId: track.id, title: track.name,
         artist: (track.artists ?? []).map((a) => a.name).filter(Boolean).join(", ") || "Unknown artist",
         album: track.album?.name ?? null,
         durationSeconds: track.duration_ms ? Math.round(track.duration_ms / 1000) : null,
         artworkUrl: track.album?.images?.[0]?.url ?? null,
-        audioUrl: null, previewUrl: preview,
-        sourcePageUrl: track.external_urls?.spotify ?? `https://open.spotify.com/track/${track.id}`,
+        audioUrl: null, previewUrl: null,
+        sourcePageUrl: `https://open.spotify.com/track/${encodeURIComponent(track.id)}`,
         licenseUrl: null,
-        access: preview ? "preview" as const : "external" as const,
-        isrc: null, releaseYear: null, versionTag: classifyVersionTag(track.name)
+        access: "external" as const,
+        isrc: validIsrc(track.external_ids?.isrc), releaseYear: yearOf(track.album?.release_date),
+        versionTag: classifyVersionTag(track.name)
       } satisfies DiscoveryResult];
     });
   }
@@ -1155,6 +1146,7 @@ export class DiscoveryInputError extends Error {
 
 export type ResolveInput = {
   artist?: unknown; title?: unknown; isrc?: unknown; durationSeconds?: unknown;
+  playbackOnly?: unknown;
 };
 
 export type ResolvedTrack = {
@@ -1166,17 +1158,6 @@ export type ResolvedTrack = {
   preview_alternative?: DiscoveryResult | null;
   providers?: Record<string, ProviderStatus>;
 };
-
-const RESOLVE_MATCH_THRESHOLD = 0.55;
-const DURATION_AGREEMENT_SECONDS = 15;
-
-function durationAgrees(want: number | null, have: number | null): boolean {
-  return want !== null && have !== null && Math.abs(want - have) <= DURATION_AGREEMENT_SECONDS;
-}
-
-function toCandidateShape(result: DiscoveryResult): { artist: string; title: string; durationSeconds?: number | null } {
-  return { artist: result.artist, title: result.title, durationSeconds: result.durationSeconds };
-}
 
 /**
  * Find the single best licensed full audio for {artist,title,isrc?,duration?}.
@@ -1190,55 +1171,53 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
   const isrc = validIsrc(input.isrc);
   const duration = finiteNumber(input.durationSeconds);
   if (!title && !isrc) throw new DiscoveryInputError("Provide at least a title or an ISRC.");
-  const query = (isrc ? `isrc:${isrc}` : [artist, title].filter(Boolean).join(" ")).slice(0, 100);
-  if (!query.trim()) throw new DiscoveryInputError("Provide at least a title or an ISRC.");
+  const playbackOnly = input.playbackOnly === true;
 
   const openAdapters = OPEN_RESOLVE_ADAPTER_IDS
+    .filter((id) => !playbackOnly || id === "independent_collection" || id === "platform_stream_catalog")
     .map((id) => ADAPTER_BY_ID.get(id))
     .filter((adapter): adapter is SourceAdapter => Boolean(adapter && adapter.available(env)));
   const graphAdapter = ADAPTER_BY_ID.get("metadata_graph");
   const previewAdapter = ADAPTER_BY_ID.get("platform_preview");
 
-  const wanted = { artist, title: title ?? "", durationSeconds: duration };
-  const pool = async (adapter: SourceAdapter | undefined): Promise<DiscoveryResult[]> =>
+  const pool = async (adapter: SourceAdapter | undefined, query: string): Promise<DiscoveryResult[]> =>
     adapter && adapter.available(env)
       ? await withinBudget(adapter.search(query, { limit: 8 })).catch(() => [] as DiscoveryResult[])
       : [];
-  const fanOut = await Promise.all([
-    pool(graphAdapter),
-    ...openAdapters.map((adapter) => pool(adapter)),
-    pool(previewAdapter)
-  ]);
-  const graphHits = fanOut[0] ?? [];
-  const openResults = fanOut.slice(1, 1 + openAdapters.length).flat();
-  const previewResults = fanOut[1 + openAdapters.length] ?? [];
+  const graphQuery = isrc ?? [artist, title].filter(Boolean).join(" ").slice(0, 100);
+  const graph = !playbackOnly || !title ? pool(graphAdapter, graphQuery) : Promise.resolve([]);
+  const anchor = title ? undefined : (await graph).find((result) => result.isrc === isrc);
+  const wanted = { isrc, artist: artist || anchor?.artist || "", title: title ?? anchor?.title ?? "", durationSeconds: duration ?? anchor?.durationSeconds ?? null };
+  const query = [wanted.artist, wanted.title].filter(Boolean).join(" ").slice(0, 100) || graphQuery;
+  const [graphHits, open, previewResults] = await Promise.all([
+    graph,
+    Promise.allSettled(openAdapters.map((adapter) => withinBudget(adapter.search(query, { limit: 8 })))),
+    playbackOnly ? Promise.resolve([]) : pool(previewAdapter, query)
+  ] as const);
+  if (playbackOnly && !open.some((result) => result.status === "fulfilled")) {
+    throw new Error("Playback catalogs are temporarily unavailable.");
+  }
+  const openResults = open.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 
-  // ISRC first: an exact ISRC hit on an open result is the strongest evidence.
-  const verifiedByGraph = isrc !== null && graphHits.some((hit) => hit.isrc === isrc);
-  const scoredOpen = openResults
-    .filter((result) => result.access === "open" && result.audioUrl)
-    .map((result) => ({
-      result,
-      score: isrc && result.isrc === isrc ? Math.max(scoreMatch(toCandidateShape(result), wanted), 0.95)
-        : scoreMatch(toCandidateShape(result), wanted),
-      via: (isrc && result.isrc === isrc) || verifiedByGraph && scoreMatch(toCandidateShape(result), wanted) >= 0.8
-        ? "isrc" as const
-        : durationAgrees(duration, result.durationSeconds ?? null) && scoreMatch(toCandidateShape(result), wanted) >= 0.7
-          ? "meta+duration" as const
-          : "title-only" as const
-    }))
-    .filter((entry) => entry.score >= RESOLVE_MATCH_THRESHOLD)
-    .sort((a, b) => b.score - a.score || ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access]);
+  // A metadata hit can guide the search, but only an audio candidate's own
+  // identifier confirms that the candidate is the same recording.
+  const verifiedByGraph = graphHits.some((hit) => matchRecording(wanted, hit) === "isrc");
+  const scores = { isrc: 0.99, "meta+duration": 0.9, "artist+title": 0.78 } as const;
+  const scoredOpen = openResults.flatMap((result) => {
+    if (result.access !== "open" || !result.audioUrl?.startsWith("https://")) return [];
+    const match = matchRecording(wanted, result);
+    if (!match) return [];
+    const difference = wanted.durationSeconds !== null && result.durationSeconds
+      ? Math.abs(wanted.durationSeconds - result.durationSeconds) : Number.MAX_VALUE;
+    return [{ result, match, score: scores[match], difference }];
+  }).sort((a, b) => b.score - a.score || a.difference - b.difference);
 
   const bestOpen = scoredOpen[0];
   if (bestOpen) {
-    let confidence = bestOpen.score;
-    if (bestOpen.via === "isrc") confidence = Math.max(confidence, 0.95);
-    else if (bestOpen.via === "meta+duration") confidence = Math.min(0.9, confidence + 0.05);
-    else if (!wanted.artist) confidence = Math.min(confidence, 0.75);
     return {
-      found: true, track: bestOpen.result, matched_via: bestOpen.via,
-      confidence: Math.round(Math.max(0, Math.min(1, confidence)) * 100) / 100
+      found: true, track: bestOpen.result,
+      matched_via: bestOpen.match === "artist+title" ? "title-only" : bestOpen.match,
+      confidence: bestOpen.score
     };
   }
 
@@ -1246,21 +1225,20 @@ export async function resolveBestTrack(input: ResolveInput, env: NodeJS.ProcessE
   // preview (iTunes/other adapters) or link-only result is reported as an
   // alternative — never as found=true.
   const previewCandidates = [...openResults.filter((r) => r.access !== "open"), ...previewResults]
-    .map((result) => ({ result, score: scoreMatch(toCandidateShape(result), wanted) }))
-    .filter((entry) => entry.score >= 0.6)
-    .sort((a, b) => ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access] || b.score - a.score);
-  const alternative = previewCandidates[0]?.result ?? null;
-  const graphAnchor = graphHits.find((hit) => scoreMatch(toCandidateShape(hit), wanted) >= 0.7);
-  const via: ResolvedTrack["matched_via"] = isrc && (verifiedByGraph || graphAnchor) ? "isrc"
-    : durationAgrees(duration, alternative?.durationSeconds ?? null) ? "meta+duration" : "title-only";
-  const confidence = alternative
-    ? Math.max(...previewCandidates.map((entry) => entry.score)) : (graphAnchor ? 0.4 : 0);
+    .flatMap((result) => {
+      const match = matchRecording(wanted, result);
+      return match ? [{ result, match, score: scores[match] }] : [];
+    })
+    .sort((a, b) => b.score - a.score || ACCESS_RANK[a.result.access] - ACCESS_RANK[b.result.access]);
+  const alternative = previewCandidates[0];
+  const graphAnchor = graphHits.find((hit) => matchRecording(wanted, hit) === "isrc") ??
+    graphHits.find((hit) => matchRecording(wanted, hit) !== null);
   return {
     found: false, track: null,
-    matched_via: via,
-    confidence: Math.round(Math.max(0, Math.min(1, confidence)) * 100) / 100,
-    preview_alternative: via === "isrc" && graphAnchor
-      ? { ...graphAnchor, audioUrl: null, access: "metadata" } : alternative
+    matched_via: verifiedByGraph || alternative?.match === "isrc" ? "isrc"
+      : alternative?.match === "meta+duration" ? "meta+duration" : "title-only",
+    confidence: alternative?.score ?? (graphAnchor ? 0.4 : 0),
+    preview_alternative: alternative?.result ?? graphAnchor ?? null
   };
 }
 
@@ -1293,7 +1271,11 @@ export function licensedCandidate(result: DiscoveryResult): JamendoCandidate | n
 // HTTP registration (called from index.ts)
 // ---------------------------------------------------------------------------
 
-export function registerDiscoveryRoutes(app: FastifyInstance): void {
+export function registerDiscoveryRoutes(
+  app: FastifyInstance,
+  licensedCatalog: ReturnType<typeof createLicensedCatalog>,
+  commonsCatalog: ReturnType<typeof createCommonsCatalog>
+): void {
   const discoveryRateLimit = {
     config: { rateLimit: { keyGenerator: (request: FastifyRequest) => request.ip, max: 30, timeWindow: "1 minute" } }
   };
@@ -1314,7 +1296,34 @@ export function registerDiscoveryRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: ResolveInput }>("/api/v1/discovery/resolve", discoveryRateLimit, async (request, reply) => {
     try {
-      return await resolveBestTrack(request.body ?? {}, process.env);
+      if (request.body?.playbackOnly === true && licensedCatalog.configured) {
+        const licensed = await licensedCatalog.match(request.body).catch(() => null);
+        if (licensed) return licensed;
+      }
+      const input = request.body ?? {};
+      if (input.playbackOnly !== true) return await resolveBestTrack(input, process.env);
+      const artist = firstString(input.artist);
+      const title = firstString(input.title);
+      const durationSeconds = finiteNumber(input.durationSeconds);
+      const [resolved, commons] = await Promise.allSettled([
+        resolveBestTrack(input, process.env),
+        artist && title && durationSeconds && durationSeconds > 0
+          ? commonsCatalog.search(`${artist} ${title}`.slice(0, 160), 12).then((tracks) =>
+              tracks.filter((track) => matchRecording({ artist, title, durationSeconds }, track) === "meta+duration")
+                .sort((a, b) => Math.abs(a.durationSeconds - durationSeconds) - Math.abs(b.durationSeconds - durationSeconds))[0])
+          : Promise.resolve(undefined)
+      ]);
+      if (commons.status === "fulfilled" && commons.value && (resolved.status === "rejected" || !resolved.value.track)) {
+        return { playableTrack: commons.value, matchedVia: "meta+duration" };
+      }
+      if (resolved.status === "rejected") throw resolved.reason;
+      const result = resolved.value;
+      const track = result.track ? licensedCandidate(result.track) : null;
+      const provider = track?.provider === "audius" ? "Audius" : "Jamendo";
+      return {
+        playableTrack: track ? { ...track, id: `${track.provider}:${track.providerTrackId}`, provider } : null,
+        matchedVia: result.matched_via
+      };
     } catch (error) {
       if (error instanceof DiscoveryInputError) return reply.code(400).send({ statusCode: 400, error: error.message });
       request.log.error({ err: error }, "Discovery resolve failed");

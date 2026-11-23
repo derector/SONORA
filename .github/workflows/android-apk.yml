@@ -84,9 +84,18 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk --clobber
           else
+            cat > release-notes.md <<EOF
+          Автоматическая CI-сборка #$GITHUB_RUN_NUMBER (commit ${GITHUB_SHA:0:7}).
+
+          SHA-256 APK: $SHA256
+          Подпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).
+
+          Приложение периодически проверяет новые версии и показывает уведомление при разрешённых уведомлениях. Это не мгновенная серверная push-доставка.
+          Проверка вручную: Настройки → Проверить обновления.
+          EOF
             gh release create "$TAG" "SONORA-release-$TAG.apk" SONORA-latest.apk \
               --title "SONORA Android $TAG" \
-              --notes "Автоматическая CI-сборка #$GITHUB_RUN_NUMBER (commit ${GITHUB_SHA:0:7}).\n\nSHA-256 APK: $SHA256\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).\n\nВ приложении обновление придёт пушем: Настройки → Проверить обновления."
+              --notes-file release-notes.md
           fi
           echo "Release $TAG published with SONORA-latest.apk" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload QA-only debug APK

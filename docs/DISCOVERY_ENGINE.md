@@ -35,7 +35,7 @@ constructed. `POST /discovery/resolve` returns `found: true` **only** for
 | platform_preview        | Apple iTunes Search API (`entity=song`, official 30s `previewUrl`, artwork 600x600) | none | preview / external |
 | metadata_graph          | MusicBrainz recordings (`inc=isrcs`) | none | metadata (ISRC enrichment) |
 | curated_open_catalogs   | GitHub allow-list via `GITHUB_CATALOG_REPOS=owner/repo[/path@ref]` — exact files only, no scanning | env allow-list | open / metadata |
-| commercial_streaming    | Spotify Web API (client-credentials token cached with expiry) | `SPOTIFY_CLIENT_ID`+`SPOTIFY_CLIENT_SECRET` | preview (API's own `preview_url`) / external |
+| commercial_streaming    | Spotify Web API (client-credentials token cached with expiry) | `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET` + `SPOTIFY_CATALOG_MARKET` | metadata and official external track link |
 | deezer_public_catalog   | Deezer public search JSON    | `DEEZER_APP_ID` (gate) | preview / external |
 | commercial_storefront   | Apple Music API, ES256-signed developer token (incl. `previews`) | `APPLE_MUSIC_TEAM_ID`+`APPLE_MUSIC_KEY_ID`+`APPLE_MUSIC_PRIVATE_KEY`, `APPLE_MUSIC_STOREFRONT` | preview / external |
 | video_platform          | YouTube Data API v3          | `YOUTUBE_API_KEY` | stream_only (official embed) |

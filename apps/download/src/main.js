@@ -2,56 +2,67 @@ import "./styles.css";
 
 const OWNER = "derector";
 const REPO = "SONORA";
-const RELEASES_API = `https://api.github.com/repos/${OWNER}/${REPO}/releases?per_page=5`;
-const FALLBACK = {
-  tag_name: "v0.1.187",
-  name: "SONORA Android v0.1.187",
-  published_at: "2026-11-21T12:05:18Z",
-  body: "Автоматическая CI-сборка #187.\nSHA-256 APK: 625b55444c6f02129e7357e2deef837913b81477b7a5bb55b511613b3e6dcec3\nПодпись V2 стабильным ключом SONORA, мин. Android 8.0 (API 26).",
-  assets: [{
-    name: "SONORA-latest.apk",
-    size: 15892555,
-    digest: "sha256:625b55444c6f02129e7357e2deef837913b81477b7a5bb55b511613b3e6dcec3",
-    browser_download_url: "https://github.com/derector/SONORA/releases/download/v0.1.187/SONORA-latest.apk"
-  }]
-};
+const RELEASES_API = `https://api.github.com/repos/${OWNER}/${REPO}/releases`;
+const RELEASES_PAGE = `https://github.com/${OWNER}/${REPO}/releases`;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const apkUrl = (release) => release?.assets?.find((asset) => asset.name.toLowerCase().endsWith(".apk"))?.browser_download_url
-  || "https://github.com/derector/SONORA/releases/latest";
-const sizeLabel = (bytes) => bytes ? `${(bytes / 1024 / 1024).toFixed(1)} МБ` : "Размер уточняется";
-const versionLabel = (release) => (release?.tag_name || "v0.1.187").replace(/^v/, "v");
-const safeDate = (value) => value ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(new Date(value)) : "Дата не указана";
-const getSha = (release, asset) => {
+function releaseApk(release) {
+  const tag = release?.tag_name;
+  if (!/^v\d+\.\d+\.\d+$/.test(tag ?? "")) return undefined;
+  const assets = Array.isArray(release.assets) ? release.assets.filter((asset) =>
+    typeof asset?.name === "string" &&
+    asset.browser_download_url === `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(asset.name)}`
+  ) : [];
+  return assets.find(({ name }) => name === `SONORA-release-${tag}.apk`) ??
+    assets.find(({ name }) => name === "SONORA-latest.apk");
+}
+const sizeLabel = (bytes) => Number.isFinite(bytes) && bytes > 0
+  ? `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} МБ`
+  : "Уточняется";
+const safeDate = (value) => {
+  const date = new Date(value);
+  return value && Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("ru-RU", {day:"numeric",month:"long",year:"numeric"}).format(date)
+    : "Дата не указана";
+};
+const getSha = (asset) => {
   const digest = asset?.digest || "";
   if (/^sha256:[a-f0-9]{64}$/i.test(digest)) return digest.slice(7);
-  const match = String(release?.body || "").match(/SHA-?256[^a-f0-9]*([a-f0-9]{64})/i);
-  return match?.[1] || "";
+  return "";
 };
 
-function applyRelease(release, history = []) {
-  const asset = release.assets?.find((item) => item.name.toLowerCase().endsWith(".apk"));
-  const version = versionLabel(release);
-  const url = apkUrl(release);
-  const sha = getSha(release, asset);
+function applyRelease(release) {
+  const asset = releaseApk(release);
+  const version = release?.tag_name || "См. релиз";
+  const url = asset?.browser_download_url ?? `${RELEASES_PAGE}/latest`;
+  const sha = getSha(asset);
   $$("[data-version]").forEach((node) => node.textContent = version);
   $$("[data-size]").forEach((node) => node.textContent = sizeLabel(asset?.size));
-  $$("[data-apk]").forEach((node) => node.href = url);
-  $$("[data-release-title]").forEach((node) => node.textContent = release.name || `SONORA Android ${version}`);
-  $$("[data-release-date]").forEach((node) => node.textContent = `Опубликовано: ${safeDate(release.published_at)}`);
+  $$("[data-apk]").forEach((node) => {
+    node.href = url;
+    const label = node.querySelector(".button-label");
+    if (label) label.textContent = asset ? "Скачать APK" : "Открыть релиз";
+  });
+  const copy = $("#copySha");
+  if (copy) copy.disabled = !sha;
+  $$("[data-release-title]").forEach((node) => node.textContent = release?.name || "SONORA для Android");
+  $$("[data-release-date]").forEach((node) => node.textContent = release ? `Опубликовано: ${safeDate(release.published_at)}` : "Версия доступна на странице релиза");
   $$("[data-release-notes]").forEach((node) => {
-    const body = String(release.body || "Список изменений будет опубликован в GitHub Releases.");
+    const body = String(release?.body || "Список изменений доступен в GitHub Releases.").replaceAll("\\n", "\n");
     node.textContent = body.length > 420 ? body.slice(0, 417) + "…" : body;
   });
   $$("[data-sha]").forEach((node) => node.textContent = sha || "Контрольная сумма доступна в официальном релизе");
+}
+
+function applyReleaseHistory(release, history = []) {
   const historyNode = $("#releaseHistory");
   if (historyNode) {
     historyNode.replaceChildren();
-    history.slice(1, 5).forEach((item) => {
+    history.filter((item) => item.tag_name !== release?.tag_name).slice(0, 4).forEach((item) => {
       const row = document.createElement("a");
       row.className = "release-item";
-      row.href = item.html_url || "https://github.com/derector/SONORA/releases";
+      row.href = `${RELEASES_PAGE}/tag/${item.tag_name}`;
       row.target = "_blank";
       row.rel = "noopener noreferrer";
       const name = document.createElement("b");
@@ -75,17 +86,34 @@ async function loadReleases() {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6500);
   try {
-    const response = await fetch(RELEASES_API, {
+    const options = {
       headers: { Accept: "application/vnd.github+json" },
       signal: controller.signal
-    });
-    if (!response.ok) throw new Error("Release API unavailable");
-    const releases = await response.json();
-    const latest = releases.find((item) => !item.draft && !item.prerelease && item.assets?.some((asset) => asset.name.toLowerCase().endsWith(".apk")));
-    if (!latest) throw new Error("No published APK release");
-    applyRelease(latest, releases.filter((item) => !item.draft && !item.prerelease));
+    };
+    const read = async (url) => {
+      try {
+        const response = await fetch(url, options);
+        return response.ok ? await response.json() : null;
+      } catch {
+        return null;
+      }
+    };
+    const historyRequest = read(`${RELEASES_API}?per_page=5`);
+    const latest = await read(`${RELEASES_API}/latest`);
+    const hasPublishedApk = (item) => item && !item.draft && !item.prerelease && Boolean(releaseApk(item));
+    let release = hasPublishedApk(latest) ? latest : null;
+    if (release) applyRelease(release);
+
+    const rawHistory = await historyRequest;
+    const history = Array.isArray(rawHistory) ? rawHistory.filter(hasPublishedApk) : [];
+    if (!release) {
+      release = history[0] ?? null;
+      applyRelease(release);
+    }
+    applyReleaseHistory(release, history);
   } catch {
-    applyRelease(FALLBACK, [FALLBACK]);
+    applyRelease(null);
+    applyReleaseHistory(null);
   } finally {
     clearTimeout(timeout);
   }
@@ -93,16 +121,19 @@ async function loadReleases() {
 
 const toggle = $("#menuToggle");
 const nav = $("#navLinks");
-toggle?.addEventListener("click", () => {
-  const open = nav.classList.toggle("open");
-  toggle.setAttribute("aria-expanded", String(open));
-  toggle.textContent = open ? "×" : "☰";
+function setMenuOpen(open) {
+  nav?.classList.toggle("open", open);
+  toggle?.setAttribute("aria-expanded", String(open));
+  toggle?.setAttribute("aria-label", open ? "Закрыть меню" : "Открыть меню");
+  if (toggle) toggle.textContent = open ? "×" : "☰";
+}
+toggle?.addEventListener("click", () => setMenuOpen(!nav?.classList.contains("open")));
+$$(".nav-links a").forEach((link) => link.addEventListener("click", () => setMenuOpen(false)));
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !nav?.classList.contains("open")) return;
+  setMenuOpen(false);
+  toggle?.focus();
 });
-$$(".nav-links a").forEach((link) => link.addEventListener("click", () => {
-  nav.classList.remove("open");
-  toggle?.setAttribute("aria-expanded", "false");
-  if (toggle) toggle.textContent = "☰";
-}));
 
 let lastY = 0;
 const header = $("#siteHeader");
@@ -111,7 +142,7 @@ window.addEventListener("scroll", () => {
   const max = document.documentElement.scrollHeight - window.innerHeight;
   $("#scrollProgress").style.width = `${max > 0 ? y / max * 100 : 0}%`;
   header?.classList.toggle("scrolled", y > 20);
-  if (y > 560 && y > lastY + 3) header?.classList.add("hidden");
+  if (y > 560 && y > lastY + 3 && !nav?.classList.contains("open")) header?.classList.add("hidden");
   else if (y < lastY - 3 || y < 560) header?.classList.remove("hidden");
   lastY = y;
 }, { passive: true });
@@ -126,29 +157,6 @@ if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: re
   $$(".reveal").forEach((element) => observer.observe(element));
 } else {
   $$(".reveal").forEach((element) => element.classList.add("is-visible"));
-}
-
-const moods = ["lofi для фокуса", "неон для пробежки", "джаз для вечера", "эмбиент для паузы", "новые музыкальные открытия"];
-let moodIndex = 0;
-const phoneShots = $(".phone-stack img");
-if (phoneShots.length > 1 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
-  let phoneIndex = 0;
-  setInterval(() => {
-    phoneShots[phoneIndex].classList.remove("active");
-    phoneIndex = (phoneIndex + 1) % phoneShots.length;
-    phoneShots[phoneIndex].classList.add("active");
-  }, 5200);
-}
-
-const moodLine = $("#moodLine");
-if (!matchMedia("(prefers-reduced-motion: reduce)").matches && moodLine) {
-  setInterval(() => {
-    moodIndex = (moodIndex + 1) % moods.length;
-    moodLine.animate([{opacity:1,transform:"translateY(0)"},{opacity:0,transform:"translateY(-5px)"}],{duration:220}).onfinish = () => {
-      moodLine.textContent = moods[moodIndex];
-      moodLine.animate([{opacity:0,transform:"translateY(5px)"},{opacity:1,transform:"translateY(0)"}],{duration:260});
-    };
-  }, 3600);
 }
 
 $$(".demo-tab").forEach((button) => button.addEventListener("click", () => {
