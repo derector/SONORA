@@ -62,3 +62,44 @@ revoke insert on public.messenger_messages from authenticated;
 grant insert (conversation_id, sender_id, client_nonce, body) on public.messenger_messages to authenticated;
 -- Anonymous callers receive no table privileges.
 
+
+-- Direct-chat creation is atomic and callable only by authenticated users.
+-- The canonical pair is enforced by a unique index to prevent duplicate dialogs.
+alter table public.messenger_conversations
+ add column if not exists direct_pair text;
+create unique index if not exists messenger_direct_pair_unique
+ on public.messenger_conversations(direct_pair) where direct_pair is not null;
+
+create or replace function public.messenger_open_direct_chat(other_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+ caller uuid := auth.uid();
+ pair_key text;
+ chat_id uuid;
+begin
+ if caller is null then raise exception 'Authentication required' using errcode='28000'; end if;
+ if other_user_id is null or other_user_id = caller then
+   raise exception 'Invalid recipient' using errcode='22023';
+ end if;
+ if not exists (select 1 from auth.users u where u.id = other_user_id) then
+   raise exception 'Recipient not found' using errcode='22023';
+ end if;
+ pair_key := least(caller::text,other_user_id::text) || ':' || greatest(caller::text,other_user_id::text);
+ -- Serialize simultaneous requests for the same pair.
+ perform pg_advisory_xact_lock(hashtextextended(pair_key, 0));
+ select c.id into chat_id from public.messenger_conversations c where c.direct_pair=pair_key;
+ if chat_id is null then
+   insert into public.messenger_conversations(kind,created_by,direct_pair)
+   values ('direct',caller,pair_key) returning id into chat_id;
+   insert into public.messenger_members(conversation_id,user_id,role)
+   values (chat_id,caller,'member'),(chat_id,other_user_id,'member');
+ end if;
+ return chat_id;
+end;
+$$;
+revoke all on function public.messenger_open_direct_chat(uuid) from public, anon;
+grant execute on function public.messenger_open_direct_chat(uuid) to authenticated;
