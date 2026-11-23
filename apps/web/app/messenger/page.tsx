@@ -83,16 +83,9 @@ export default function MessengerPage() {
       const nonce = pendingNonce.current?.chatId === selected && pendingNonce.current.body === body
         ? pendingNonce.current.nonce : crypto.randomUUID();
       pendingNonce.current = { chatId: selected, body, nonce };
-      try {
-        await requestJson(`/chats/${selected}/messages`, accessToken, {
-          method: "POST", body: JSON.stringify({ body, clientNonce: nonce })
-        });
-      } catch (error) {
-        // A timeout can occur after the server has saved the message. Retry using
-        // the same nonce and verify server history before reporting a failure.
-        await loadMessages();
-        if (!(error instanceof Error) || !error.message.includes("already submitted")) throw error;
-      }
+      await requestJson(`/chats/${selected}/messages`, accessToken, {
+        method: "POST", body: JSON.stringify({ body, clientNonce: nonce })
+      });
       pendingNonce.current = null;
       setDraft("");
       await loadMessages();
