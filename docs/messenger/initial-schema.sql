@@ -103,3 +103,15 @@ end;
 $$;
 revoke all on function public.messenger_open_direct_chat(uuid) from public, anon;
 grant execute on function public.messenger_open_direct_chat(uuid) to authenticated;
+
+-- Realtime Postgres Changes: restrict row visibility to chat members via existing RLS.
+-- Enable publication only once, when the migration is reviewed and applied.
+do $$
+begin
+ if not exists (
+  select 1 from pg_publication_tables
+  where pubname='supabase_realtime' and schemaname='public' and tablename='messenger_messages'
+ ) then
+  alter publication supabase_realtime add table public.messenger_messages;
+ end if;
+end $$;
