@@ -1,3 +1,4 @@
+import { registerMessengerRoutes } from "./messenger-routes.js";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -1516,6 +1517,7 @@ registerDiscoveryRoutes(app);
 
 try {
   registerProfileRoutes(app, { authClient, authError, requireUser });
+  registerMessengerRoutes(app);
 
 await app.listen({ port, host });
 } catch (error) {
