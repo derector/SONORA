@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useAuth } from "../../components/auth-provider";
 
@@ -27,6 +27,7 @@ export default function MessengerPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const pendingNonce = useRef<{ chatId: string; body: string; nonce: string } | null>(null);
 
   const loadChats = useCallback(async () => {
     if (!accessToken) return;
@@ -43,6 +44,10 @@ export default function MessengerPage() {
   useEffect(() => {
     if (!accessToken) return;
     void loadChats().catch((e: Error) => setError(e.message));
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void loadChats().catch(() => {});
+    }, 10000);
+    return () => window.clearInterval(timer);
   }, [accessToken, loadChats]);
 
   // Polling provides real persisted updates until private Realtime subscriptions are integrated.
@@ -74,9 +79,21 @@ export default function MessengerPage() {
     setSending(true);
     setError("");
     try {
-      await requestJson(`/chats/${selected}/messages`, accessToken, {
-        method: "POST", body: JSON.stringify({ body: draft.trim(), clientNonce: crypto.randomUUID() })
-      });
+      const body = draft.trim();
+      const nonce = pendingNonce.current?.chatId === selected && pendingNonce.current.body === body
+        ? pendingNonce.current.nonce : crypto.randomUUID();
+      pendingNonce.current = { chatId: selected, body, nonce };
+      try {
+        await requestJson(`/chats/${selected}/messages`, accessToken, {
+          method: "POST", body: JSON.stringify({ body, clientNonce: nonce })
+        });
+      } catch (error) {
+        // A timeout can occur after the server has saved the message. Retry using
+        // the same nonce and verify server history before reporting a failure.
+        await loadMessages();
+        if (!(error instanceof Error) || !error.message.includes("already submitted")) throw error;
+      }
+      pendingNonce.current = null;
       setDraft("");
       await loadMessages();
     } catch (e) { setError((e as Error).message); }
