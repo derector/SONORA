@@ -54,5 +54,11 @@ create policy "messenger_messages_member_insert" on public.messenger_messages
  );
 -- No direct membership/conversation creation until atomic authenticated RPC is reviewed.
 -- No direct update/delete permissions yet. Future endpoints require actor checks.
-grant select on public.messenger_conversations,public.messenger_members to authenticated;
-grant select,insert on public.messenger_messages to authenticated;
+revoke all on public.messenger_conversations, public.messenger_members, public.messenger_messages from anon, authenticated;
+grant select on public.messenger_conversations, public.messenger_members to authenticated;
+grant select, insert on public.messenger_messages to authenticated;
+-- Restrict writes to allowed columns; immutable identity and timestamps are server-controlled.
+revoke insert on public.messenger_messages from authenticated;
+grant insert (conversation_id, sender_id, client_nonce, body) on public.messenger_messages to authenticated;
+-- Anonymous callers receive no table privileges.
+
