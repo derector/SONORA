@@ -14,7 +14,7 @@ export default function SettingsPage() {
   function toggle() {
     const next = !seasonalEffects;
     setSeasonalEffects(next);
-    try { localStorage.setItem("sonora-seasonal-effects", next ? "on" : "off"); } catch {}
+    try { localStorage.setItem("sonora-seasonal-effects", next ? "on" : "off"); window.dispatchEvent(new Event("sonora-seasonal-effects-change")); } catch {}
   }
   return <main className="mx-auto min-h-screen max-w-3xl px-4 py-8">
     <Link href="/messenger" className="inline-flex items-center gap-2 text-sm text-violet-200"><ArrowLeft size={16}/> К перепискам</Link>
